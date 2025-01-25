@@ -36,6 +36,7 @@ jobs:
           uname -a
           df -h
           ulimit -a
+        shell: bash -l {0}
 
       - uses: prefix-dev/setup-pixi@v0.8.0
         with:
