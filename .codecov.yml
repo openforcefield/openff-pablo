@@ -13,4 +13,5 @@ comment:
   flags: []
   paths: []
 ignore:
-  - "openff/pablo/_version.py"
+  - "examples/"
+  - "docs/"

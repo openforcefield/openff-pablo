@@ -43,21 +43,19 @@ numpy = "*"
 
 [tool.pixi.pypi-dependencies]
 openff-pablo = { path = ".", editable = true }
-# openff-toolkit = { git = "https://github.com/openforcefield/openff-toolkit.git", rev = "better_typing" }
-# openff-units = { git = "https://github.com/openforcefield/openff-units.git", rev = "better_typing" }
 
 [tool.pixi.feature.test.dependencies]
 pytest = "*"
 pytest-xdist = "*"
-# pytest-cov = "*"
-# codecov = "*"
+pytest-cov = "*"
+codecov = "*"
 
 [tool.pixi.feature.test.tasks.test]
-cmd = "pytest -n auto -m 'not slow'"
+cmd = "pytest -n auto"
 cwd = "."
 
-[tool.pixi.feature.test.tasks.slowtest]
-cmd = "pytest -n auto"
+[tool.pixi.feature.test.tasks.fasttest]
+cmd = "pytest -n auto -m 'not slow'"
 cwd = "."
 
 [tool.pixi.feature.test.tasks.doctest]
@@ -102,6 +100,10 @@ cwd = "examples"
 [tool.pixi.feature.lint.dependencies]
 basedpyright = "*"
 ruff = "*"
+
+[tool.pixi.feature.lint.tasks.typecheck]
+cmd = "basedpyright openff"
+cwd = "."
 
 [tool.pixi.environments]
 test = { features = ["test"], solve-group = "default" }

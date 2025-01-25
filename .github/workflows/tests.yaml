@@ -30,7 +30,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ["3.11"]
 
     steps:
       - uses: actions/checkout@v4
@@ -43,34 +42,19 @@ jobs:
           df -h
           ulimit -a
 
-      - name: Install environment
-        uses: mamba-org/setup-micromamba@v2
+      - uses: prefix-dev/setup-pixi@v0.8.0
         with:
-          environment-file: devtools/conda-envs/test_env.yaml
-          create-args: >-
-            python=${{ matrix.python-version }}
-
-      - name: Install package
-        run: |
-          python --version
-          python -m pip install .
-
-      - name: Python information
-        run: |
-          which python
-          which pip
-          pip list
-          micromamba info
-          micromamba list
+          pixi-version: v0.40.3
+          environments: test
 
       - name: Type check
         if: runner.os == 'Linux'
         run: |
-          basedpyright openff
+          pixi run typecheck
 
-      - name: Run tests
-        run: |
-          pytest -n auto -v --color=yes
+      - run: pixi run test -v --color=yes --cov=openff/pablo --cov-append --cov-report=xml
+
+      - run: pixi run doctest -v --color=yes
 
     # - name: codecov
     #   uses: codecov/codecov-action@v3
