@@ -1,4 +1,4 @@
-name: GH Actions Tests
+name: GH Actions CI
 on:
   push:
     branches:
