@@ -1,4 +1,4 @@
-name: GH Actions CI
+name: GH Actions Tests
 on:
   push:
     branches:
@@ -23,7 +23,7 @@ defaults:
     shell: bash -l {0}
 
 jobs:
-  lints:
+  tests:
     if: "github.repository == 'openforcefield/openff-pablo'"
     runs-on: ${{ matrix.os }}
     strategy:
