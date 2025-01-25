@@ -42,4 +42,4 @@ jobs:
           pixi-version: v0.40.3
           activate-environment: lint
 
-      - run: ruff
+      - run: ruff check openff
