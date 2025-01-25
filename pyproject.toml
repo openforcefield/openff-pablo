@@ -106,10 +106,10 @@ cmd = "basedpyright openff"
 cwd = "."
 
 [tool.pixi.environments]
-test = { features = ["test"], solve-group = "default" }
+test = { features = ["lint", "test"], solve-group = "default" }
 doc = { features = ["doc"], solve-group = "default" }
 example = { features = ["example"], solve-group = "default" }
-lint = { features = ["lint"], no-default-feature = true }
+lint = { features = ["lint"], no-default-feature = true, solve-group = "default" }
 
 [tool.versioningit]
 default-version = "v0.0.0.dev0+VERSIONMISSING"

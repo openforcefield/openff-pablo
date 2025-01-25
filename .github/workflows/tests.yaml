@@ -56,6 +56,8 @@ jobs:
 
       - run: pixi run doctest -v --color=yes
 
+      - run: pixi run basedpyright
+
       - name: Codecov
         uses: codecov/codecov-action@v5
         with:
