@@ -109,8 +109,7 @@ cwd = "."
 test = { features = ["test"], solve-group = "default" }
 doc = { features = ["doc"], solve-group = "default" }
 example = { features = ["example"], solve-group = "default" }
-lint = { features = ["lint"], no-default-feature = true, solve-group = "default" }
-all = { features = ["test", "doc", "example", "lint"], solve-group = "default" }
+lint = { features = ["lint"], no-default-feature = true }
 
 [tool.versioningit]
 default-version = "v0.0.0.dev0+VERSIONMISSING"
