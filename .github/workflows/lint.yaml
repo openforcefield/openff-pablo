@@ -15,7 +15,7 @@ concurrency:
 
 defaults:
   run:
-    shell: bash -l {0}
+    shell: pixi run bash -l {0}
 
 jobs:
   main-tests:
@@ -42,4 +42,6 @@ jobs:
           pixi-version: v0.40.3
           environments: lint
 
-      - run: pixi run lint
+      - run: pyright
+
+      - run: ruff
