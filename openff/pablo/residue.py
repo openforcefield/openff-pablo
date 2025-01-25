@@ -542,6 +542,41 @@ class ResidueDefinition:
         virtual_sites
             Virtual sites expected by the residue. See
             :py:data:`openff.pablo.ResidueDefinition.virtual_sites`
+
+        Examples
+        --------
+
+        To create a ``ResidueDefinition`` for a neutral cysteine residue:
+
+        >>> from openff.pablo.residue import ResidueDefinition
+        >>> from openff.pablo.chem import DISULFIDE_BOND, PEPTIDE_BOND
+        >>>
+        >>> ResidueDefinition.from_smiles(
+        ...     residue_name="CYS",
+        ...     mapped_smiles=r"[N:1]([C@@:2]([C:5]([S:6][H:13])([H:11])[H:12])([C:3]([O:7][H:14])=[O:4])[H:10])([H:8])[H:9]",
+        ...     atom_names={
+        ...         1: "N",
+        ...         2: "CA",
+        ...         3: "C",
+        ...         4: "O",
+        ...         5: "CB",
+        ...         6: "SG",
+        ...         7: "OXT",
+        ...         8: "H",
+        ...         9: "H2",
+        ...         10: "HA",
+        ...         11: "HB2",
+        ...         12: "HB3",
+        ...         13: "HG",
+        ...         14: "HXT",
+        ...     },
+        ...     leaving_atoms={7, 14, 13, 9},
+        ...     crosslink=DISULFIDE_BOND,
+        ...     linking_bond=PEPTIDE_BOND,
+        ...     description="CYSTEINE",
+        ... )
+        ResidueDefinition(...)
+
         """
         molecule = Molecule.from_mapped_smiles(
             mapped_smiles,
