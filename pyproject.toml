@@ -59,7 +59,7 @@ cmd = "pytest -n auto -m 'not slow'"
 cwd = "."
 
 [tool.pixi.feature.test.tasks.doctest]
-cmd = "pytest -n auto --doctest-glob 'docs/*.md' --doctest-glob 'docs/*.rst' --doctest-modules --ignore openff/pdbscan/tests/  --ignore openff/pdbscan/_tests/ --ignore-glob docs/*.py openff/ docs/"
+cmd = "pytest -n auto --doctest-glob 'docs/*.md' --doctest-glob 'docs/*.rst' --doctest-modules --ignore openff/pablo/_tests/ --ignore-glob docs/*.py openff/ docs/"
 cwd = "."
 
 [tool.pixi.feature.doc.dependencies]

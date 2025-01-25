@@ -1,4 +1,4 @@
-name: GH Actions CI
+name: GH Actions Lints
 on:
   push:
     branches:
