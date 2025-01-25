@@ -23,7 +23,7 @@ defaults:
     shell: bash -l {0}
 
 jobs:
-  main-tests:
+  lints:
     if: "github.repository == 'openforcefield/openff-pablo'"
     runs-on: ${{ matrix.os }}
     strategy:
