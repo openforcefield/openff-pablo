@@ -15,7 +15,7 @@ concurrency:
 
 defaults:
   run:
-    shell: pixi run bash -l {0}
+    shell: pixi run bash -e {0}
 
 jobs:
   main-tests:
