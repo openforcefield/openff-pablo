@@ -73,7 +73,7 @@ pip install -e ".[test,doc]"
 ### Copyright
 
 The OpenFF Pablo source code is hosted at https://github.com/openforcefield/openff-pablo
-and is available under the GNU General Public License, version 3 (see the file [LICENSE](https://github.com/openforcefield/openff-pablo/blob/main/LICENSE)).
+and is available under the MIT license (see the file [LICENSE](https://github.com/openforcefield/openff-pablo/blob/main/LICENSE)).
 
 Copyright (c) 2025, Josh Mitchell
 
