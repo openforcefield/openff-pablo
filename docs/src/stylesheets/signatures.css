@@ -1,0 +1,11 @@
+.signature {
+    font-size: 70%;
+}
+
+.signature span.filename {
+    display: none;
+}
+
+.signature a:first-child + span.n {
+    color: #2f9ed2;
+}

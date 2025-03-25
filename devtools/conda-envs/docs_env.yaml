@@ -7,11 +7,16 @@ dependencies:
   - pip
 
   # Documentation
-  - myst-parser
-  - sphinx==6.1.2
-  - sphinx-notfound-page
-  - autodoc-pydantic
-  - sphinx-click
+  - mkdocs
+  - mkdocs-material
+  - mkdocs-gen-files
+  - mkdocs-literate-nav
+  - mkdocs-jupyter
+  - mkdocstrings
+  - mkdocstrings-python >=1.10.8
+  - griffe-pydantic
+  - pymdown-extensions
+  - ruff
 
   # Imports
   - openff-units
@@ -25,7 +30,3 @@ dependencies:
   - mdanalysis
   - rdkit
   - pyxdg
-
-  #  Pip-only installs
-  - pip:
-      - git+https://github.com/openforcefield/openff-sphinx-theme.git@main

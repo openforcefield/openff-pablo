@@ -1,0 +1,5 @@
+:root > * {
+    --md-primary-fg-color: rgb(1, 84, 128);
+
+    --md-accent-fg-color: rgb(47, 158, 210);
+}

@@ -1,0 +1,26 @@
+{% extends "_base/function.html.jinja" %}
+
+{% block heading scoped %}
+    {% set heading_line_length = config.line_length %}
+    <span class="signature">
+        {% filter format_signature(function, heading_line_length, crossrefs=config.signature_crossrefs) %}
+            {{ function.name }}
+        {% endfilter %}
+    </span>
+{% endblock %}
+
+{% block signature scoped %}
+    {#- Signature block.
+
+    This block renders any overloaded signatures for the function.
+    -#}
+    {% if function.overloads and config.show_overloads %}
+    <div class="doc-overloads">
+        {% for overload in function.overloads %}
+        {% filter format_signature(overload, config.line_length, annotations=True, crossrefs=config.signature_crossrefs) %}
+            {{ overload.name }}
+        {% endfilter %}
+        {% endfor %}
+    </div>
+    {% endif %}
+{% endblock signature %}

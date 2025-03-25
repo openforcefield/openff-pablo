@@ -2,7 +2,7 @@
 
 Pablo has a (developing) PDB test suite.
 
-:::{list-table}
+<!-- :::{list-table}
 :header-rows: 1
 :name: pdb-tests
 :align: left
@@ -37,7 +37,7 @@ Pablo has a (developing) PDB test suite.
     - Non-canonical amino acid from CCD, iron ion
 *   - 3ip9_dye_solvated.pdb
     - Large system with water and NaCl, non-canonical amino acid not in CCD
-:::
+::: -->
 
 <script>
   function filterTable(column) {

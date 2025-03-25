@@ -12,9 +12,8 @@ python:
     - method: pip
       path: .
 
-sphinx:
-  configuration: docs/conf.py
-  fail_on_warning: true
+mkdocs:
+  configuration: docs/mkdocs.yml
 
 conda:
   environment: devtools/conda-envs/docs_env.yaml
