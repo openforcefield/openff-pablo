@@ -1,6 +1,7 @@
 site_name: "Pablo"
 site_description: "A chemistry-first PDB loader"
 site_url: !ENV READTHEDOCS_CANONICAL_URL
+repo_name: openforcefield/openff-pablo
 repo_url: "https://github.com/openforcefield/openff-pablo"
 docs_dir: "src"
 watch: ["../openff", "../examples", "../README.md", "."]
@@ -11,12 +12,11 @@ nav:
   - Home:
       - Overview: index.md
       - tests.md
-  - Examples:
-      - ../examples/README.md
-      - ../examples/compute-energy.ipynb
-      - ../examples/conformer-minimization.ipynb
-      - ../examples/md-simulations.ipynb
-      - ../examples/parameter-gradients.ipynb
+  # - Examples:
+  #     - examples/load_pdb.ipynb
+  #     - examples/prepare_pdb.ipynb
+  #     - examples/prepare_jsontop.ipynb
+  #     - examples/smiles_names.ipynb
   - API reference: reference/
 
 theme:
@@ -114,7 +114,9 @@ plugins:
   - gen-files:
       scripts:
         - scripts/gen_ref_pages.py
-        - scripts/compile_sass.py
+        # - scripts/copy_examples.py
+  # - mkdocs-jupyter:
+  #     include: ["examples/*.ipynb"]
   - literate-nav:
       nav_file: SUMMARY.md
   - mkdocstrings:
@@ -153,11 +155,12 @@ plugins:
             docstring_section_style: spacy
             merge_init_into_class: true
             show_if_no_docstring: true
-            separate_signature: true # ignored by template override
+            separate_signature: false
             show_root_heading: true
             show_root_full_path: true
-            # parameter_headings: true
+            parameter_headings: false
             show_symbol_type_heading: true
+            filters: ["!^_"] # Filter out all class members starting with an underscore, including those starting with two underscores
             show_labels: false
             group_by_category: true
             summary: true

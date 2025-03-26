@@ -2,3 +2,31 @@
 .md-header__button.md-logo svg {
     height: 2rem;
 }
+
+.doc-object {
+    --doc-object-padding: 1rem;
+    --doc-object-border-radius: 4px;
+    padding: var(--doc-object-padding);
+    box-shadow:
+        0 2px 2px 0 rgba(0, 0, 0, 0.14),
+        0 1px 5px 0 rgba(0, 0, 0, 0.12),
+        0 3px 1px -2px rgba(0, 0, 0, 0.2);
+    border-radius: var(--doc-object-border-radius);
+}
+
+.doc-object .doc-heading {
+    margin: calc(-1 * var(--doc-object-padding));
+    margin-bottom: var(--doc-object-padding);
+    padding: var(--doc-object-padding);
+    background-color: rgba(47, 158, 210, 0.1);
+    border-radius: var(--doc-object-border-radius) 0;
+}
+
+.doc-object .doc-object {
+    --doc-object-padding: 0.5rem;
+    margin-bottom: 1rem;
+    box-shadow:
+        0 4px 5px 0 rgba(0, 0, 0, 0.14),
+        0 1px 10px 0 rgba(0, 0, 0, 0.12),
+        0 2px 4px -1px rgba(0, 0, 0, 0.4);
+}

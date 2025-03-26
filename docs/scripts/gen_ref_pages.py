@@ -1,7 +1,6 @@
 """Generate the code reference pages and navigation."""
 
 from pathlib import Path
-from os import getcwd
 
 import mkdocs_gen_files
 import griffe
@@ -15,7 +14,7 @@ pkg_griffe = griffe.load(src)
 mod_symbol = '<code class="doc-symbol doc-symbol-nav doc-symbol-module"></code>'
 
 
-def is_private(path: Path) -> bool:
+def is_private_module(path: Path) -> bool:
     if path.name == "__init__.py":
         parts = path.parts[:-1]
     else:
@@ -30,7 +29,7 @@ def is_private(path: Path) -> bool:
 # Iterate over python modules
 for path in sorted(src.rglob("*.py")):
     # Skip private modules
-    if is_private(path):
+    if is_private_module(path):
         continue
 
     # Sort out where we're reading from and writing to
@@ -57,7 +56,6 @@ for path in sorted(src.rglob("*.py")):
     # Write the stub for this module
     with mkdocs_gen_files.open(full_doc_path, "w") as fd:
         mod_ident = ".".join(parts)
-        print(mod_ident, public_names)
         fd.write(f"::: {mod_ident}\n")
         # fd.write("    options:\n")
         # fd.write(f"      summary: true\n")
@@ -66,7 +64,6 @@ for path in sorted(src.rglob("*.py")):
 
     # Write stubs for the members of this module
     for name in public_names:
-        print(f"{name=}")
         # Make sure we don't collide filenames with the module index
         if "index" in public_names and name.startswith("index"):
             filename = name + "_"

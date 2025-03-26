@@ -103,6 +103,7 @@ def _match_unknown_molecules(
 
 def topology_from_pdb(
     file: PathLike[str] | str | IO[str] | TextIOBase,
+    *,
     unknown_molecules: Iterable[Molecule] = [],
     residue_database: Mapping[
         str,
