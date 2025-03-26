@@ -1,3 +1,5 @@
+// TODO: This currently doesn't seem to work with `navigation.instant`
+
 // Use CustomEvent to generate the version selector
 document.addEventListener("readthedocs-addons-data-ready", function (event) {
   const config = event.detail.data();
