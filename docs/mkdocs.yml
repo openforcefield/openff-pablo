@@ -41,6 +41,10 @@ theme:
     - search.suggest
     - toc.follow
   palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: custom
@@ -54,7 +58,7 @@ theme:
       accent: custom
       toggle:
         icon: material/lightbulb-outline
-        name: Switch to light mode
+        name: Switch to system preference
 
 markdown_extensions:
   - admonition
@@ -134,16 +138,26 @@ plugins:
             - https://www.rdkit.org/docs/objects.inv
             # - https://docs.eyesopen.com/toolkits/python/objects.inv
             - https://www.mdtraj.org/1.9.5/objects.inv
-            # - https://docs.openforcefield.org/projects/toolkit/en/stable/objects.inv
-            - https://docs.openforcefield.org/projects/interchange/en/stable/objects.inv
-            - https://docs.openforcefield.org/projects/units/en/stable/objects.inv
-            # - https://docs.openforcefield.org/projects/bespokefit/en/stable/objects.inv
-            - https://docs.openforcefield.org/projects/qcsubmit/en/stable/objects.inv
-            - https://docs.openforcefield.org/projects/nagl/en/stable/objects.inv
-            - https://docs.openforcefield.org/projects/fragmenter/en/stable/objects.inv
-            - https://docs.openforcefield.org/projects/evaluator/en/stable/objects.inv
-            - https://docs.openforcefield.org/projects/recharge/en/stable/objects.inv
-            - https://docs.openforcefield.org/en/latest/objects.inv
+            # - url: https://docs.openforcefield.org/projects/toolkit/en/stable/objects.inv
+            #   domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/interchange/en/stable/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/units/en/stable/objects.inv
+              domains: [std, py]
+            # - url: https://docs.openforcefield.org/projects/bespokefit/en/stable/objects.inv
+            #   domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/qcsubmit/en/stable/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/nagl/en/stable/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/fragmenter/en/stable/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/evaluator/en/stable/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/recharge/en/stable/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/en/latest/objects.inv
+              domains: [std, py]
           paths: [".."]
           options:
             extensions: [griffe_pydantic]
