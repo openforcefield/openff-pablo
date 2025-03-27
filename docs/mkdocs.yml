@@ -32,7 +32,7 @@ theme:
     - content.tooltips
     - navigation.footer
     - navigation.indexes
-    # - navigation.instant
+    # - navigation.instant # Breaks src/javascript/readthedocs-versions.js
     - navigation.sections
     - navigation.tabs
     - navigation.tabs.sticky
@@ -91,9 +91,9 @@ markdown_extensions:
 extra:
   homepage: https://docs.openforcefield.org
   social:
-    # - name: Open Force Field on Zenodo
-    #   icon: fontawesome/brands/zenodo
-    #   link: https://zenodo.org/communities/openforcefield/
+    - name: Open Force Field on Zenodo
+      icon: academicons/zenodo
+      link: https://zenodo.org/communities/openforcefield/
     - name: Open Force Field on YouTube
       icon: fontawesome/brands/youtube
       link: https://www.youtube.com/channel/UCh0aJSUm_sYr7nuTzhW806g
@@ -130,6 +130,7 @@ plugins:
       handlers:
         python:
           inventories:
+            # Some of these require https://github.com/mkdocstrings/mkdocstrings/pull/748
             - https://docs.python.org/3/objects.inv
             - https://numpy.org/doc/stable/objects.inv
             - https://docs.scipy.org/doc/scipy/reference/objects.inv
