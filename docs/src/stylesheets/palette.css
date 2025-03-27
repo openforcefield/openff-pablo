@@ -1,5 +1,11 @@
 :root > * {
-    --md-primary-fg-color: rgb(1, 84, 128);
+    --md-primary-fg-color: lch(32.53% 32.5 255.14);
 
-    --md-accent-fg-color: rgb(47, 158, 210);
+    --md-accent-fg-color: rgba(47, 158, 210, 1);
+    --md-accent-fg-color--transparent: rgba(47, 158, 210, 0.1);
+}
+[data-md-color-scheme="openff"] {
+    --md-primary-fg-color: lch(32.53% 32.5 255.14);
+    --md-primary-fg-color--light: lch(67% 32.5 255.14);
+    --md-primary-fg-color--dark: lch(16% 32.5 255.14);
 }

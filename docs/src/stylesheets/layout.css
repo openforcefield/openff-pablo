@@ -30,9 +30,3 @@
         0 1px 10px 0 rgba(0, 0, 0, 0.12),
         0 2px 4px -1px rgba(0, 0, 0, 0.4);
 }
-
-/* Hide ads */
-#readthedocs-ea,
-.ethical-alabaster {
-    display: none;
-}

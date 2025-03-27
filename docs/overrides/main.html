@@ -1,5 +1,13 @@
-{% extends "base.html" %} {% block site_meta %} {{ super() }}
+{% extends "base.html" %}
+
+{% block site_meta %}
+{{ super() }}
 <meta name="readthedocs-addons-api-version" content="1" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-{% endblock %}
+{% endblock site_meta %}
+
+{% block site_nav %}
+{{ super() }}
+<div id="ethical-ad-placement" style="display: none;"></div>
+{% endblock site_nav %}

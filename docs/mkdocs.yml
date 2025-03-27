@@ -4,7 +4,8 @@ site_url: !ENV READTHEDOCS_CANONICAL_URL
 repo_name: openforcefield/openff-pablo
 repo_url: "https://github.com/openforcefield/openff-pablo"
 docs_dir: "src"
-watch: ["../openff", "../examples", "../README.md", "."]
+watch:
+  ["../openff", "../examples", "../README.md", "src", "scripts", "overrides"]
 copyright: Copyright &copy 2025, Josh Mitchell
 edit_uri: edit/main/docs/src/
 
@@ -46,8 +47,7 @@ theme:
         icon: material/brightness-auto
         name: Switch to light mode
     - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: custom
+      scheme: openff
       accent: custom
       toggle:
         icon: material/lightbulb
@@ -125,7 +125,7 @@ plugins:
       nav_file: SUMMARY.md
   - mkdocstrings:
       enable_inventory: true
-      custom_templates: mkdocstring_templates
+      custom_templates: overrides/mkdocstrings
       default_handler: python
       handlers:
         python:
