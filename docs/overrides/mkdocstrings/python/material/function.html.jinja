@@ -9,7 +9,9 @@
         {{ super() }}
       {% else %}
         <span class="signature-and-symbol">
-            {% if config.show_symbol_type_heading %}<code class="doc-symbol doc-symbol-heading doc-symbol-{{ symbol_type }}"></code>{% endif %}
+            {% if config.show_symbol_type_heading -%}
+                <code class="doc-symbol doc-symbol-heading doc-symbol-{{ symbol_type }}"></code>
+            {%- endif -%}
             <span class="signature">
                 {%- if show_full_path -%}
                     <span class="sig-path-root">{{function.parent.path}}.</span>

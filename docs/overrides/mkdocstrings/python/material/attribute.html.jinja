@@ -9,18 +9,22 @@
         {{ super() }}
       {% else %}
         <span class="signature-and-symbol">
-            {% if config.show_symbol_type_heading %}<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>{% endif %}
+            {% if config.show_symbol_type_heading -%}
+            <code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>
+            {%- endif -%}
             <span class="signature sig-attr">
                 {%- if show_full_path -%}
                     <span class="sig-path-root">{{attribute.parent.path}}.</span>
                 {%- endif -%}
                 <span class="sig-path-name">{{ attribute.name }}</span>
                 {%- if attribute.annotation and config.show_signature_annotations -%}
-                    <span class="sig-attr-type-colon sig-type-colon">:</span>
-                    <span class="sig-attr-type-expr sig-type-expr">
-                        {%- with expression = attribute.annotation -%}
-                            {%- include "expression"|get_template with context -%}
-                        {%- endwith -%}
+                    <span class="sig-type">{#--#}
+                        <span class="sig-attr-type-colon sig-type-colon">:</span>
+                        <span class="sig-attr-type-expr sig-type-expr">
+                            {%- with expression = attribute.annotation -%}
+                                {%- include "expression"|get_template with context -%}
+                            {%- endwith -%}
+                        </span>
                     </span>
                 {% endif %}
                 {% if attribute.value -%}

@@ -7,16 +7,17 @@
     --doc-object-padding: 1rem;
     --doc-object-border-radius: 4px;
     padding: var(--doc-object-padding);
+    padding-bottom: 0;
     box-shadow:
-        0 2px 2px 0 rgba(0, 0, 0, 0.14),
-        0 1px 5px 0 rgba(0, 0, 0, 0.12),
-        0 3px 1px -2px rgba(0, 0, 0, 0.2);
+        0 4px 5px 0 rgba(0, 0, 0, 0.14),
+        0 1px 10px 0 rgba(0, 0, 0, 0.12),
+        0 2px 4px -1px rgba(0, 0, 0, 0.4);
     border-radius: var(--doc-object-border-radius);
 }
 
 .doc-object .doc-heading {
     margin: calc(-1 * var(--doc-object-padding));
-    margin-bottom: var(--doc-object-padding);
+    margin-bottom: 0;
     padding: var(--doc-object-padding);
     background-color: rgba(47, 158, 210, 0.1);
     border-radius: var(--doc-object-border-radius) 0;
@@ -26,7 +27,27 @@
     --doc-object-padding: 0.5rem;
     margin-bottom: 1rem;
     box-shadow:
-        0 4px 5px 0 rgba(0, 0, 0, 0.14),
-        0 1px 10px 0 rgba(0, 0, 0, 0.12),
-        0 2px 4px -1px rgba(0, 0, 0, 0.4);
+        0 2px 2px 0 rgba(0, 0, 0, 0.14),
+        0 1px 5px 0 rgba(0, 0, 0, 0.12),
+        0 3px 1px -2px rgba(0, 0, 0, 0.2);
+}
+
+/*
+Fix padding when contents is empty
+    :empty can't be used because .doc-contents has whitespace
+        This could be fixed when CSS selectors 4 makes :empty
+        match nodes that are whitespace only, or by re-writing
+        the class/attribute/function templates to omit this
+        whitespace
+*/
+.doc-object .doc-contents:has(> :last-child) {
+    padding-bottom: var(--doc-object-padding);
+    margin-bottom: 0;
+}
+.doc-object .doc-contents > :last-child {
+    padding-bottom: 0;
+    margin-bottom: 0;
+}
+.doc-object .doc-contents > :first-child {
+    margin-top: var(--doc-object-padding);
 }

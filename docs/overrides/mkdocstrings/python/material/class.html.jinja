@@ -7,7 +7,9 @@
       -#}
       {% if config.merge_init_into_class and "__init__" in all_members and not config.separate_signature %}
         <span class="signature-and-symbol">
-            {% if config.show_symbol_type_heading %}<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>{% endif %}
+            {% if config.show_symbol_type_heading -%}
+                <code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>
+            {%- endif -%}
             <span class="signature">
                 {% with function = all_members["__init__"] %}
                     {%- if show_full_path -%}

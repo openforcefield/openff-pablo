@@ -26,12 +26,14 @@ Context:
         annotation="",
         equal="=",
         default=False,
+        nth_param = -1,
       ) -%}
 
     <span class="sig-paramlist"><span class="sig-paramlist-open-paren">(</span>
     {%- for parameter in function.parameters -%}
       {%- if parameter.name not in ("self", "cls") or loop.index0 > 0 or not (function.parent and function.parent.is_class) -%}
-        {%- if not loop.first %} {% endif -%}
+        {%- set ns.nth_param = ns.nth_param + 1 -%}
+        {%- if ns.nth_param > 0 %} {% endif -%}
         <span class="sig-param">
 
         {#- Handle parameter kind. -#}
@@ -107,7 +109,7 @@ Context:
         {#- Render parameter annotation. -#}
         {%- if ns.annotation -%}
             <span class="sig-param-type-colon sig-type-colon">:</span>
-            <span class="sig-param-type sig-type"><span class="sig-param-type-expr">
+            <span class="sig-param-type sig-type"><span class="sig-param-type-expr sig-type-expr">
                 {{- ns.annotation -}}
             </span>
                 {%- if not ns.default -%}
@@ -128,7 +130,7 @@ Context:
           {%- else -%}
             {{ parameter.default|safe }}
           {%- endif -%}
-          </span><span class="sig-param-term-comma">,</span>
+          </span><span class="sig-param-term-comma">,</span>{#--#}
           </span>
         {%- endif -%}
 

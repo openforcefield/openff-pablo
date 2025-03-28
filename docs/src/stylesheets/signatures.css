@@ -1,7 +1,12 @@
 /* Set the fonts for the signature-as-heading */
-.doc-heading .signature-and-symbol {
-    font-size: 60%;
+:is(h1, h2, h3, h4, h5, h6).doc-heading {
+    font-size: 100%;
+}
+.signature-and-symbol {
     font-family: var(--md-code-font-family);
+}
+.signature-and-symbol .signature {
+    margin-left: 1rem;
 }
 .doc-heading .signature .sig-type a {
     color: var(--md-default-fg-color--light);
@@ -13,18 +18,22 @@
 .doc-heading .signature .sig-path-name {
     font-weight: bold;
     color: #015480;
-    font-size: 110%;
+}
+.doc-heading .signature .sig-path-root {
+    font-size: 80%;
 }
 .doc-heading .signature .sig-param-default-equals {
     color: #f03a21;
 }
 
-/* Each parameter is its own indented block, and continuation lines should
-be indented further still*/
-.doc-heading .signature .sig-param,
-.doc-heading .signature.sig-attr {
+/* Each parameter is its own indented block */
+.doc-heading .signature .sig-param {
     display: block;
     margin-left: 2ch;
+}
+/* Continuation lines should be indented further still*/
+.doc-heading .signature .sig-param,
+.doc-heading .signature.sig-attr {
     text-indent: hanging 2ch;
 }
 
