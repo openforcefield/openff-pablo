@@ -186,9 +186,12 @@ plugins:
 extra_javascript:
   - javascript/readthedocs_search.js
   - javascript/readthedocs_versions.js
-  - javascript/mathjax.js
+  - javascript/katex.js
+  - https://unpkg.com/katex@0/dist/katex.min.js
+  - https://unpkg.com/katex@0/dist/contrib/auto-render.min.js
 extra_css:
   - stylesheets/palette.css
   - stylesheets/font.css
   - stylesheets/layout.css
   - stylesheets/signatures.css
+  - https://unpkg.com/katex@0/dist/katex.min.css
