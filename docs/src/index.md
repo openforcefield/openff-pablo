@@ -11,4 +11,4 @@ $ mamba create -n pablo -c conda-forge openff-pablo
 $ mamba activate pablo
 ```
 
-If you do not have Conda or Mamba installed, see the [OpenFF installation documentation](inv:openff.docs#install).
+If you do not have Conda or Mamba installed, see the [OpenFF installation documentation][install].

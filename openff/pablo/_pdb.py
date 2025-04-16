@@ -123,18 +123,17 @@ def topology_from_pdb(
     ``residue_database``. In return, it provides full chemical information on
     the entire PDB file.
 
-    To load a PDB file with molecules including any residue not found in the
-    CCD, or with residues that differ from that specified under a particular
-    residue name, provide your own ``residue_database``. Any mapping from a
-    residue name to a list of :py:data:`ResidueDefinition
-    <openff.pdbscan.pdb.residue.ResidueDefinition>` objects may be used,
-    but the :py:mod:`ccd <openff.pdbscan.pdb.ccd>` module  provides tools for
-    augmenting the CCD.
+    To load a PDB file with molecules including any residue not found in the CCD,
+    or with residues that differ from that specified under a particular residue
+    name, provide your own `residue_database`. Any mapping from a residue
+    name to a list of [`ResidueDefinition`][openff.pablo.ResidueDefinition]
+    objects may be used, but the [`openff.pablo.ccd`][] module provides tools
+    for augmenting the CCD.
 
     Alternatively, to load a single-residue molecule that is not present in the
-    CCD, name that molecule ``"UNL"`` (or any name not present in the
-    ``residue_database``), specify its CONECT records, and provide the
-    appropriate molecule to the ``unknown_molecules`` argument.
+    CCD, name that molecule `"UNL"` (or any name not present in the
+    `residue_database`), specify its CONECT records, and provide the appropriate
+    molecule to the ``unknown_molecules`` argument.
 
     Parameters
     ----------
@@ -181,59 +180,72 @@ def topology_from_pdb(
     argument, which by default uses a patched version of the RCSB Chemical
     Component Dictionary (CCD). This is the dictionary of residue and atom names
     that the RCSB PDB is referenced against. The CCD is very large and cannot be
-    distributed with this software, so by default internet access is required to
-    use it.
+    distributed with this software, so by default except for a select few common
+    residues internet access is required to use it.
 
-    The produced ``Topology`` will have its atoms in the same order as the PDB
+    The produced `Topology` will have its atoms in the same order as the PDB
     file in all cases except when the atoms in one molecule are divided by
     another molecule. This can happen, for example, if a PDB file with 3 chains
     A, B and C has a disulfide bond between A and C. In this case, chains A and
     C form a single molecule, but the atoms from B should be in the middle. This
-    atom ordering cannot be represented in :py:class:`openff.toolkit.Topology`
-    unless all 3 chains are included in a single
-    :py:class:`openff.toolkit.Molecule`, which would then represent two distinct
-    molecules. When this occurs, atoms from the latter chain(s) appear
-    immediately after the first, and atoms from other molecules appear after.
+    atom ordering cannot be represented in a
+    [`Topology`][openff.toolkit.topology.Topology] unless all 3 chains are
+    included in a single [`Molecule`][openff.toolkit.topology.Molecule], which
+    would then represent two distinct molecules. When this occurs, atoms from
+    the latter chain(s) appear immediately after the first, and atoms from other
+    molecules appear after.
 
     The following metadata are specified for all atoms produced by this function
-    and can be accessed via ``topology.atom(i).metadata[key]``:
+    and can be accessed via `topology.atom(i).metadata[key]`:
 
-    ``"residue_name"``
-        The residue name
-    ``"residue_number"``
-        The residue number as a string
-    ``"res_seq"``
-        The residue number as an integer
-    ``"insertion_code"``
-        The icode for the atom's residue. Used to align residue numbers between
+    `"residue_name"`
+    :   The residue name
+
+    `"residue_number"`
+    :   The residue number as a string
+
+    `"res_seq"`
+    :   The residue number as an integer
+
+    `"insertion_code"`
+    :   The icode for the atom's residue. Used to align residue numbers between
         proteins with indels.
-    ``"chain_id"``
-        The letter identifier for the atom's chain.
-    ``"pdb_index"``
-        The atom's index in the PDB file. Sometimes called rank. Not to be
+
+    `"chain_id"`
+    :   The letter identifier for the atom's chain.
+
+    `"pdb_index"`
+    :   The atom's index in the PDB file. Sometimes called rank. Not to be
         confused with ``"atom_serial"``, which is the number given to the atom
         in the second column of the PDB file. Guaranteed to be unique and to
         match the index of the atom within the topology.
-    ``"used_synonym"``
-        The name of the atom that was found in the PDB file. By default,
+
+    `"used_synonym"`
+    :   The name of the atom that was found in the PDB file. By default,
         `atom.name` is set to this. This value is not set for atoms matched via
         ``unknown_molecules``.
-    ``"canonical_name"``
-        The canonical name of the atom in the residue database. `atom.name` can
+
+    `"canonical_name"`
+    :   The canonical name of the atom in the residue database. `atom.name` can
         be set to this with the `use_canonical_names` argument. This value is
         not set for atoms matched via ``unknown_molecules``.
-    ``"atom_serial"``
-        The serial number of the atom, found in the second column of the PDB
+
+    `"atom_serial"`
+    :   The serial number of the atom, found in the second column of the PDB
         file. Not guaranteed to be unique.
-    ``"matched_residue_description"``
-        The residue description found in the residue database. This value is not
+
+    `"matched_residue_description"`
+    :   The residue description found in the residue database. This value is not
         set for atoms matched via ``unknown_molecules``.
-    ``"b_factor"``
-        The temperature b-factor for the atom.
-    ``"occupancy"``
-        The occupancy for the atom.
-    ``"alt_loc"``
-        The alternate location code for the atom.
+
+    `"b_factor"`
+    :   The temperature b-factor for the atom.
+
+    `"occupancy"`
+    :   The occupancy for the atom.
+
+    `"alt_loc"`
+    :   The alternate location code for the atom.
 
     """
     if hasattr(file, "readlines"):

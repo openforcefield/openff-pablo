@@ -289,7 +289,7 @@ def draw_molecule(
     """Draw a molecule
 
     Parameters
-    ==========
+    ----------
 
     molecule
         The molecule to draw.
@@ -323,7 +323,7 @@ def draw_molecule(
         highlight_atoms or highlight_bonds is provided, and color otherwise.
 
     Raises
-    ======
+    ------
 
     KeyError
         When an atom or bond in highlight_atoms or highlight_bonds is missing

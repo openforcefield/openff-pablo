@@ -66,6 +66,8 @@ markdown_extensions:
   - def_list
   - footnotes
   - tables
+  - smarty
+  - sane_lists
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.arithmatex:
@@ -87,6 +89,8 @@ markdown_extensions:
   - pymdownx.snippets
   - pymdownx.tasklist:
       custom_checkbox: true
+  - toc:
+      permalink: "#"
 
 extra:
   homepage: https://docs.openforcefield.org
@@ -115,6 +119,7 @@ validation:
 
 plugins:
   - search
+  - autorefs
   - gen-files:
       scripts:
         - scripts/gen_ref_pages.py
@@ -130,23 +135,16 @@ plugins:
       handlers:
         python:
           inventories:
-            # Some of these require https://github.com/mkdocstrings/mkdocstrings/pull/748
-            - https://docs.python.org/3/objects.inv
-            - https://numpy.org/doc/stable/objects.inv
-            - https://docs.scipy.org/doc/scipy/reference/objects.inv
-            - https://scikit-learn.org/stable/objects.inv
-            - http://docs.openmm.org/latest/api-python/objects.inv
-            - https://www.rdkit.org/docs/objects.inv
-            # - https://docs.eyesopen.com/toolkits/python/objects.inv
-            - https://www.mdtraj.org/1.9.5/objects.inv
-            # - url: https://docs.openforcefield.org/projects/toolkit/en/stable/objects.inv
-            #   domains: [std, py]
+            - url: https://docs.openforcefield.org/en/latest/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/toolkit/en/stable/objects.inv
+              domains: [std, py]
             - url: https://docs.openforcefield.org/projects/interchange/en/stable/objects.inv
               domains: [std, py]
             - url: https://docs.openforcefield.org/projects/units/en/stable/objects.inv
               domains: [std, py]
-            # - url: https://docs.openforcefield.org/projects/bespokefit/en/stable/objects.inv
-            #   domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/bespokefit/en/stable/objects.inv
+              domains: [std, py]
             - url: https://docs.openforcefield.org/projects/qcsubmit/en/stable/objects.inv
               domains: [std, py]
             - url: https://docs.openforcefield.org/projects/nagl/en/stable/objects.inv
@@ -157,8 +155,14 @@ plugins:
               domains: [std, py]
             - url: https://docs.openforcefield.org/projects/recharge/en/stable/objects.inv
               domains: [std, py]
-            - url: https://docs.openforcefield.org/en/latest/objects.inv
-              domains: [std, py]
+            - https://docs.python.org/3/objects.inv
+            - https://numpy.org/doc/stable/objects.inv
+            - https://docs.scipy.org/doc/scipy/reference/objects.inv
+            - https://scikit-learn.org/stable/objects.inv
+            - http://docs.openmm.org/latest/api-python/objects.inv
+            - https://www.rdkit.org/docs/objects.inv
+            - https://docs.eyesopen.com/toolkits/python/objects.inv
+            - https://www.mdtraj.org/1.9.5/objects.inv
           paths: [".."]
           options:
             extensions: [griffe_pydantic]
@@ -178,6 +182,7 @@ plugins:
             filters: ["!^_"] # Filter out all class members starting with an underscore, including those starting with two underscores
             show_labels: false
             group_by_category: true
+            show_category_heading: true
             summary: true
             heading_level: 1
             show_signature_annotations: true

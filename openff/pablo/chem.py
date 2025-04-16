@@ -17,6 +17,7 @@ DISULFIDE_BOND = BondDefinition(
     aromatic=False,
     stereo=None,
 )
+"""A disulfide bond between atoms named `"SG"` in different residues."""
 
 PEPTIDE_BOND = BondDefinition(
     atom1="C",
@@ -25,6 +26,7 @@ PEPTIDE_BOND = BondDefinition(
     aromatic=False,
     stereo=None,
 )
+"""A peptide bond between atoms named `"C"` and `"N"`."""
 
 PHOSPHODIESTER_BOND = BondDefinition(
     atom1="O3'",
@@ -33,3 +35,4 @@ PHOSPHODIESTER_BOND = BondDefinition(
     aromatic=False,
     stereo=None,
 )
+"""A phosphodiester bond between atoms named `"O3'"` and `"P"`."""
