@@ -1,0 +1,61 @@
+/* Set the fonts for the signature-as-heading */
+:is(h1, h2, h3, h4, h5, h6).doc-heading {
+    font-size: 100%;
+}
+.signature-and-symbol {
+    font-family: var(--md-code-font-family);
+}
+.signature-and-symbol .signature {
+    margin-left: 1rem;
+}
+.doc-heading .signature .sig-type a {
+    color: var(--md-default-fg-color--light);
+    font-weight: bold;
+}
+.doc-heading .signature .sig-type a:hover {
+    color: var(--md-accent-fg-color);
+}
+.doc-heading .signature .sig-path-name {
+    font-weight: bold;
+    color: #015480;
+}
+.doc-heading .signature .sig-path-root {
+    font-size: 80%;
+}
+.doc-heading .signature .sig-param-default-equals {
+    color: #f03a21;
+}
+
+/* Each parameter is its own indented block */
+.doc-heading .signature .sig-param {
+    display: block;
+    margin-left: 2ch;
+}
+/* Continuation lines should be indented further still*/
+.doc-heading .signature .sig-param,
+.doc-heading .signature.sig-attr {
+    text-indent: hanging 2ch;
+}
+
+/* Set the colour for the name of each parameter */
+.doc-heading .signature .sig-param .sig-param-name {
+    color: #2f9ed2;
+}
+
+/* Control how each parameter wraps - this is basically responsive formatting */
+.doc-heading .signature .sig-type,
+.doc-heading .signature .sig-default {
+    display: inline-block;
+    white-space: nowrap;
+}
+.doc-heading .signature .sig-type .sig-type-expr,
+.doc-heading .signature .sig-default .sig-default-expr {
+    white-space: normal;
+}
+
+/* This is the only real CSS hack - insist on whitespace between type and default */
+.sig-param-type:not(:empty)::after {
+    content: "";
+    width: 1ch;
+    display: inline-block;
+}

@@ -50,8 +50,8 @@ class AtomDefinition:
     Atoms marked as leaving are expected to be missing from a PDB file when a
     bond is formed between this residue and another to satisfy the valence
     change for the new bond. See also
-    :py:data:`openff.pablo.residue.ResidueDefinition.linking_bond` and
-    :py:data:`openff.pablo.residue.ResidueDefinition.crosslink`.
+    [`openff.pablo.residue.ResidueDefinition.linking_bond`][] and
+    [`openff.pablo.residue.ResidueDefinition.crosslink`][].
     """
     charge: int
     """The formal charge of this atom"""
@@ -119,7 +119,7 @@ class BondDefinition:
     order: int
     """The bond order of this bond (1 for single bond, 2 for double bond, etc.)"""
     aromatic: bool
-    """``True`` if this bond is aromatic, ``False`` otherwise"""
+    """`True` if this bond is aromatic, `False` otherwise"""
     stereo: Literal["E", "Z"] | None
     """The stereochemistry of this bond."""
 
@@ -176,12 +176,12 @@ class ResidueDefinition:
     linking_bond: BondDefinition | None
     """Description of how this residue may bond to its neighbours in a polymer
 
-    If the residue is only found as a monomer, ``None``. Otherwise, a
-    :py:class:`BondDefinition`. The ``atom1`` and ``atom2`` attributes give the
-    canonical atom names of the atoms that form the linking bond. ``atom1`` is
-    the name of the atom in the residue preceding the bond, and ``atom2`` is in
-    the residue after the bond. Any atoms that the bond between residues
-    replaces should be marked as ``atom.leaving=True``.
+    If the residue is only found as a monomer, `None`. Otherwise, a
+    [`BondDefinition`][openff.pablo.residue.BondDefinition]. The `atom1` and
+    `atom2` attributes give the canonical atom names of the atoms that form the
+    linking bond. `atom1` is the name of the atom in the residue preceding the
+    bond, and `atom2` is in the residue after the bond. Any atoms that the bond
+    between residues replaces should be marked as `atom.leaving=True`.
 
     A linking bond will be formed to join two residues if and only if all of the
     below are true:
@@ -189,12 +189,12 @@ class ResidueDefinition:
     - The residues' atom records are sequential in the PDB file
     - The residues have the same chain ID
     - There is no TER record between the residues in the PDB file
-    - The two residues have identical ``linking_bond`` attributes
-    - All leaving atoms associated with ``linking_bond.atom1`` are absent in
+    - The two residues have identical `linking_bond` attributes
+    - All leaving atoms associated with `linking_bond.atom1` are absent in
       the first encountered residue, and all leaving atoms associated with
-      ``linking_bond.atom2`` are absent in the latter residue. Leaving atoms
-      are those that have the ``AtomDefinition.leaving`` attribute set to
-      ``True``. A leaving atom is associated with atom `a` if it is bonded to
+      `linking_bond.atom2` are absent in the latter residue. Leaving atoms
+      are those that have the `AtomDefinition.leaving` attribute set to
+      `True`. A leaving atom is associated with atom `a` if it is bonded to
       `a`, or it is bonded to a leaving atom associated with `a`.
     - There is at least one leaving atom associated with each linking atom
 
@@ -209,21 +209,21 @@ class ResidueDefinition:
     are do not appear sequentially in the PDB file. Crosslinks cannot occur
     within a residue; use a bond or residue variant instead.
 
-    If the residue does not form cross links, ``None``. Otherwise, a
-    :py:class:`BondDefinition`. The ``atom1`` and ``atom2`` attributes give the
-    canonical atom names of the atoms that form the crosslink. ``atom1`` is
-    the name of the atom in this residue, and ``atom2`` is in the other residue.
-    Any atoms that the bond between residues replaces should be marked as
-    ``atom.leaving=True``.
+    If the residue does not form cross links, `None`. Otherwise, a
+    [`BondDefinition`][openff.pablo.residue.BondDefinition]. The `atom1` and
+    `atom2` attributes give the canonical atom names of the atoms that form the
+    crosslink. `atom1` is the name of the atom in this residue, and `atom2` is
+    in the other residue. Any atoms that the bond between residues replaces
+    should be marked as `atom.leaving=True`.
 
     A crosslink will be formed between two residues if and only if all of the
     below are true:
 
-    - The two residues' ``crosslink`` attributes are identical except that their
+    - The two residues' `crosslink` attributes are identical except that their
       atom names are reversed
-    - All leaving atoms associated with each residues' ``crosslink.atom1``
+    - All leaving atoms associated with each residues' `crosslink.atom1`
       attribute are absent in that residue. Leaving atoms are those that have
-      the ``AtomDefinition.leaving`` attribute set to ``True``. A leaving atom
+      the `AtomDefinition.leaving` attribute set to `True`. A leaving atom
       is associated with atom `a` if it is bonded to `a`, or it is bonded to a
       leaving atom associated with `a`.
     - There is at least one leaving atom associated with each cross-linking atom
@@ -317,33 +317,33 @@ class ResidueDefinition:
         description: str | None = None,
     ) -> Self:
         """
-        Create a ``ResidueDefinition`` from an :py:class:`openff.toolkit.Molecule`
+        Create a `ResidueDefinition` from an OpenFF `Molecule`.
 
         Parameters
         ----------
         molecule
-            The ``Molecule`` object. Canonical names are taken from the atom
+            The `Molecule` object. Canonical names are taken from the atom
             names in this object. Leaving atoms are identified from the atom
             metadata; atom's whose metadata includes a truthy value for the key
-            ``"leaving_atom"`` are marked as leaving atoms. Synonyms are never
+            `"leaving_atom"` are marked as leaving atoms. Synonyms are never
             set.
         residue_name
             The 3-letter code used to identify the residue in a PDB file. If
-            ``None``, takes name from atom's ``"residue_name"`` metadata entry,
-            or raises ``ValueError`` if they do not all agree. See also
-            :py:data:`openff.pablo.ResidueDefinition.residue_name`
+            `None`, takes name from atom's `"residue_name"` metadata entry,
+            or raises `ValueError` if they do not all agree. See also
+            [`openff.pablo.ResidueDefinition.residue_name`][].
         linking_bond
-            Residue linking bond. May be taken from ``molecule``
-            ``"linking_bond"`` property if ``None``. See
-            :py:data:`openff.pablo.ResidueDefinition.linking_bond`
+            Residue linking bond. May be taken from the molecule's
+            `"linking_bond"` property if ``None``. See
+            [`openff.pablo.ResidueDefinition.linking_bond`][].
         crosslink
-            Residue crosslink. May be taken from ``molecule`` ``"crosslink"``
-            property if ``None``. See
-            :py:data:`openff.pablo.ResidueDefinition.crosslink`
+            Residue crosslink. May be taken from the molecule's
+            `"crosslink"` property if `None`. See
+            [`openff.pablo.ResidueDefinition.crosslink`][].
         description
-            An optional string describing the residue. Taken from ``molecule``
-            ``"description"`` property if ``None``. See
-            :py:data:`openff.pablo.ResidueDefinition.description`
+            An optional string describing the residue. Taken from the
+            molecule's `"description"` property if `None`. See
+            [`openff.pablo.ResidueDefinition.description`][].
         """
         if residue_name is None:
             atom_residue_names = {
@@ -425,27 +425,28 @@ class ResidueDefinition:
         description: str | None = None,
     ) -> Self:
         """
-        Create a linking ``ResidueDefinition`` from an :py:class:`openff.toolkit.Molecule`
+        Create a linking `ResidueDefinition` from an OpenFF `Molecule`
 
         Parameters
         ----------
         residue_name
             The 3-letter code used to identify the residue in a PDB file. See
-            :py:data:`openff.pablo.ResidueDefinition.residue_name`
+            [`openff.pablo.ResidueDefinition.residue_name`][]
         molecule
-            The ``Molecule`` object. Canonical names are taken from the atom
+            The `Molecule` object. Canonical names are taken from the atom
             names in this object. Synonyms are never set.
         leaving_atom_indices
-            Indices of atoms within the ``molecule`` argument that should be
-            marked as leaving atoms. See :py:data:`openff.pablo.AtomDefinition.leaving`
+            Indices of atoms within the `molecule` argument that should be
+            marked as leaving atoms. See
+            [`openff.pablo.residue.AtomDefinition.leaving`][]
         linking_bond
             The bond linking this residue to its neighbours in a polymer. See
-            :py:data:`openff.pablo.ResidueDefinition.linking_bond`
+            [`openff.pablo.ResidueDefinition.linking_bond`][]
         crosslink
-            See :py:data:`openff.pablo.ResidueDefinition.crosslink`
+            See [`openff.pablo.ResidueDefinition.crosslink`][]
         description
             An optional string describing the residue. See
-            :py:data:`openff.pablo.ResidueDefinition.description`
+            [`openff.pablo.ResidueDefinition.description`][]
         """
         molecule = deepcopy(molecule)
         for i in leaving_atom_indices:
@@ -476,7 +477,7 @@ class ResidueDefinition:
         ----------
         residue_name
             The 3-letter code used to identify the residue in a PDB file. See
-            :py:data:`openff.pablo.ResidueDefinition.residue_name`
+            [`openff.pablo.ResidueDefinition.residue_name`][]
         mapped_smiles
             The SMILES string. All atoms must be explicitly included with
             contiguous mapping numbers starting at 1.
@@ -490,12 +491,12 @@ class ResidueDefinition:
             leaving atoms.
         linking_bond
             The bond linking this residue to its neighbours in a polymer. See
-            :py:data:`openff.pablo.ResidueDefinition.linking_bond`
+            [`openff.pablo.ResidueDefinition.linking_bond`][]
         crosslink
-            See :py:data:`openff.pablo.ResidueDefinition.crosslink`
+            See [`openff.pablo.ResidueDefinition.crosslink`][]
         description
             An optional string describing the residue. See
-            :py:data:`openff.pablo.ResidueDefinition.description`
+            [`openff.pablo.ResidueDefinition.description`][]
         """
         molecule = Molecule.from_mapped_smiles(
             mapped_smiles,

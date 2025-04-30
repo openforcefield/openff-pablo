@@ -1,0 +1,71 @@
+{% extends "_base/attribute.html.jinja" %}
+{% set value_in_header_cutoff = 30 %}
+
+    {% block heading scoped %}
+      {#- Heading block.
+
+      This block renders the heading for the attribute.
+      -#}
+      {% if config.separate_signature %}
+        {{ super() }}
+      {% else %}
+        <span class="signature-and-symbol">
+            {% if config.show_symbol_type_heading -%}
+            <code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>
+            {%- endif -%}
+            <span class="signature sig-attr">
+                {%- if show_full_path -%}
+                    <span class="sig-path-root">{{attribute.parent.path}}.</span>
+                {%- endif -%}
+                <span class="sig-path-name">{{ attribute.name }}</span>
+                {%- if attribute.annotation and config.show_signature_annotations -%}
+                    <span class="sig-type">{#--#}
+                        <span class="sig-attr-type-colon sig-type-colon">:</span>
+                        <span class="sig-attr-type-expr sig-type-expr">
+                            {%- with expression = attribute.annotation -%}
+                                {%- include "expression"|get_template with context -%}
+                            {%- endwith -%}
+                        </span>
+                    </span>
+                {% endif %}
+                {% if attribute.value -%}
+                    <span class="sig-attr-default sig-default"><span class="sig-attr-default-equals sig-default-equals"> = </span>
+                    <span class="sig-attr-default-expr sig-default-expr">
+                        {%- if attribute.value|string|length < value_in_header_cutoff -%}
+                            {%- if config.signature_crossrefs -%}
+                                {%- with expression = attribute.value, backlink_type = "used-by" -%}
+                                    {%- include "expression"|get_template with context -%}
+                                {%- endwith -%}
+                            {%- else -%}
+                                {{- attribute.value|safe -}}
+                            {%- endif -%}
+                        {%- else -%}
+                            ...
+                        {%- endif -%}
+                    </span>
+                {%- endif -%}
+            </span>
+        </span>
+      {% endif %}
+    {% endblock heading %}
+
+    {% block contents scoped %}
+      {{ super() }}
+
+      {%- if
+        not config.separate_signature
+        and attribute.value|string|length >= value_in_header_cutoff
+      -%}
+        <details class="quote">
+            <summary>Source code in <code>
+            {%- if attribute.relative_filepath.is_absolute() -%}
+            {{ attribute.relative_package_filepath }}
+            {%- else -%}
+                {{ attribute.relative_filepath }}
+            {%- endif -%}
+            </code></summary>
+            {{ attribute.source|highlight(language="python", linestart=attribute.lineno or 0, linenums=True) }}
+        </details>
+      {% endif %}
+
+    {% endblock contents %}

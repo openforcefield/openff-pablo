@@ -1,0 +1,202 @@
+site_name: "Pablo"
+site_description: "A chemistry-first PDB loader"
+site_url: !ENV READTHEDOCS_CANONICAL_URL
+repo_name: openforcefield/openff-pablo
+repo_url: "https://github.com/openforcefield/openff-pablo"
+docs_dir: "src"
+watch:
+  ["../openff", "../examples", "../README.md", "src", "scripts", "overrides"]
+copyright: Copyright &copy 2025, Josh Mitchell
+edit_uri: edit/main/docs/src/
+
+nav:
+  - Home:
+      - Overview: index.md
+      - tests.md
+  # - Examples:
+  #     - examples/load_pdb.ipynb
+  #     - examples/prepare_pdb.ipynb
+  #     - examples/prepare_jsontop.ipynb
+  #     - examples/smiles_names.ipynb
+  - API reference: reference/
+
+theme:
+  name: material
+  custom_dir: overrides
+  font: false
+  logo: assets/logos/openforcefield_v1_white.png
+  favicon: assets/favicon.svg
+  features:
+    - announce.dismiss
+    - content.code.annotate
+    - content.code.copy
+    - content.tooltips
+    - navigation.footer
+    - navigation.indexes
+    # - navigation.instant # Breaks src/javascript/readthedocs-versions.js
+    - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: openff
+      accent: custom
+      toggle:
+        icon: material/lightbulb
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/lightbulb-outline
+        name: Switch to system preference
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - tables
+  - smarty
+  - sane_lists
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem
+  - pymdownx.blocks.caption
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      use_pygments: true
+      pygments_lang_class: true
+      auto_title: true
+      line_spans: __span
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.snippets
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - toc:
+      permalink: "#"
+
+extra:
+  homepage: https://docs.openforcefield.org
+  social:
+    - name: Open Force Field on Zenodo
+      icon: academicons/zenodo
+      link: https://zenodo.org/communities/openforcefield/
+    - name: Open Force Field on YouTube
+      icon: fontawesome/brands/youtube
+      link: https://www.youtube.com/channel/UCh0aJSUm_sYr7nuTzhW806g
+    - name: Open Force Field on GitHub
+      icon: fontawesome/brands/github
+      link: https://github.com/openforcefield
+    - name: Open Force Field on BlueSky
+      icon: fontawesome/brands/bluesky
+      link: https://bsky.app/profile/openforcefield.org
+    - name: Open Force Field on LinkedIn
+      icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/company/openforcefield/
+
+validation:
+  omitted_files: warn
+  absolute_links: relative_to_docs
+  unrecognized_links: warn
+  anchors: warn
+
+plugins:
+  - search
+  - autorefs
+  - gen-files:
+      scripts:
+        - scripts/gen_ref_pages.py
+        # - scripts/copy_examples.py
+  # - mkdocs-jupyter:
+  #     include: ["examples/*.ipynb"]
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      enable_inventory: true
+      custom_templates: overrides/mkdocstrings
+      default_handler: python
+      handlers:
+        python:
+          inventories:
+            - url: https://docs.openforcefield.org/en/latest/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/toolkit/en/stable/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/interchange/en/stable/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/units/en/stable/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/bespokefit/en/stable/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/qcsubmit/en/stable/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/nagl/en/stable/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/fragmenter/en/stable/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/evaluator/en/stable/objects.inv
+              domains: [std, py]
+            - url: https://docs.openforcefield.org/projects/recharge/en/stable/objects.inv
+              domains: [std, py]
+            - https://docs.python.org/3/objects.inv
+            - https://numpy.org/doc/stable/objects.inv
+            - https://docs.scipy.org/doc/scipy/reference/objects.inv
+            - https://scikit-learn.org/stable/objects.inv
+            - http://docs.openmm.org/latest/api-python/objects.inv
+            - https://www.rdkit.org/docs/objects.inv
+            - https://docs.eyesopen.com/toolkits/python/objects.inv
+            - https://www.mdtraj.org/1.9.5/objects.inv
+          paths: [".."]
+          options:
+            extensions: [griffe_pydantic]
+            docstring_options:
+              ignore_init_summary: true
+              returns_multiple_items: false
+              returns_named_value: false
+            docstring_style: numpy
+            docstring_section_style: spacy
+            merge_init_into_class: true
+            show_if_no_docstring: true
+            separate_signature: false
+            show_root_heading: true
+            show_root_full_path: true
+            parameter_headings: false
+            show_symbol_type_heading: true
+            filters: ["!^_"] # Filter out all class members starting with an underscore, including those starting with two underscores
+            show_labels: false
+            group_by_category: true
+            show_category_heading: true
+            summary: true
+            heading_level: 1
+            show_signature_annotations: true
+            signature_crossrefs: true
+
+extra_javascript:
+  - javascript/readthedocs_search.js
+  - javascript/readthedocs_versions.js
+  - javascript/katex.js
+  - https://unpkg.com/katex@0/dist/katex.min.js
+  - https://unpkg.com/katex@0/dist/contrib/auto-render.min.js
+extra_css:
+  - stylesheets/palette.css
+  - stylesheets/font.css
+  - stylesheets/layout.css
+  - stylesheets/signatures.css
+  - https://unpkg.com/katex@0/dist/katex.min.css

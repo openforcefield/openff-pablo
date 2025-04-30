@@ -1,0 +1,24 @@
+{% extends "_base/function.html.jinja" %}
+
+    {% block heading scoped %}
+      {#- Heading block.
+
+      This block renders the heading for the function.
+      -#}
+      {% if config.separate_signature %}
+        {{ super() }}
+      {% else %}
+        <span class="signature-and-symbol">
+            {% if config.show_symbol_type_heading -%}
+                <code class="doc-symbol doc-symbol-heading doc-symbol-{{ symbol_type }}"></code>
+            {%- endif -%}
+            <span class="signature">
+                {%- if show_full_path -%}
+                    <span class="sig-path-root">{{function.parent.path}}.</span>
+                {%- endif -%}
+                <span class="sig-path-name">{{ function.name }}</span>
+                {%- include "detailed_signature"|get_template with context %}
+            </span>
+        </span>
+      {% endif %}
+    {% endblock heading %}

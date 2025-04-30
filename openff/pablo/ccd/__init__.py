@@ -1,9 +1,9 @@
 """
 Tools for reading and patching the PDB Chemical Component Dictionary (CCD).
 
-The ``CCD_RESIDUE_DEFINITION_CACHE`` loads, caches, and provides residue
+The `CCD_RESIDUE_DEFINITION_CACHE` loads, caches, and provides residue
 definitions from the CCD and is the default residue database used by
-``topology_from_pdb``.
+`topology_from_pdb`.
 """
 
 from pathlib import Path

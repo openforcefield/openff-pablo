@@ -23,22 +23,25 @@ __all__ = [
 
 class CcdCache(Mapping[str, list[ResidueDefinition]]):
     """
-    Caches, patches, and presents the CCD as a Python ``Mapping``.
+    Caches, patches, and presents the CCD as a Python `Mapping`.
 
     This requires internet access to work.
 
     Parameters
-    ==========
-    path
+    ----------
+    library_paths
+        Paths in which to look (in addition to `cache_path`) for CCD entries.
+    cache_path
         The path to which to download CCD entries.
     preload
         A list of residue names to download when initializing the class.
     patches
-        Functions to call on the given ``ResidueDefinitions`` before they are
-        returned. A map from residue names to a single callable. The patch
-        corresponding to key ``"*"`` will be applied to all residues before the
-        more specific patches. Use :py:func:`combine_patches` to combine
-        multiple patches into one.
+        Functions to call on the given `ResidueDefinitions` before they are
+        returned. An iterable of maps from residue names to a single callable.
+        The patch corresponding to key `"*"` will be applied to all residues
+        before the more specific patches. Multiple maps may be provided to apply
+        multiple transformations; transformations are applied in the order
+        given.
     extra_definitions
         Additional residue definitions to add to the cache. Note that patches
         are not applied to these definitions.
@@ -53,13 +56,13 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
             xdg_base_dir.save_cache_path("openff-pablo"),
             "ccd_cache",
         ),
-        preload: list[str] = [],
+        preload: Iterable[str] = (),
         patches: Iterable[
             Mapping[
                 str,
                 Callable[[ResidueDefinition], list[ResidueDefinition]],
             ]
-        ] = {},
+        ] = (),
         extra_definitions: Mapping[str, Iterable[ResidueDefinition]] = {},
     ):
         self._cache_path = cache_path.resolve()
@@ -295,6 +298,11 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         self,
         extra_definitions: Mapping[str, Sequence[ResidueDefinition]],
     ) -> Self:
+        """Add additional definitions to the cache.
+
+        This method modifies `self`. The modified object is only returned to
+        facilitate method chaining.
+        """
         new = deepcopy(self)
         for resname, resdefs in extra_definitions.items():
             new._extra_definitions_set = True

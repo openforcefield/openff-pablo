@@ -1,0 +1,26 @@
+{% extends "_base/class.html.jinja" %}
+
+    {% block heading scoped %}
+      {#- Heading block.
+
+      This block renders the heading for the class.
+      -#}
+      {% if config.merge_init_into_class and "__init__" in all_members and not config.separate_signature %}
+        <span class="signature-and-symbol">
+            {% if config.show_symbol_type_heading -%}
+                <code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>
+            {%- endif -%}
+            <span class="signature">
+                {% with function = all_members["__init__"] %}
+                    {%- if show_full_path -%}
+                        <span class="sig-path-root">{{class.parent.path}}.</span>
+                    {%- endif -%}
+                    <span class="sig-path-name">{{ class.name }}</span>
+                    {%- include "detailed_signature"|get_template with context %}
+                {% endwith %}
+            </span>
+        </span>
+      {% else %}
+        {{ super() }}
+      {% endif %}
+    {% endblock heading %}

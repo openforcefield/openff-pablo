@@ -67,8 +67,10 @@ Each 3-tuple specifies an atom name to remove. This atom must have exactly one
 bond. A variant residue definition is created with that atom and bond removed,
 and the formal charge of the bonded atom reduced by one.
 
-Note that all combinations of deprotonations are generated; this means a residue
-with ``n`` abstractable hydrogens will have ``2**n`` variants."""
+Note that all combinations of protonations and deprotonations are generated;
+this means a residue with $n$ abstractable hydrogens and $m$ acidic atoms
+will have $2^{n+m}$ variants.
+"""
 
 
 BASIC_ATOMS: dict[str, list[tuple[str, str]]] = {
@@ -97,7 +99,12 @@ BASIC_ATOMS: dict[str, list[tuple[str, str]]] = {
 
 Each 3-tuple specifies an atom name to protonate and the name of the added
 proton. A variant residue definition is created with that atom and bond added,
-and the formal charge of the atom increased by one."""
+and the formal charge of the atom increased by one.
+
+Note that all combinations of protonations and deprotonations are generated;
+this means a residue with $n$ abstractable hydrogens and $m$ acidic atoms
+will have $2^{n+m}$ variants.
+"""
 
 ATOM_NAME_SYNONYMS = {
     "NME": {
@@ -157,11 +164,11 @@ def fix_caps(res: ResidueDefinition) -> list[ResidueDefinition]:
 
 def add_protonation_variants(res: ResidueDefinition) -> list[ResidueDefinition]:
     """
-    Add protonation variants from the ACIDIC_PROTONS and BASIC_ATOMS constants
+    Add protonation variants from `ACIDIC_PROTONS` and `BASIC_ATOMS`.
 
     Note that all combinations of protonations and deprotonations are generated;
-    this means a residue with ``n`` abstractable hydrogens and ``m`` acidic atoms
-    will have ``2**(n+m)`` variants.
+    this means a residue with $n$ abstractable hydrogens and $m$ acidic atoms
+    will have $2^{n+m}$ variants.
     """
     return list(
         flatten(
@@ -172,7 +179,7 @@ def add_protonation_variants(res: ResidueDefinition) -> list[ResidueDefinition]:
 
 
 def add_deprotonated_variants(res: ResidueDefinition) -> list[ResidueDefinition]:
-    """Add protonation variants from the ACIDIC_PROTONS constant"""
+    """Add protonation variants from the `ACIDIC_PROTONS` constant"""
     deprotonations: list[tuple[str, str]] = []
     for hydrogen in ACIDIC_PROTONS.get(res.residue_name, []):
         bonded_atoms: list[str] = []
@@ -223,7 +230,7 @@ def add_deprotonated_variants(res: ResidueDefinition) -> list[ResidueDefinition]
 
 
 def add_protonated_variants(res: ResidueDefinition) -> list[ResidueDefinition]:
-    """Add protonation variants from the BASIC_ATOMS constant"""
+    """Add protonation variants from the `BASIC_ATOMS` constant"""
     protonations = BASIC_ATOMS.get(res.residue_name, [])
 
     variants: list[ResidueDefinition] = [res]
@@ -271,7 +278,7 @@ def add_protonated_variants(res: ResidueDefinition) -> list[ResidueDefinition]:
 
 def add_synonyms(res: ResidueDefinition) -> list[ResidueDefinition]:
     """
-    Patch a residue definition to include synonyms from :py:data:`ATOM_NAME_SYNONYMS`.
+    Patch a residue definition to include synonyms from `ATOM_NAME_SYNONYMS`.
     """
     patched_residues = [
         res.replace(
@@ -294,7 +301,7 @@ def add_synonyms(res: ResidueDefinition) -> list[ResidueDefinition]:
 
 def disambiguate_alt_ids(res: ResidueDefinition) -> list[ResidueDefinition]:
     """
-    CCD patch: put alt atom ids in their own residue definitions if needed
+    Put alt atom ids in their own residue definitions if needed.
 
     This patch should be run before other patches that add synonyms, as it
     assumes that there is at most one synonym (from the CCD alt id
