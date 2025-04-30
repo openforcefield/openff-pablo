@@ -3,6 +3,7 @@ import warnings
 from collections.abc import Iterable, Mapping, MutableSequence
 from io import TextIOBase
 from os import PathLike
+from pathlib import Path
 from typing import IO, assert_never
 
 import numpy as np
@@ -558,3 +559,57 @@ def _add_to_molecule(
                 return other_molecule
 
     return this_molecule
+
+
+def topology_to_pdb(topology: Topology, fn: PathLike[str] | str):
+    path = Path(fn)
+
+    maybe_positions = topology.get_positions()
+    if maybe_positions is None:
+        raise ValueError("Cannot write pdb without positions")
+    positions: np.ndarray = maybe_positions.m_as("angstrom")  # type: ignore
+
+    try:
+        enumerated_atoms = sorted(
+            enumerate(topology.atoms),
+            key=lambda t: t[1].metadata["pdb_index"],
+        )
+    except KeyError:
+        enumerated_atoms = list(enumerate(topology.atoms))
+
+    for i, atom in enumerated_atoms:
+        metadata: dict[str, int | str] = {
+            "used_synonym": atom.name,
+            "atom_serial": i,
+            "alt_loc": " ",
+            "residue_name": "UNK",
+            "chain_id": "A",
+            "res_seq": 1,
+            "insertion_code": "",
+            "occupancy": "1.0",
+            "b_factor": "0.0",
+        }
+        metadata.update(atom.metadata)
+
+        serial = str(metadata["atom_serial"]).strip()[:5]
+        name = str(metadata["used_synonym"]).strip()[:4]
+        if len(name) < 4:
+            name = " " + name
+        altloc = str(metadata["alt_loc"]).strip()[:1]
+        resname = str(metadata["residue_name"]).strip()[:3]
+        chainid = str(metadata["chain_id"]).strip()[:1]
+        resseq = str(metadata["res_seq"]).strip()[:4]
+        icode = str(metadata["insertion_code"]).strip()[:1]
+        x, y, z = positions[i]
+        occupancy = float(metadata["occupancy"])
+        tempfactor = float(metadata["b_factor"])
+        element = str(atom.symbol).strip()[:2]
+        charge = atom.formal_charge.m_as("elementary_charge")
+        assert -10 < charge < 10
+        path.write_text(
+            f"ATOM  {serial: >5} {name: >4}{altloc: >1}{resname: >3} {chainid: >1}"
+            + f"{resseq: >4}{icode: >1}   {x: >8.3f}{y: >8.3f}{z: >8.3f}"
+            + f"{occupancy: >6.2f}{tempfactor: >6.2f}          {element: >2}{charge:+2}",
+        )
+
+    # TODO: Write CONECTs where necessary
