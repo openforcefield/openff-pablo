@@ -66,7 +66,7 @@ def test_2mum_neutralized_has_all_neutral_aas(all_aa_resnames: set[str]):
                 atom.formal_charge.m,
             )
             for atom in topology.atoms
-            if atom.formal_charge.m != 0  # type: ignore
+            if atom.formal_charge.m != 0
         ],
         sep="\n",
     )
