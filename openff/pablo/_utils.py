@@ -2,10 +2,12 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import (
     DefaultDict,
+    Literal,
     TypeAlias,
     TypeVar,
     TypeVarTuple,
     no_type_check,
+    overload,
 )
 
 import rdkit
@@ -29,7 +31,7 @@ __all__ = [
     "with_neighbours",
     "float_or_unknown",
     "dec_hex",
-    "int_or_none",
+    "charge_int_or_none",
     "cryst_to_box_vectors",
     "assign_stereochemistry_from_3d",
     "__UNSET__",
@@ -175,15 +177,23 @@ def dec_hex(s: str) -> int:
         n = len(s)
         parsed_as_hex = int(s, 16)
         smallest_hex: int = 0xA * 16 ** (n - 1)
-        if parsed_as_hex < smallest_hex:
-            raise ValueError("hex values must have leading digit greater than 9")
         largest_dec: int = 10**n - 1
+        if parsed_as_hex < smallest_hex:
+            raise ValueError(f"hex value's leftmost character must be A-F: {s!r}")
         return parsed_as_hex - smallest_hex + largest_dec + 1
 
 
-def int_or_none(s: str) -> int | None:
+@overload
+def charge_int_or_none(s: str, strict: Literal[True]) -> int: ...
+
+
+@overload
+def charge_int_or_none(s: str, strict: Literal[False]) -> int | None: ...
+
+
+def charge_int_or_none(s: str, strict: bool = False):
     if s == "":
-        return None
+        return 0 if strict else None
     else:
         if s.endswith("+"):
             return int(s[:-1])

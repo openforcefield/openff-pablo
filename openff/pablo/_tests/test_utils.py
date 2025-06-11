@@ -71,6 +71,9 @@ def test_with_neighbours(iterable: str):
         ("A00F", 10015),
         ("A010", 10016),
         ("FFFF", 34575),
+        ("99999", 99999),
+        ("A0000", 100000),
+        ("FFFFF", 493215),
     ],
 )
 def test_dec_hex(s: str, n: int):
