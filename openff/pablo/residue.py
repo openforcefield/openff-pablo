@@ -686,10 +686,7 @@ class ResidueDefinition:
                 f"Cannot deprotonate non-hydrogen atom {name}: {atom.symbol=}",
             )
 
-        neighbours = [
-            *(bond.atom1 for bond in self.bonds if bond.atom2 == name),
-            *(bond.atom2 for bond in self.bonds if bond.atom1 == name),
-        ]
+        neighbours = list(self.atoms_bonded_to(name))
         if len(neighbours) != 1:
             raise ValueError(
                 f"Cannot deprotonate atom {name} bonded to {len(neighbours)} other atoms",
@@ -782,7 +779,7 @@ class ResidueDefinition:
         ``resdef.vary_protonation(...)[1:]``.
 
         Note that all combinations of protonations and deprotonations are
-        generated; this means that if ``acidic`` has length ``n`` and ``bassic``
+        generated; this means that if ``acidic`` has length ``n`` and ``basic``
         has length ``m``, ``2**(n+m)`` variants will be generated.
 
         Parameters
