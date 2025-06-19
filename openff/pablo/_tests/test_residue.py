@@ -316,3 +316,156 @@ class TestResidueDefinition:
         cys_def: ResidueDefinition,
     ):
         assert cys_def.posterior_bond_linking_atom == "C"
+
+    def test_is_isomorphic_to(
+        self,
+        cys_def: ResidueDefinition,
+        cys_def_deprotonated_sidechain: ResidueDefinition,
+    ):
+        assert cys_def._is_isomorphic_to(cys_def)
+        cys_def_shuffled_atoms = cys_def.replace(
+            atoms=cys_def.atoms[5:] + cys_def.atoms[:5],
+        )
+        cys_def_shuffled_bonds = cys_def.replace(
+            bonds=cys_def.bonds[5:] + cys_def.bonds[:5],
+        )
+        assert cys_def._is_isomorphic_to(cys_def_shuffled_atoms)
+        assert cys_def != cys_def_shuffled_atoms
+        assert cys_def._is_isomorphic_to(cys_def_shuffled_bonds)
+        assert cys_def != cys_def_shuffled_bonds
+        assert not cys_def._is_isomorphic_to(cys_def_deprotonated_sidechain)
+
+    def test_deprotonated_at_cooh(self):
+        cooh = ResidueDefinition.from_smiles(
+            "[H:1][C:2](=[O:3])[O:4][H:5]",
+            {1: "HC", 2: "C", 3: "O", 4: "OH", 5: "HO"},
+            "COOH",
+        )
+        coo = ResidueDefinition.from_smiles(
+            "[H:1][C:2](=[O:3])[O-:4]",
+            {1: "HC", 2: "C", 3: "O", 4: "OH"},
+            "COO",
+        )
+
+        assert cooh.deprotonated_at("HO")._is_isomorphic_to(coo)
+
+    def test_protonated_at_cooh(self):
+        cooh = ResidueDefinition.from_smiles(
+            "[H:1][C:2](=[O:3])[O:4][H:5]",
+            {1: "HC", 2: "C", 3: "O", 4: "OH", 5: "HO"},
+            "COOH",
+        )
+        coo = ResidueDefinition.from_smiles(
+            "[H:1][C:2](=[O:3])[O-:4]",
+            {1: "HC", 2: "C", 3: "O", 4: "OH"},
+            "COO",
+        )
+
+        assert coo.protonated_at("OH", "HO")._is_isomorphic_to(cooh)
+
+    def test_protonated_at_oh(self):
+        hydroxide_ion = ResidueDefinition(
+            atoms=(
+                AtomDefinition.with_defaults("O", "O", charge=-1),
+                AtomDefinition.with_defaults("H1", "H"),
+            ),
+            bonds=(BondDefinition.with_defaults("H1", "O"),),
+            crosslink=None,
+            linking_bond=None,
+            description="HYDROXIDE ION",
+            residue_name="OH-",
+        )
+        water_from_hydroxide = hydroxide_ion.protonated_at("O", "H2")
+        assert water_from_hydroxide.to_openff_molecule().is_isomorphic_with(
+            Molecule.from_smiles("O"),
+        )
+
+    def test_protonated_at_fails_on_synonym_clash(self):
+        oh_resdef = ResidueDefinition(
+            atoms=(
+                AtomDefinition.with_defaults("O", "O", charge=-1),
+                AtomDefinition.with_defaults("H1", "H", synonyms=["H2"]),
+            ),
+            bonds=(BondDefinition.with_defaults("H1", "O"),),
+            crosslink=None,
+            linking_bond=None,
+            description="HYDROXIDE ION",
+            residue_name="OH-",
+        )
+        assert "H2" in oh_resdef.name_to_atom
+        with pytest.raises(ValueError):
+            oh_resdef.protonated_at("O", "H2")
+
+    @pytest.mark.parametrize("ignore_synonym_clashes", [True, False])
+    def test_protonated_at_fails_on_canonical_clash(
+        self,
+        ignore_synonym_clashes: bool,
+    ):
+        with pytest.raises(ValueError):
+            ResidueDefinition(
+                atoms=(
+                    AtomDefinition.with_defaults("O", "O", charge=-1),
+                    AtomDefinition.with_defaults("H", "H"),
+                ),
+                bonds=(BondDefinition.with_defaults("H", "O"),),
+                crosslink=None,
+                linking_bond=None,
+                description="HYDROXIDE ION",
+                residue_name="OH-",
+            ).protonated_at("O", "H", ignore_synonym_clashes=ignore_synonym_clashes)
+
+    def test_deprotonated_at_cys_sidechain(
+        self,
+        cys_def: ResidueDefinition,
+        cys_def_deprotonated_sidechain: ResidueDefinition,
+    ):
+        assert cys_def.deprotonated_at("HG")._is_isomorphic_to(
+            cys_def_deprotonated_sidechain,
+        )
+
+    def test_deprotonated_at_gly_backbones(
+        self,
+        gly_def_neutral: ResidueDefinition,
+        gly_def_zwitterionic: ResidueDefinition,
+    ):
+        assert gly_def_neutral.deprotonated_at("HXT")._is_isomorphic_to(
+            gly_def_zwitterionic.deprotonated_at("H3"),
+        )
+
+    def test_protonated_at_gly_backbones(
+        self,
+        gly_def_neutral: ResidueDefinition,
+        gly_def_zwitterionic: ResidueDefinition,
+    ):
+        assert gly_def_neutral.protonated_at("N", "H3")._is_isomorphic_to(
+            gly_def_zwitterionic.protonated_at("OXT", "HXT"),
+        )
+
+    def test_vary_protonation_gly_backbones(
+        self,
+        gly_def_neutral: ResidueDefinition,
+        gly_def_zwitterionic: ResidueDefinition,
+    ):
+        from_neutral = sorted(
+            gly_def_neutral.vary_protonation(
+                acidic=["HXT"],
+                basic=[("N", "H3")],
+            ),
+            key=lambda resdef: sorted([atom.name for atom in resdef.atoms]),
+        )
+        from_zwitterionic = sorted(
+            gly_def_zwitterionic.vary_protonation(
+                acidic=["H3"],
+                basic=[("OXT", "HXT")],
+            ),
+            key=lambda resdef: sorted([atom.name for atom in resdef.atoms]),
+        )
+
+        assert len(from_neutral) == 4
+        assert len(from_zwitterionic) == 4
+
+        for resdef_from_neutral, resdef_from_zwitterionic in zip(
+            from_neutral,
+            from_zwitterionic,
+        ):
+            assert resdef_from_zwitterionic._is_isomorphic_to(resdef_from_neutral)

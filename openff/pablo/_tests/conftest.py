@@ -213,6 +213,80 @@ def hoh_def_with_synonyms() -> ResidueDefinition:
 
 
 @pytest.fixture
+def gly_def_neutral() -> ResidueDefinition:
+    atoms = (
+        AtomDefinition.with_defaults(name="N", symbol="N"),
+        AtomDefinition.with_defaults(name="CA", symbol="C", stereo="R"),
+        AtomDefinition.with_defaults(name="C", symbol="C"),
+        AtomDefinition.with_defaults(name="O", symbol="O"),
+        AtomDefinition.with_defaults(name="HA1", symbol="H"),
+        AtomDefinition.with_defaults(name="OXT", symbol="O", leaving=True),
+        AtomDefinition.with_defaults(name="H", symbol="H"),
+        AtomDefinition.with_defaults(name="H2", symbol="H", leaving=True),
+        AtomDefinition.with_defaults(name="HA2", symbol="H"),
+        AtomDefinition.with_defaults(name="HXT", symbol="H", leaving=True),
+    )
+
+    bonds = (
+        BondDefinition.with_defaults("N", "CA"),
+        BondDefinition.with_defaults("N", "H"),
+        BondDefinition.with_defaults("N", "H2"),
+        BondDefinition.with_defaults("CA", "C"),
+        BondDefinition.with_defaults("CA", "HA1"),
+        BondDefinition.with_defaults("CA", "HA2"),
+        BondDefinition.with_defaults("C", "O", order=2),
+        BondDefinition.with_defaults("C", "OXT"),
+        BondDefinition.with_defaults("OXT", "HXT"),
+    )
+
+    return ResidueDefinition(
+        atoms=atoms,
+        bonds=bonds,
+        crosslink=None,
+        linking_bond=PEPTIDE_BOND,
+        description="GLYCINE",
+        residue_name="GLY",
+    )
+
+
+@pytest.fixture
+def gly_def_zwitterionic() -> ResidueDefinition:
+    atoms = (
+        AtomDefinition.with_defaults(name="N", symbol="N", charge=1),
+        AtomDefinition.with_defaults(name="CA", symbol="C", stereo="R"),
+        AtomDefinition.with_defaults(name="C", symbol="C"),
+        AtomDefinition.with_defaults(name="O", symbol="O"),
+        AtomDefinition.with_defaults(name="HA1", symbol="H"),
+        AtomDefinition.with_defaults(name="OXT", symbol="O", leaving=True, charge=-1),
+        AtomDefinition.with_defaults(name="H", symbol="H"),
+        AtomDefinition.with_defaults(name="H2", symbol="H", leaving=True),
+        AtomDefinition.with_defaults(name="H3", symbol="H"),
+        AtomDefinition.with_defaults(name="HA2", symbol="H"),
+    )
+
+    bonds = (
+        BondDefinition.with_defaults("N", "CA"),
+        BondDefinition.with_defaults("N", "H"),
+        BondDefinition.with_defaults("N", "H2"),
+        BondDefinition.with_defaults("N", "H3"),
+        BondDefinition.with_defaults("CA", "C"),
+        BondDefinition.with_defaults("CA", "HA1"),
+        BondDefinition.with_defaults("CA", "HA2"),
+        BondDefinition.with_defaults("C", "O", order=2),
+        BondDefinition.with_defaults("C", "OXT"),
+    )
+
+    return ResidueDefinition(
+        atoms=atoms,
+        bonds=bonds,
+        crosslink=None,
+        linking_bond=PEPTIDE_BOND,
+        description="GLYCINE",
+        residue_name="GLY",
+    )
+
+
+@pytest.fixture
 def cys_match(cys_def: ResidueDefinition) -> ResidueMatch:
     return ResidueMatch(
         residue_definition=cys_def,

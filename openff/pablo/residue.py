@@ -562,16 +562,21 @@ class ResidueDefinition:
         return molecule
 
     @cached_property
+    def canonical_name_to_atom(self) -> dict[str, AtomDefinition]:
+        """Map from each atoms' name and synonyms to the atom definition."""
+        return {atom.name: atom for atom in self.atoms}
+
+    @cached_property
     def name_to_atom(self) -> dict[str, AtomDefinition]:
         """Map from each atoms' name and synonyms to the atom definition."""
-        mapping = {atom.name: atom for atom in self.atoms}
+        mapping = self.canonical_name_to_atom
         canonical_names = set(mapping)
         for atom in self.atoms:
             for synonym in atom.synonyms:
                 if synonym in mapping and mapping[synonym] != atom:
                     raise ValueError(
                         f"synonym {synonym} degenerately defined for canonical"
-                        + f" names {mapping[synonym]} and {atom.name} in"
+                        + f" names {mapping[synonym].name} and {atom.name} in"
                         + f" residue {self.residue_name}",
                     )
                 if synonym in canonical_names:
@@ -639,3 +644,173 @@ class ResidueDefinition:
         if self.linking_bond is None:
             raise ValueError("not a linking residue")
         return self.linking_bond.atom1
+
+    def _is_isomorphic_to(self, other: Self) -> bool:
+        """Atom and bond ordering insensitive equality test"""
+        if other.linking_bond != self.linking_bond:
+            print(other.linking_bond, "!=", self.linking_bond)
+        if other.crosslink != self.crosslink:
+            print(other.crosslink, "!=", self.crosslink)
+        if set(other.atoms) != set(self.atoms):
+            print(
+                f"{set(other.atoms)-set(self.atoms)=}\n{set(self.atoms)-set(other.atoms)=}",
+            )
+        if set(other.bonds) != set(self.bonds):
+            print(
+                f"{set(other.bonds)-set(self.bonds)=}\n{set(self.bonds)-set(other.bonds)=}",
+            )
+        return all(
+            [
+                other.linking_bond == self.linking_bond,
+                other.crosslink == self.crosslink,
+                set(other.atoms) == set(self.atoms),
+                set(other.bonds) == set(self.bonds),
+            ],
+        )
+
+    def deprotonated_at(self, name: str) -> Self:
+        """Return a copy of ``self`` with proton ``name`` abstracted.
+
+        The hydrogen with canonical name ``name`` is removed, and the formal
+        charge of the atom bonded to it is decremented. If the named atom is not
+        hydrogen, is missing, or is bonded to a number of other atoms other than
+        1, ``ValueError`` is raised.
+        """
+        try:
+            atom = self.canonical_name_to_atom[name]
+        except KeyError:
+            raise ValueError(f"Cannot deprotonate missing atom {name}")
+
+        if atom.symbol != "H":
+            raise ValueError(
+                f"Cannot deprotonate non-hydrogen atom {name}: {atom.symbol=}",
+            )
+
+        neighbours = list(self.atoms_bonded_to(name))
+        if len(neighbours) != 1:
+            raise ValueError(
+                f"Cannot deprotonate atom {name} bonded to {len(neighbours)} other atoms",
+            )
+        neighbour = neighbours[0]
+
+        return self.replace(
+            bonds=[bond for bond in self.bonds if name not in [bond.atom1, bond.atom2]],
+            atoms=[
+                (
+                    atom.replace(charge=atom.charge - 1)
+                    if atom.name == neighbour
+                    else atom
+                )
+                for atom in self.atoms
+                if atom.name != name
+            ],
+        )
+
+    def protonated_at(
+        self,
+        heavy_atom_name: str,
+        proton_name: str,
+        ignore_synonym_clashes: bool = False,
+    ) -> Self:
+        """Return a copy of ``self`` with ``heavy_atom_name`` protonated by ``proton_name``.
+
+        The formal charge of the atom with canonical name ``heavy_atom_name`` is
+        incremented, a new hydrogen atom named ``proton_name`` is added, and a
+        bond is created between the two named atoms.  If the heavy atom is
+        missing or the new proton name clashes with an existing name or synonym,
+        ``ValueError`` is raised. The new atom has the same value for the
+        ``leaving`` attribute as the heavy atom. The synonym clash check may be
+        suppressed with the ``ignore_synonym_clashes`` argument, but the
+        canonical names are always checked.
+        """
+        try:
+            heavy_atom = self.canonical_name_to_atom[heavy_atom_name]
+        except KeyError:
+            raise ValueError(f"Cannot protonate missing atom {heavy_atom_name}")
+        if any(
+            [
+                (ignore_synonym_clashes and proton_name in self.canonical_name_to_atom),
+                (not ignore_synonym_clashes and proton_name in self.name_to_atom),
+            ],
+        ):
+            raise ValueError(
+                f"name {proton_name} clashes with existing name in residue",
+            )
+
+        return self.replace(
+            bonds=[
+                *self.bonds,
+                BondDefinition.with_defaults(heavy_atom_name, proton_name),
+            ],
+            atoms=[
+                *(
+                    (
+                        atom.replace(charge=atom.charge + 1)
+                        if atom.name == heavy_atom_name
+                        else atom
+                    )
+                    for atom in self.atoms
+                ),
+                AtomDefinition.with_defaults(
+                    proton_name,
+                    "H",
+                    leaving=heavy_atom.leaving,
+                ),
+            ],
+        )
+
+    def vary_protonation(
+        self,
+        *,
+        acidic: Iterable[str],
+        # Each element specifies an atom name to remove, decrementing the formal
+        # charge on the neighbouring heavy atom. Multiply bonded or non-hydrogen
+        # atoms raise an error.
+        basic: Iterable[tuple[str, str]],
+        # Each tuple specifies an atom name to protonate (increment the formal
+        # charge and form a bond) and the name of the added proton
+        ignore_synonym_clashes: bool = False,
+    ) -> list[Self]:
+        """
+        Compute all combinations of the specified protonation variants
+
+        The first element of the returned list is guaranteed to be the unmodified
+        starting residue definition; to get a list of just the new variants, use
+        ``resdef.vary_protonation(...)[1:]``.
+
+        Note that all combinations of protonations and deprotonations are
+        generated; this means that if ``acidic`` has length ``n`` and ``basic``
+        has length ``m``, ``2**(n+m)`` variants will be generated.
+
+        Parameters
+        ==========
+        acidic
+            Each element specifies an atom name to remove, decrementing the
+            formal charge on the neighbouring heavy atom. Multiply bonded,
+            unbonded, missing or non-hydrogen atoms raise ``ValueError``.
+        basic
+            Each tuple specifies an atom name to protonate (increment the formal
+            charge and form a bond) and the name of the added proton. Missing
+            heavy atoms or new atom names that clash with existing names raise
+            ``ValueError``.
+        ignore_synonym_clashes
+            If set to ``True``, protons added by the ``basic`` argument may have
+            names that clash with the synonyms of other atoms. This can be
+            useful in the early stages of a multi-step residue definition
+            patching process. Added protons may never have names that clash
+            with the canonical names of other atoms.
+        """
+        variants = [self]
+        for proton_to_remove in acidic:
+            for variant in list(variants):
+                variants.append(variant.deprotonated_at(proton_to_remove))
+        for atom_to_protonate, name_of_proton in basic:
+            for variant in list(variants):
+                variants.append(
+                    variant.protonated_at(
+                        atom_to_protonate,
+                        name_of_proton,
+                        ignore_synonym_clashes=ignore_synonym_clashes,
+                    ),
+                )
+        return variants
