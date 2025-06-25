@@ -23,6 +23,7 @@ from .patches import (
     fix_caps,
     patch_his_sidechain_zwitterion,
     set_hop3_leaving,
+    strip_linkless_leavers,
 )
 
 __all__ = [
@@ -34,7 +35,7 @@ __all__ = [
 # TODO: Replace these patches with CONECT records?
 CCD_RESIDUE_DEFINITION_CACHE: CcdCache = CcdCache(
     # TODO: Use a proper resource setup for this
-    [Path(__file__).parent / "data/ccd_cache"],
+    library_paths=[Path(__file__).parent / "data/ccd_cache"],
     patches=[
         {
             "ACE": fix_caps,
@@ -66,6 +67,7 @@ CCD_RESIDUE_DEFINITION_CACHE: CcdCache = CcdCache(
         },
         {"*": disambiguate_alt_ids},
         {"*": add_synonyms},
+        {"*": strip_linkless_leavers},
         {
             "HIS": patch_his_sidechain_zwitterion,
             "ARG": delete_doubly_deprotonated_arginine,
