@@ -1,6 +1,7 @@
 import pytest
 
 from openff.pablo.ccd import CCD_RESIDUE_DEFINITION_CACHE
+from openff.pablo.residue import ResidueDefinition
 
 
 @pytest.mark.parametrize(
@@ -79,3 +80,35 @@ def test_ccdcache_gives_clear_errors(resname: str, expected_message: str):
         check=lambda e: e.args == (resname, expected_message),
     ):
         CCD_RESIDUE_DEFINITION_CACHE[resname]
+
+
+def test_ccdcache_with(hooh_def: ResidueDefinition, hoh_def: ResidueDefinition):
+    assert "HOOH" not in CCD_RESIDUE_DEFINITION_CACHE
+    new_ccdcache = CCD_RESIDUE_DEFINITION_CACHE.with_([hooh_def])
+    assert new_ccdcache is not CCD_RESIDUE_DEFINITION_CACHE
+    assert "HOOH" in new_ccdcache
+    assert "HOOH" not in CCD_RESIDUE_DEFINITION_CACHE
+    assert new_ccdcache["HOOH"] == [hooh_def]
+
+    assert "HOH" in CCD_RESIDUE_DEFINITION_CACHE
+    assert CCD_RESIDUE_DEFINITION_CACHE["HOH"] != hoh_def
+    new_ccdcache = CCD_RESIDUE_DEFINITION_CACHE.with_({"HOH": [hoh_def]})
+    assert new_ccdcache is not CCD_RESIDUE_DEFINITION_CACHE
+    assert new_ccdcache["HOH"] == [*CCD_RESIDUE_DEFINITION_CACHE["HOH"], hoh_def]
+
+
+def test_ccdcache_with_replaced(hoh_def: ResidueDefinition):
+    assert "HOH" in CCD_RESIDUE_DEFINITION_CACHE
+    assert CCD_RESIDUE_DEFINITION_CACHE["HOH"] != hoh_def
+    new_ccdcache = CCD_RESIDUE_DEFINITION_CACHE.with_replaced({"HOH": [hoh_def]})
+    assert new_ccdcache is not CCD_RESIDUE_DEFINITION_CACHE
+    assert new_ccdcache["HOH"] == [hoh_def]
+
+
+def test_ccdcache_without(hooh_def: ResidueDefinition):
+    assert "HOOH" not in CCD_RESIDUE_DEFINITION_CACHE
+    ccdcache_with_hooh = CCD_RESIDUE_DEFINITION_CACHE.with_([hooh_def])
+    new_ccdcache = ccdcache_with_hooh.without({"HOOH"})
+    assert new_ccdcache is not ccdcache_with_hooh
+    assert "HOOH" not in new_ccdcache
+    assert "HOOH" in ccdcache_with_hooh
