@@ -12,6 +12,7 @@ dependencies:
   - sphinx-notfound-page
   - autodoc-pydantic
   - sphinx-click
+  - imghdr
 
   # Imports
   - openff-units
