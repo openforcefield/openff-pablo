@@ -3,7 +3,7 @@ channels:
   - conda-forge
 dependencies:
   # Base depends
-  - python>=3.11
+  - python>=3.11,<3.13
   - pip
 
   # Documentation
@@ -12,7 +12,6 @@ dependencies:
   - sphinx-notfound-page
   - autodoc-pydantic
   - sphinx-click
-  - imghdr
 
   # Imports
   - openff-units
