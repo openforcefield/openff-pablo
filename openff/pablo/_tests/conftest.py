@@ -190,6 +190,15 @@ def hoh_def() -> ResidueDefinition:
 
 
 @pytest.fixture
+def hooh_def() -> ResidueDefinition:
+    return ResidueDefinition.from_smiles(
+        "[H:1][O:2][O:3][H:4]",
+        {1: "H1", 2: "O1", 3: "O2", 4: "H2"},
+        "HOOH",
+    )
+
+
+@pytest.fixture
 def hoh_def_with_synonyms() -> ResidueDefinition:
     atoms = (
         AtomDefinition.with_defaults(name="H1", symbol="H", synonyms=["HA"]),

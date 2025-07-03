@@ -429,3 +429,15 @@ def add_nh2_leaving_atom(
         ),
         res,
     ]
+
+
+def strip_linkless_leavers(
+    res: ResidueDefinition,
+) -> list[ResidueDefinition]:
+    """
+    Set ``leaving=False`` on all atoms if ``res`` has no linking bond or crosslink
+    """
+    if res.linking_bond is None and res.crosslink is None:
+        return [res.replace(atoms=[atom.replace(leaving=False) for atom in res.atoms])]
+    else:
+        return [res]
