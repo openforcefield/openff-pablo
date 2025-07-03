@@ -46,8 +46,7 @@ def _match_unknown_molecules(
                 "residue_name": data.res_name[pdb_index],
                 "leaving": False,
                 "pdb_index": pdb_index,
-                "residue_number": str(data.res_seq[pdb_index]),
-                "res_seq": data.res_seq[pdb_index],
+                "residue_number": data.res_seq[pdb_index],
                 "insertion_code": data.i_code[pdb_index],
                 "chain_id": data.chain_id[pdb_index],
                 "atom_serial": data.serial[pdb_index],
@@ -201,8 +200,6 @@ def topology_from_pdb(
         The residue name
     ``"residue_number"``
         The residue number as a string
-    ``"res_seq"``
-        The residue number as an integer
     ``"insertion_code"``
         The icode for the atom's residue. Used to align residue numbers between
         proteins with indels.
@@ -223,7 +220,7 @@ def topology_from_pdb(
         not set for atoms matched via ``unknown_molecules``.
     ``"atom_serial"``
         The serial number of the atom, found in the second column of the PDB
-        file. Not guaranteed to be unique.
+        file, as a string. Not guaranteed to be unique.
     ``"matched_residue_description"``
         The residue description found in the residue database. This value is not
         set for atoms matched via ``unknown_molecules``.
@@ -445,8 +442,7 @@ def _add_to_molecule(
             name=atom_def.name if use_canonical_names else data.name[pdb_index],
             metadata={
                 "residue_name": data.res_name[pdb_index],
-                "res_seq": data.res_seq[pdb_index],
-                "residue_number": str(data.res_seq[pdb_index]),
+                "residue_number": data.res_seq[pdb_index],
                 "insertion_code": data.i_code[pdb_index],
                 "chain_id": data.chain_id[pdb_index],
                 "pdb_index": pdb_index,

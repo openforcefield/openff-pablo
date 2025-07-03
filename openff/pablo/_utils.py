@@ -144,7 +144,8 @@ def dec_hex(s: str) -> int:
     integer, except for strings that cannot be parsed as a decimal. For these
     strings, the first hexadecimal number is interpreted as 10^n, and subsequent
     numbers continue from there. For example, in PDB files, a fixed width column
-    format, residue numbers for large systems follow this representation:
+    format, residue numbers for large systems sometimes follow this
+    representation:
 
         "   1" -> 1
         "   2" -> 2

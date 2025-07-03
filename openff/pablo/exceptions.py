@@ -110,7 +110,7 @@ class MultipleMatchingResidueDefinitionsError(ValueError):
 
 
 class UnknownOrAmbiguousSerialInConectError(ValueError):
-    def __init__(self, serial: int, possible_indices: Collection[int]):
+    def __init__(self, serial: str, possible_indices: Collection[int]):
         self.serial = serial
         self.possible_indices = possible_indices
         msg = f"Atom serial {serial} was found in a CONECT record, "
