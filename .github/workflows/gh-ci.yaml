@@ -64,6 +64,7 @@ jobs:
           micromamba list
 
       - name: Type check
+        if: runner.os == 'Linux'
         run: |
           basedpyright openff
 

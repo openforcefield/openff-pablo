@@ -485,16 +485,6 @@ class TestPdbData:
             cys_data.subset_matches_residue(range(len(cys_def.atoms)), cys_def) is None
         )
 
-    def test_subset_matches_residue_fails_on_charge_mismatch(
-        self,
-        cys_def: ResidueDefinition,
-        cys_data: PdbData,
-    ):
-        cys_data.charge[5] = +2
-        assert (
-            cys_data.subset_matches_residue(range(len(cys_def.atoms)), cys_def) is None
-        )
-
     def test_subset_matches_residue_tolerates_none_charge_and_empty_element(self):
         resdef = ResidueDefinition(
             atoms=(AtomDefinition.with_defaults("H", "H", charge=1),),

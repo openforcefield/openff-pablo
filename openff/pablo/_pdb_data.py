@@ -9,7 +9,7 @@ from io import TextIOBase
 from os import PathLike
 from typing import IO, Any, DefaultDict, Self
 
-from ._utils import __UNSET__, dec_hex, int_or_none, with_neighbours
+from ._utils import __UNSET__, dec_hex, charge_int_or_none, with_neighbours
 from .exceptions import (
     UnknownOrAmbiguousSerialInConectError,
 )
@@ -208,6 +208,15 @@ class PdbData:
     cryst1_alpha: float | None = None
     cryst1_beta: float | None = None
     cryst1_gamma: float | None = None
+    strict: bool = False
+    """True to read in strict, spec-compliant mode, False to use common extensions.
+
+    Extensions include:
+    - hexadecimal extensions for atom serials and residue sequence numbers that
+    do not fit in the fixed column format
+    - missing charge column indicates unknown charge, not 0
+    - residue name may extend into column 21 iff the reside name has 4
+    non-whitespace characters"""
 
     @classmethod
     def from_file(cls, path: str | PathLike[str]) -> Self:
@@ -226,13 +235,17 @@ class PdbData:
                 assert value[-1] is __UNSET__
 
         self.model[-1] = None
-        self.serial[-1] = int(line[6:11])
+        self.serial[-1] = int(line[6:11]) if self.strict else dec_hex(line[6:11])
         self.serial_to_index[self.serial[-1]].append(len(self.serial) - 1)
         self.name[-1] = line[12:16].strip()
         self.alt_loc[-1] = line[16].strip() or ""
-        self.res_name[-1] = line[17:20].strip()
+        self.res_name[-1] = (
+            line[17:20].strip()
+            if self.strict or any(char.isspace() for char in line[17:21])
+            else line[17:21]
+        )
         self.chain_id[-1] = line[21].strip()
-        self.res_seq[-1] = dec_hex(line[22:26])
+        self.res_seq[-1] = int(line[22:26]) if self.strict else dec_hex(line[22:26])
         self.i_code[-1] = line[26].strip() or " "
         self.x[-1] = float(line[30:38])
         self.y[-1] = float(line[38:46])
@@ -240,7 +253,7 @@ class PdbData:
         self.occupancy[-1] = float(line[54:60])
         self.temp_factor[-1] = float(line[60:66])
         self.element[-1] = line[76:78].strip()
-        self.charge[-1] = int_or_none(line[78:80].strip())
+        self.charge[-1] = charge_int_or_none(line[78:80].strip(), strict=self.strict)
         self.terminated[-1] = False
         self.conects[-1] = set()
 
@@ -251,9 +264,9 @@ class PdbData:
                 assert value[-1] is not __UNSET__
 
     @classmethod
-    def parse_pdb(cls, lines: Iterable[str]) -> Self:
+    def parse_pdb(cls, lines: Iterable[str], strict: bool = False) -> Self:
         model_n = None
-        data = cls()
+        data = cls(strict=strict)
         for line in lines:
             if line.startswith("MODEL "):
                 model_n = int(line[10:14])
@@ -305,7 +318,7 @@ class PdbData:
         for line in lines:
             if line.startswith("CONECT "):
                 # a is the serial of the first atom in the conect, we need its indices
-                a = int(line[6:11])
+                a = dec_hex(line[6:11])
                 a_idcs = serial_to_index.get(a, [])
 
                 # Conects are usually provided once for multi-model files
@@ -318,7 +331,7 @@ class PdbData:
                 for a_idx, a_model in zip(a_idcs, a_models):
                     for start, stop in [(11, 16), (16, 21), (21, 26), (26, 31)]:
                         try:
-                            b = int(line[start:stop])
+                            b = dec_hex(line[start:stop])
                         except (ValueError, IndexError):
                             continue
 
@@ -348,6 +361,7 @@ class PdbData:
             ),
         ):
             if alt_loc != "":
+                # TODO: Support alt-locs as alternate conformers
                 warnings.warn(
                     "Alt locs not supported; only empty or 'A' alt locs will be read",
                 )
@@ -428,13 +442,14 @@ class PdbData:
             logging.debug("    Match failed: Element mismatch")
             return None
 
-        # Check that charges match, but tolerate missing columns
-        if any(
-            self.charge[i] is not None and self.charge[i] != atom.charge
-            for i, atom in index_to_atomdef.items()
-        ):
-            logging.debug("    Match failed: Charge mismatch")
-            return None
+        # PDB files can not be trusted; ignore charges.
+        # # Check that charges match, but tolerate missing columns
+        # if any(
+        #     self.charge[i] is not None and self.charge[i] != atom.charge
+        #     for i, atom in index_to_atomdef.items()
+        # ):
+        #     logging.debug("    Match failed: Charge mismatch")
+        #     return None
 
         missing_atoms = [
             atom for atom in residue_definition.atoms if atom.name not in matched_atoms

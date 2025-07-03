@@ -2,11 +2,9 @@
 Patches to add essential features to the CCD.
 """
 
-from itertools import combinations
-
 from openff.pablo.chem import DISULFIDE_BOND
 
-from .._utils import flatten, unwrap
+from .._utils import unwrap
 from ..residue import (
     AtomDefinition,
     BondDefinition,
@@ -107,13 +105,18 @@ ATOM_NAME_SYNONYMS = {
         "H2": ["2HH3"],
         "H3": ["3HH3"],
     },
+    "ACE": {
+        "H1": ["1HH3"],
+        "H2": ["2HH3"],
+        "H3": ["3HH3"],
+    },
     "NA": {"NA": ["Na"]},
     "CL": {"CL": ["Cl"]},
     "ALA": {"H": ["H1"]},
     "ARG": {"H": ["H1"]},
     "ASN": {"H": ["H1"]},
     "ASP": {"H": ["H1"]},
-    "CYS": {"H": ["H1"]},
+    "CYS": {"H": ["H1"], "HB2": ["3HB"]},
     "GLN": {"H": ["H1"]},
     "GLU": {"H": ["H1"]},
     "GLY": {"H": ["H1"]},
@@ -123,7 +126,7 @@ ATOM_NAME_SYNONYMS = {
     "LYS": {"H": ["H1"]},
     "MET": {"H": ["H1"]},
     "PHE": {"H": ["H1"]},
-    "SER": {"H": ["H1"]},
+    "SER": {"H": ["H1"], "HB2": ["3HB"]},
     "THR": {"H": ["H1"]},
     "TRP": {"H": ["H1"]},
     "TYR": {"H": ["H1"]},
@@ -158,110 +161,11 @@ def add_protonation_variants(res: ResidueDefinition) -> list[ResidueDefinition]:
     this means a residue with ``n`` abstractable hydrogens and ``m`` acidic atoms
     will have ``2**(n+m)`` variants.
     """
-    return list(
-        flatten(
-            add_protonated_variants(deprotonated_variant)
-            for deprotonated_variant in add_deprotonated_variants(res)
-        ),
+    return res.vary_protonation(
+        acidic=ACIDIC_PROTONS.get(res.residue_name, []),
+        basic=BASIC_ATOMS.get(res.residue_name, []),
+        ignore_synonym_clashes=True,
     )
-
-
-def add_deprotonated_variants(res: ResidueDefinition) -> list[ResidueDefinition]:
-    """Add protonation variants from the ACIDIC_PROTONS constant"""
-    deprotonations: list[tuple[str, str]] = []
-    for hydrogen in ACIDIC_PROTONS.get(res.residue_name, []):
-        bonded_atoms: list[str] = []
-        for bond in res.bonds:
-            if bond.atom1 == hydrogen:
-                bonded_atoms.append(bond.atom2)
-            elif bond.atom2 == hydrogen:
-                bonded_atoms.append(bond.atom1)
-
-        if len(bonded_atoms) != 1:
-            raise ValueError(
-                f"should be exactly 1 bonded atom to abstracted proton {hydrogen}, found {len(bonded_atoms)} in {res.description}",
-            )
-        deprotonations.append((hydrogen, bonded_atoms[0]))
-
-    variants: list[ResidueDefinition] = [res]
-    for i in range(len(deprotonations)):
-        for combination in combinations(deprotonations, i + 1):
-            hydrogens, partners = zip(*combination)
-
-            bonds: list[BondDefinition] = [
-                bond
-                for bond in res.bonds
-                if bond.atom1 not in hydrogens and bond.atom2 not in hydrogens
-            ]
-
-            atoms: list[AtomDefinition] = []
-            for atom in res.atoms:
-                if atom.name in partners:
-                    atoms.append(atom.replace(charge=atom.charge - 1))
-                elif atom.name in hydrogens:
-                    if atom.symbol != "H":
-                        raise ValueError(
-                            "Elements of PROTONATION_VARIANTS values must be hydrogens",
-                        )
-                else:
-                    atoms.append(atom)
-
-            variants.append(
-                res.replace(
-                    atoms=atoms,
-                    bonds=bonds,
-                    description=res.description + f" -{' -'.join(hydrogens)}",
-                ),
-            )
-
-    return variants
-
-
-def add_protonated_variants(res: ResidueDefinition) -> list[ResidueDefinition]:
-    """Add protonation variants from the BASIC_ATOMS constant"""
-    protonations = BASIC_ATOMS.get(res.residue_name, [])
-
-    variants: list[ResidueDefinition] = [res]
-    for i in range(len(protonations)):
-        for combination in combinations(protonations, i + 1):
-            bonds = [*res.bonds]
-            atoms = [*res.atoms]
-            for heavy_atom, hydrogen in combination:
-                bonds.append(
-                    BondDefinition(
-                        heavy_atom,
-                        hydrogen,
-                        order=1,
-                        aromatic=False,
-                        stereo=None,
-                    ),
-                )
-
-                atoms.append(
-                    AtomDefinition(
-                        name=hydrogen,
-                        synonyms=(),
-                        symbol="H",
-                        leaving=False,
-                        charge=0,
-                        aromatic=False,
-                        stereo=None,
-                    ),
-                )
-                for i, atom in enumerate(res.atoms):
-                    if atom.name == heavy_atom:
-                        atoms[i] = atom.replace(charge=atom.charge + 1)
-
-            _partners, hydrogens = zip(*combination)
-            variants.append(
-                res.replace(
-                    atoms=atoms,
-                    bonds=bonds,
-                    description=res.description + f" +{' +'.join(hydrogens)}",
-                ),
-            )
-
-    return variants
 
 
 def add_synonyms(res: ResidueDefinition) -> list[ResidueDefinition]:

@@ -69,7 +69,7 @@ def _match_unknown_molecules(
             )
         except KeyError:
             a_summary = f"{data.name[a]}#{data.serial[a]}@{data.chain_id[a]}:{data.res_name[a]}#{data.res_seq[a]}"
-            b_summary = f"{data.name[b]}#{data.serial[a]}@{data.chain_id[b]}:{data.res_name[b]}#{data.res_seq[b]}"
+            b_summary = f"{data.name[b]}#{data.serial[b]}@{data.chain_id[b]}:{data.res_name[b]}#{data.res_seq[b]}"
             raise ValueError(
                 "Cannot match unknown molecule that spans multiple residues: "
                 + f"Found CONECT record between {a_summary} and {b_summary}",

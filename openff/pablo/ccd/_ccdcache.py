@@ -1,9 +1,8 @@
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from copy import deepcopy
 from io import StringIO
 from pathlib import Path
 from typing import Self, no_type_check
-from collections.abc import Sequence
 from urllib.request import urlopen
 
 import xdg.BaseDirectory as xdg_base_dir

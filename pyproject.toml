@@ -42,6 +42,7 @@ doc = [
 # documentation = "https://openff-pablo.readthedocs.io"
 
 [tool.versioningit]
+default-version = "v0.0.0.dev0+VERSIONMISSING"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -95,6 +96,9 @@ strictGenericNarrowing = true
 
 [tool.ruff]
 namespace-packages = ["openff/pablo/"]
+
+[tool.ruff.lint]
+ignore = ["E731"]
 
 [tool.ruff.lint.isort]
 known-third-party = ["openff.toolkit", "openff.utilities", "openff.units"]

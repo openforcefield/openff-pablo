@@ -66,7 +66,7 @@ def test_2mum_neutralized_has_all_neutral_aas(all_aa_resnames: set[str]):
                 atom.formal_charge.m,
             )
             for atom in topology.atoms
-            if atom.formal_charge.m != 0  # type: ignore
+            if atom.formal_charge.m != 0
         ],
         sep="\n",
     )
@@ -263,9 +263,179 @@ def test_3ip9_loads_with_additional_residue():
         assert pablo_res_charge == legacy_res_charge
 
 
+@pytest.mark.slow
+def test_big_bilayer():
+    """
+    Test file with 100k+ atoms w/ CONECT records and 4-letter residue names
+
+    This tests that atoms with hexadecimal SERIAL entries work, even in CONECT
+    records. It also checks that 4-letter residue names work and that
+    hexadecimal residue numbers work.
+    """
+    top = topology_from_pdb(
+        get_test_data_path("big_bilayer.pdb"),
+        residue_database=CCD_RESIDUE_DEFINITION_CACHE.with_(
+            {
+                "DLPC": [
+                    ResidueDefinition.from_smiles(
+                        "[C:1]([C@@:2]([C:3]([O:36][C:21]([C:22]([C:23]([C:24]([C:25]([C:26]([C:27]([C:28]([C:29]([C:30]([C:31]([C:32]([H:104])([H:105])[H:106])([H:102])[H:103])([H:100])[H:101])([H:98])[H:99])([H:96])[H:97])([H:94])[H:95])([H:92])[H:93])([H:90])[H:91])([H:88])[H:89])([H:86])[H:87])([H:84])[H:85])=[O:34])([H:46])[H:47])([O:35][C:9]([C:10]([C:11]([C:12]([C:13]([C:14]([C:15]([C:16]([C:17]([C:18]([C:19]([C:20]([H:81])([H:82])[H:83])([H:79])[H:80])([H:77])[H:78])([H:75])[H:76])([H:73])[H:74])([H:71])[H:72])([H:69])[H:70])([H:67])[H:68])([H:65])[H:66])([H:63])[H:64])([H:61])[H:62])=[O:33])[H:45])([O:39][P@:42](=[O:37])([O-:38])[O:40][C:4]([C:5]([N+:41]([C:6]([H:52])([H:53])[H:54])([C:7]([H:55])([H:56])[H:57])[C:8]([H:58])([H:59])[H:60])([H:50])[H:51])([H:48])[H:49])([H:43])[H:44]",
+                        residue_name="DLPC",
+                        atom_names={
+                            1: "C1",
+                            2: "C2",
+                            3: "C3",
+                            4: "C11",
+                            5: "C12",
+                            6: "C13",
+                            7: "C14",
+                            8: "C15",
+                            9: "C21",
+                            10: "C22",
+                            11: "C23",
+                            12: "C24",
+                            13: "C25",
+                            14: "C26",
+                            15: "C27",
+                            16: "C28",
+                            17: "C29",
+                            18: "0C21",
+                            19: "1C21",
+                            20: "2C21",
+                            21: "C31",
+                            22: "C32",
+                            23: "C33",
+                            24: "C34",
+                            25: "C35",
+                            26: "C36",
+                            27: "C37",
+                            28: "C38",
+                            29: "C39",
+                            30: "0C31",
+                            31: "1C31",
+                            32: "2C31",
+                            33: "O22",
+                            34: "O32",
+                            35: "O21",
+                            36: "O31",
+                            37: "O14",
+                            38: "O13",
+                            39: "O11",
+                            40: "O12",
+                            41: "N",
+                            42: "P",
+                            43: "HA",
+                            44: "HB",
+                            45: "HS",
+                            46: "HY",
+                            47: "HX",
+                            48: "H11A",
+                            49: "H11B",
+                            50: "H12A",
+                            51: "H12B",
+                            52: "H13A",
+                            53: "H13B",
+                            54: "H13C",
+                            55: "H14A",
+                            56: "H14B",
+                            57: "H14C",
+                            58: "H15A",
+                            59: "H15B",
+                            60: "H15C",
+                            61: "H2S",
+                            62: "H2R",
+                            63: "H3S",
+                            64: "H3R",
+                            65: "H4S",
+                            66: "H4R",
+                            67: "H5S",
+                            68: "H5R",
+                            69: "H6S",
+                            70: "H6R",
+                            71: "H7S",
+                            72: "H7R",
+                            73: "H8S",
+                            74: "H8R",
+                            75: "H9S",
+                            76: "H9R",
+                            77: "H10S",
+                            78: "H10R",
+                            79: "H11S",
+                            80: "H11R",
+                            81: "H12S",
+                            82: "H12R",
+                            83: "H12T",
+                            84: "H2X",
+                            85: "H2Y",
+                            86: "H3X",
+                            87: "H3Y",
+                            88: "H4X",
+                            89: "H4Y",
+                            90: "H5X",
+                            91: "H5Y",
+                            92: "H6X",
+                            93: "H6Y",
+                            94: "H7X",
+                            95: "H7Y",
+                            96: "H8X",
+                            97: "H8Y",
+                            98: "H9X",
+                            99: "H9Y",
+                            100: "H10X",
+                            101: "H10Y",
+                            102: "H11X",
+                            103: "H11Y",
+                            104: "H12X",
+                            105: "H12Y",
+                            106: "H12Z",
+                        },
+                    ),
+                ],
+            },
+        ),
+    )
+
+    # Quick, fast-fail checks
+    assert top.n_atoms == 200468
+    assert top.n_molecules == 31740
+
+    # Checks that the chemistry is correct
+    unique_molecules = sorted(
+        top.unique_molecules,
+        key=lambda mol: (mol.n_atoms, mol.hill_formula),
+    )
+    assert len(unique_molecules) > 4
+    assert unique_molecules[0].hill_formula == "Cl"
+    assert unique_molecules[1].hill_formula == "Na"
+    assert unique_molecules[2].hill_formula == "H2O"
+    # Remainder should be DLPC stereoisomers
+    dlpc_mol = Molecule.from_smiles(
+        "CCCCCCCCCCCC(=O)OC[C@H](COP(=O)([O-])OCC[N+](C)(C)C)OC(=O)CCCCCCCCCCC",
+        allow_undefined_stereo=True,
+    )
+    for mol in unique_molecules[3:]:
+        assert mol.is_isomorphic_with(dlpc_mol, atom_stereochemistry_matching=False)
+
+    # Check that correct residues are still around
+    assert {residue.identifier[3] for residue in top.residues} == {
+        "DLPC",
+        "NA",
+        "CL",
+        "HOH",
+    }
+
+
 @pytest.mark.xfail
 def test_cannot_load_arg_alternate_resonance_form():
     """One day this will pass, but not just yet"""
     topology_from_pdb(
         get_test_data_path("capped_arg_altresonance.pdb"),
     )
+
+
+@pytest.mark.xfail
+def test_misplaced_ter_with_custom_resdef_gives_clear_error():
+    """This needs a clearer error"""
+    with pytest.raises(ValueError):
+        topology_from_pdb(
+            get_test_data_path("capped_ser_extrater.pdb"),
+        )
