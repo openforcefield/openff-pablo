@@ -27,79 +27,6 @@ __all__ = [
 ]
 
 
-def _match_unknown_molecules(
-    data: PdbData,
-    indices: tuple[int, ...],
-    unknown_molecules: Iterable[Molecule],
-) -> Molecule | None:
-    conects: set[tuple[int, int]] = set()
-    pdb_idx_to_mol_idx: dict[int, int] = {}
-    pdbmol = Molecule()
-    for pdb_index in indices:
-        pdb_idx_to_mol_idx[pdb_index] = pdbmol.add_atom(
-            atomic_number=elements.NUMBERS[data.element[pdb_index]],
-            formal_charge=data.charge[pdb_index] or 0,
-            is_aromatic=False,
-            stereochemistry=None,
-            name=data.name[pdb_index],
-            metadata={
-                "residue_name": data.res_name[pdb_index],
-                "leaving": False,
-                "pdb_index": pdb_index,
-                "residue_number": data.res_seq[pdb_index],
-                "insertion_code": data.i_code[pdb_index],
-                "chain_id": data.chain_id[pdb_index],
-                "atom_serial": data.serial[pdb_index],
-                "b_factor": str(data.temp_factor[pdb_index]),
-                "occupancy": str(data.occupancy[pdb_index]),
-                "alt_loc": str(data.alt_loc[pdb_index]),
-            },
-        )
-        for conect_idx in data.conects[pdb_index]:
-            conects.add(sort_tuple((pdb_index, conect_idx)))
-
-    for a, b in conects:
-        try:
-            pdbmol.add_bond(
-                atom1=pdb_idx_to_mol_idx[a],
-                atom2=pdb_idx_to_mol_idx[b],
-                bond_order=1,
-                is_aromatic=False,
-            )
-        except KeyError:
-            a_summary = f"{data.name[a]}#{data.serial[a]}@{data.chain_id[a]}:{data.res_name[a]}#{data.res_seq[a]}"
-            b_summary = f"{data.name[b]}#{data.serial[b]}@{data.chain_id[b]}:{data.res_name[b]}#{data.res_seq[b]}"
-            raise ValueError(
-                "Cannot match unknown molecule that spans multiple residues: "
-                + f"Found CONECT record between {a_summary} and {b_summary}",
-            )
-
-    for molecule in unknown_molecules:
-        (match_found, mapping) = Molecule.are_isomorphic(
-            molecule,
-            pdbmol,
-            return_atom_map=True,
-            aromatic_matching=False,
-            formal_charge_matching=False,
-            bond_order_matching=False,
-            atom_stereochemistry_matching=False,
-            bond_stereochemistry_matching=False,
-            strip_pyrimidal_n_atom_stereo=True,
-        )
-        if match_found:
-            assert mapping is not None
-            molecule = molecule.remap(mapping)
-            for atom, pdbatom in zip(molecule.atoms, pdbmol.atoms):
-                atom.metadata.update(pdbatom.metadata)
-                atom.name = pdbatom.name
-            molecule.generate_conformers(n_conformers=0, clear_existing=True)
-            molecule.properties["pdb_idx_to_mol_atom_idx"] = pdb_idx_to_mol_idx
-
-            return molecule
-    else:
-        return None
-
-
 def topology_from_pdb(
     file: PathLike[str] | str | IO[str] | TextIOBase,
     unknown_molecules: Iterable[Molecule] = [],
@@ -199,7 +126,9 @@ def topology_from_pdb(
     ``"residue_name"``
         The residue name
     ``"residue_number"``
-        The residue number as a string
+        The residue number as the string found in the PDB file
+    ``"res_seq"``
+        The residue number, converted to an ``int`` on a best-effort basis.
     ``"insertion_code"``
         The icode for the atom's residue. Used to align residue numbers between
         proteins with indels.
@@ -405,6 +334,71 @@ def _set_box_vectors(topology: Topology, data: PdbData):
         )
 
 
+def _match_unknown_molecules(
+    data: PdbData,
+    indices: tuple[int, ...],
+    unknown_molecules: Iterable[Molecule],
+) -> Molecule | None:
+    conects: set[tuple[int, int]] = set()
+    pdb_idx_to_mol_idx: dict[int, int] = {}
+    pdbmol = Molecule()
+    for pdb_index in indices:
+        pdb_idx_to_mol_idx[pdb_index] = pdbmol.add_atom(
+            atomic_number=elements.NUMBERS[data.element[pdb_index]],
+            formal_charge=data.charge[pdb_index] or 0,
+            is_aromatic=False,
+            stereochemistry=None,
+            name=data.name[pdb_index],
+            metadata={
+                "leaving": False,
+                **data._generate_atom_metadata(pdb_index),
+            },
+        )
+        for conect_idx in data.conects[pdb_index]:
+            conects.add(sort_tuple((pdb_index, conect_idx)))
+
+    for a, b in conects:
+        try:
+            pdbmol.add_bond(
+                atom1=pdb_idx_to_mol_idx[a],
+                atom2=pdb_idx_to_mol_idx[b],
+                bond_order=1,
+                is_aromatic=False,
+            )
+        except KeyError:
+            a_summary = f"{data.name[a]}#{data.serial[a]}@{data.chain_id[a]}:{data.res_name[a]}#{data.res_seq[a]}"
+            b_summary = f"{data.name[b]}#{data.serial[b]}@{data.chain_id[b]}:{data.res_name[b]}#{data.res_seq[b]}"
+            raise ValueError(
+                "Cannot match unknown molecule that spans multiple residues: "
+                + f"Found CONECT record between {a_summary} and {b_summary}",
+            )
+
+    for molecule in unknown_molecules:
+        (match_found, mapping) = Molecule.are_isomorphic(
+            molecule,
+            pdbmol,
+            return_atom_map=True,
+            aromatic_matching=False,
+            formal_charge_matching=False,
+            bond_order_matching=False,
+            atom_stereochemistry_matching=False,
+            bond_stereochemistry_matching=False,
+            strip_pyrimidal_n_atom_stereo=True,
+        )
+        if match_found:
+            assert mapping is not None
+            molecule = molecule.remap(mapping)
+            for atom, pdbatom in zip(molecule.atoms, pdbmol.atoms):
+                atom.metadata.update(pdbatom.metadata)
+                atom.name = pdbatom.name
+            molecule.generate_conformers(n_conformers=0, clear_existing=True)
+            molecule.properties["pdb_idx_to_mol_atom_idx"] = pdb_idx_to_mol_idx
+
+            return molecule
+    else:
+        return None
+
+
 def _add_to_molecule(
     molecules: MutableSequence[Molecule],
     this_molecule: Molecule,
@@ -441,18 +435,10 @@ def _add_to_molecule(
             stereochemistry=None,
             name=atom_def.name if use_canonical_names else data.name[pdb_index],
             metadata={
-                "residue_name": data.res_name[pdb_index],
-                "residue_number": data.res_seq[pdb_index],
-                "insertion_code": data.i_code[pdb_index],
-                "chain_id": data.chain_id[pdb_index],
-                "pdb_index": pdb_index,
+                **data._generate_atom_metadata(pdb_index),
                 "used_synonym": data.name[pdb_index],
                 "canonical_name": atom_def.name,
-                "atom_serial": data.serial[pdb_index],
                 "matched_residue_description": residue_match.residue_definition.description,
-                "b_factor": str(data.temp_factor[pdb_index]),
-                "occupancy": str(data.occupancy[pdb_index]),
-                "alt_loc": str(data.alt_loc[pdb_index]),
             },
             invalidate_cache=False,
         )

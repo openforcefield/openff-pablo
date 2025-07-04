@@ -3,6 +3,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import (
     DefaultDict,
     Literal,
+    ParamSpec,
     TypeAlias,
     TypeVar,
     TypeVarTuple,
@@ -42,6 +43,7 @@ T = TypeVar("T")
 U = TypeVar("U")
 V = TypeVar("V")
 Ts = TypeVarTuple("Ts")
+P = ParamSpec("P")
 
 CIFValue: TypeAlias = str | float | int
 
@@ -95,6 +97,30 @@ def sort_tuple(tup: tuple[*Ts]) -> tuple[*Ts]:
 def flatten(container: Iterable[Iterable[T]]) -> Iterator[T]:
     for inner in container:
         yield from inner
+
+
+def try_or(
+    default: U,
+    func: Callable[P, T],
+    catch: type[BaseException],
+    /,
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> T | U:
+    try:
+        return func(*args, **kwargs)
+    except catch:
+        return default
+
+
+def try_or_none(
+    func: Callable[P, T],
+    catch: type[BaseException],
+    /,
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> T | None:
+    return try_or(None, func, catch, *args, **kwargs)
 
 
 def with_neighbours(

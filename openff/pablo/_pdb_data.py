@@ -9,7 +9,7 @@ from io import TextIOBase
 from os import PathLike
 from typing import IO, Any, DefaultDict, Self
 
-from ._utils import __UNSET__, charge_int_or_none, with_neighbours
+from ._utils import __UNSET__, charge_int_or_none, dec_hex, with_neighbours
 from .exceptions import (
     UnknownOrAmbiguousSerialInConectError,
 )
@@ -662,4 +662,26 @@ class PdbData:
         return {
             field.name: getattr(self, field.name)[index]
             for field in dataclasses.fields(self)
+        }
+
+    def _generate_atom_metadata(
+        self,
+        pdb_index: int,
+    ) -> dict[str, str | int]:
+        try:
+            res_seq = dec_hex(self.res_seq[pdb_index])
+        except ValueError:
+            res_seq = self.res_seq[pdb_index]
+
+        return {
+            "residue_name": self.res_name[pdb_index],
+            "residue_number": self.res_seq[pdb_index],
+            "res_seq": res_seq,
+            "insertion_code": self.i_code[pdb_index],
+            "chain_id": self.chain_id[pdb_index],
+            "pdb_index": pdb_index,
+            "atom_serial": self.serial[pdb_index],
+            "b_factor": str(self.temp_factor[pdb_index]),
+            "occupancy": str(self.occupancy[pdb_index]),
+            "alt_loc": str(self.alt_loc[pdb_index]),
         }
