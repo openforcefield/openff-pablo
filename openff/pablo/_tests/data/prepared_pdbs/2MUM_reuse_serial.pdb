@@ -1,4 +1,4 @@
-REMARK   1 CREATED WITH OPENMM 8.2, 2025-02-13
+REMARK   1 CREATED WITH OPENMM 8.3, 2025-07-15
 CRYST1    1.000    1.000    1.000  90.00  90.00  90.00 P 1           1 
 ATOM      1  N   THR A   1       6.564  -3.485  -0.458  1.00  0.00           N  
 ATOM      2  CA  THR A   1       5.319  -2.641  -0.516  1.00  0.00           C  
@@ -795,5 +795,5 @@ ATOM     87  HB3 GLU A  50      10.442   7.549 -20.081  1.00  0.00           H
 ATOM     87  HG2 GLU A  50       8.649   5.754 -20.427  1.00  0.00           H  
 ATOM     87  HG3 GLU A  50       9.654   4.620 -19.478  1.00  0.00           H  
 ATOM     87  HXT GLU A  50      12.676   8.713 -22.611  1.00  0.00           H  
-TER     796      GLU A  50
+TER     796      GLU A   0
 END

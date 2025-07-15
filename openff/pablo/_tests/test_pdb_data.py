@@ -191,6 +191,7 @@ class TestPdbData:
         )
 
         assert data == PdbData(
+            line_no=[None],
             model=[None],
             serial=["16"],
             name=["HD2"],
@@ -239,6 +240,7 @@ class TestPdbData:
         data = PdbData.parse_pdb(pdblines)
 
         assert data == PdbData(
+            line_no=[3, 4, 5, 6, 7, 8],
             model=[1, 1, 1, 1, 1, 1],
             serial=["1", "2", "3", "4", "5", "6"],
             name=["H1", "H2", "O", "H1", "H2", "O"],

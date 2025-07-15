@@ -181,6 +181,8 @@ class ResidueMatch:
 
 @dataclass
 class PdbData:
+    src_filename: str | None = None
+    line_no: list[int | None] = field(default_factory=list)
     model: list[int | None] = field(default_factory=list)
     serial: list[str] = field(default_factory=list)
     name: list[str] = field(default_factory=list)
@@ -221,7 +223,9 @@ class PdbData:
     @classmethod
     def from_file(cls, path: str | PathLike[str]) -> Self:
         with open(path) as f:
-            return cls.from_file_object(f)
+            ret = cls.from_file_object(f)
+        ret.src_filename = str(path)
+        return ret
 
     @classmethod
     def from_file_object(cls, file: IO[str] | TextIOBase) -> Self:
@@ -234,6 +238,7 @@ class PdbData:
                 value.append(__UNSET__)
                 assert value[-1] is __UNSET__
 
+        self.line_no[-1] = None
         self.model[-1] = None
         self.serial[-1] = line[6:11].strip()
         self.serial_to_index[self.serial[-1]].append(len(self.serial) - 1)
@@ -267,13 +272,14 @@ class PdbData:
     def parse_pdb(cls, lines: Iterable[str], strict: bool = False) -> Self:
         model_n = None
         data = cls(strict=strict)
-        for line in lines:
+        for i, line in enumerate(lines):
             if line.startswith("MODEL "):
                 model_n = int(line[10:14])
             if line.startswith("ENDMDL "):
                 model_n = None
             if line.startswith("HETATM") or line.startswith("ATOM  "):
                 data._append_coord_line(line)
+                data.line_no[-1] = i + 1
                 data.model[-1] = model_n
             if line.startswith("TER   "):
                 terminated_resname = data.res_name[-1]
