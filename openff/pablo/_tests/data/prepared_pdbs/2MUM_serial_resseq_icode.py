@@ -89,10 +89,18 @@ def reuse_serial(top: Topology) -> Topology:
 def reuse_resseq(top: Topology) -> Topology:
     res_iter = iter(top.residues)
     for i in range(5):
-        reused_resseq = next(res_iter).identifier[1]
+        res = next(res_iter)
+        reused_resseq = res.identifier[1]
+        prev_resname = res.identifier[3]
     for res in res_iter:
+        resname = res.identifier[3]
+        icode = res.identifier[2]
+        if resname == prev_resname:
+            icode = "A" if icode == " " else chr(ord(icode) + 1)
         for atom in res.atoms:
             atom.metadata["residue_number"] = reused_resseq
+            atom.metadata["insertion_code"] = icode
+        prev_resname = resname
 
     return top
 
@@ -117,22 +125,23 @@ def letters_in_resseq(top: Topology) -> Topology:
 
 def icode(top: Topology) -> Topology:
     prev_resname = None
-    offset = 0
-    icode = ord("A") - 1
+    resseq_offset = 0
+    icode_offset = 0
     for i, res in enumerate(top.residues, start=1):
         resname = res.identifier[3]
         if resname == prev_resname or i % 15 == 0 or (i % 30 == 1 and i > 15):
-            offset += 1
-            icode += 1
+            resseq_offset += 1
+            icode_offset += 1
         else:
-            icode = ord("A") - 1
+            icode_offset = 0
         for atom in res.atoms:
-            assert atom.metadata["insertion_code"] == " "
             atom.metadata["residue_number"] = (
-                int(atom.metadata["residue_number"]) - offset
+                int(atom.metadata["residue_number"]) - resseq_offset
             )
-            if icode >= ord("A"):
-                atom.metadata["insertion_code"] = chr(icode)
+            if icode_offset >= 1:
+                icode = atom.metadata["insertion_code"]
+                icode_ord = ord("A") - 1 if icode == " " else ord(icode)
+                atom.metadata["insertion_code"] = chr(icode_ord + icode_offset)
         prev_resname = resname
 
     return top
