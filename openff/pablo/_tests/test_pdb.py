@@ -57,8 +57,7 @@ class TestMatchUnknownMolecules:
 
         for i, atom in enumerate(match_mol.atoms):
             assert atom.metadata["residue_name"] == e2_data.res_name[i]
-            assert atom.metadata["residue_number"] == str(e2_data.res_seq[i])
-            assert atom.metadata["res_seq"] == e2_data.res_seq[i]
+            assert atom.metadata["residue_number"] == e2_data.res_seq[i]
             assert atom.metadata["insertion_code"] == e2_data.i_code[i]
             assert atom.metadata["chain_id"] == e2_data.chain_id[i]
             assert atom.metadata["pdb_index"] == i

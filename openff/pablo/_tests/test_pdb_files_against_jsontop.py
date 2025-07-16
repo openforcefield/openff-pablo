@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from openff.toolkit import Molecule, Topology
 
@@ -10,6 +12,24 @@ FAST_PDBS: list[tuple[str, str, list[Molecule], list[ResidueDefinition]]] = [
     (
         "prepared_pdbs/2MUM_neutralized.pdb",
         "prepared_pdbs/2MUM_neutralized.json",
+        [],
+        [],
+    ),
+    (
+        "prepared_pdbs/2MUM_dryrun.pdb",
+        "prepared_pdbs/2MUM_dryrun.json",
+        [],
+        [],
+    ),
+    (
+        "prepared_pdbs/2MUM_dryrun.pdb",
+        "prepared_pdbs/2MUM_neutralized.json",
+        [],
+        [],
+    ),
+    (
+        "prepared_pdbs/2MUM_neutralized.pdb",
+        "prepared_pdbs/2MUM_dryrun.json",
         [],
         [],
     ),
@@ -45,6 +65,31 @@ FAST_PDBS: list[tuple[str, str, list[Molecule], list[ResidueDefinition]]] = [
     ),
 ]
 SLOW_PDBS: list[tuple[str, list[Molecule], list[ResidueDefinition]]] = []
+
+
+@pytest.mark.parametrize(
+    "fn_stem",
+    [
+        "2MUM_letters_in_resseq",
+        "2MUM_letters_in_serial",
+        "2MUM_reuse_resseq",  # Fails because adjacent PROs can't be distinguished
+        "2MUM_reuse_serial",
+        "2MUM_icode",
+        "2MUM_discontiguous_serial",
+        "2MUM_discontiguous_resseq",
+        "2MUM_composed_function",
+    ],
+)
+def test_extended_atom_residue_numbering(
+    fn_stem: str,
+):
+    path_stem = Path("prepared_pdbs") / fn_stem
+    topology_identical_to_jsontop(
+        path_stem.with_suffix(".pdb"),
+        path_stem.with_suffix(".json"),
+        [],
+        [],
+    )
 
 
 @pytest.mark.slow
@@ -85,8 +130,8 @@ def test_topology_identical_to_jsontop_fast(
 
 
 def topology_identical_to_jsontop(
-    pdbfile: str,
-    jsontopfile: str,
+    pdbfile: str | Path,
+    jsontopfile: str | Path,
     unknown_molecules: list[Molecule],
     additional_substructures: list[ResidueDefinition],
 ):
@@ -105,6 +150,7 @@ def topology_identical_to_jsontop(
             assert pablo_atom.symbol == jsontop_atom.symbol
             assert pablo_atom.formal_charge == jsontop_atom.formal_charge
             assert pablo_atom.name == jsontop_atom.name
+            # assert pablo_atom.metadata == jsontop_atom.metadata
 
         pablo_bonds = {
             (sort_tuple((bond.atom1_index, bond.atom2_index)), bond.bond_order)

@@ -3,6 +3,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import (
     DefaultDict,
     Literal,
+    ParamSpec,
     TypeAlias,
     TypeVar,
     TypeVarTuple,
@@ -42,6 +43,7 @@ T = TypeVar("T")
 U = TypeVar("U")
 V = TypeVar("V")
 Ts = TypeVarTuple("Ts")
+P = ParamSpec("P")
 
 CIFValue: TypeAlias = str | float | int
 
@@ -97,6 +99,30 @@ def flatten(container: Iterable[Iterable[T]]) -> Iterator[T]:
         yield from inner
 
 
+def try_or(
+    default: U,
+    func: Callable[P, T],
+    catch: type[BaseException],
+    /,
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> T | U:
+    try:
+        return func(*args, **kwargs)
+    except catch:
+        return default
+
+
+def try_or_none(
+    func: Callable[P, T],
+    catch: type[BaseException],
+    /,
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> T | None:
+    return try_or(None, func, catch, *args, **kwargs)
+
+
 def with_neighbours(
     iterable: Iterable[T],
     default: U = None,
@@ -144,7 +170,8 @@ def dec_hex(s: str) -> int:
     integer, except for strings that cannot be parsed as a decimal. For these
     strings, the first hexadecimal number is interpreted as 10^n, and subsequent
     numbers continue from there. For example, in PDB files, a fixed width column
-    format, residue numbers for large systems follow this representation:
+    format, residue numbers for large systems sometimes follow this
+    representation:
 
         "   1" -> 1
         "   2" -> 2

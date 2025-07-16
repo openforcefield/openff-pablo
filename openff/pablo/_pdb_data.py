@@ -9,7 +9,7 @@ from io import TextIOBase
 from os import PathLike
 from typing import IO, Any, DefaultDict, Self
 
-from ._utils import __UNSET__, dec_hex, charge_int_or_none, with_neighbours
+from ._utils import __UNSET__, charge_int_or_none, dec_hex, with_neighbours
 from .exceptions import (
     UnknownOrAmbiguousSerialInConectError,
 )
@@ -181,13 +181,15 @@ class ResidueMatch:
 
 @dataclass
 class PdbData:
+    src_filename: str | None = None
+    line_no: list[int | None] = field(default_factory=list)
     model: list[int | None] = field(default_factory=list)
-    serial: list[int] = field(default_factory=list)
+    serial: list[str] = field(default_factory=list)
     name: list[str] = field(default_factory=list)
     alt_loc: list[str] = field(default_factory=list)
     res_name: list[str] = field(default_factory=list)
     chain_id: list[str] = field(default_factory=list)
-    res_seq: list[int] = field(default_factory=list)
+    res_seq: list[str] = field(default_factory=list)
     i_code: list[str] = field(default_factory=list)
     x: list[float] = field(default_factory=list)
     y: list[float] = field(default_factory=list)
@@ -197,7 +199,7 @@ class PdbData:
     element: list[str] = field(default_factory=list)
     charge: list[int | None] = field(default_factory=list)
     terminated: list[bool] = field(default_factory=list)
-    serial_to_index: DefaultDict[int, list[int]] = field(
+    serial_to_index: DefaultDict[str, list[int]] = field(
         default_factory=lambda: defaultdict(list),
     )
     conects: list[set[int]] = field(default_factory=list)
@@ -221,7 +223,9 @@ class PdbData:
     @classmethod
     def from_file(cls, path: str | PathLike[str]) -> Self:
         with open(path) as f:
-            return cls.from_file_object(f)
+            ret = cls.from_file_object(f)
+        ret.src_filename = str(path)
+        return ret
 
     @classmethod
     def from_file_object(cls, file: IO[str] | TextIOBase) -> Self:
@@ -234,8 +238,9 @@ class PdbData:
                 value.append(__UNSET__)
                 assert value[-1] is __UNSET__
 
+        self.line_no[-1] = None
         self.model[-1] = None
-        self.serial[-1] = int(line[6:11]) if self.strict else dec_hex(line[6:11])
+        self.serial[-1] = line[6:11].strip()
         self.serial_to_index[self.serial[-1]].append(len(self.serial) - 1)
         self.name[-1] = line[12:16].strip()
         self.alt_loc[-1] = line[16].strip() or ""
@@ -245,7 +250,7 @@ class PdbData:
             else line[17:21]
         )
         self.chain_id[-1] = line[21].strip()
-        self.res_seq[-1] = int(line[22:26]) if self.strict else dec_hex(line[22:26])
+        self.res_seq[-1] = line[22:26].strip()
         self.i_code[-1] = line[26].strip() or " "
         self.x[-1] = float(line[30:38])
         self.y[-1] = float(line[38:46])
@@ -267,13 +272,14 @@ class PdbData:
     def parse_pdb(cls, lines: Iterable[str], strict: bool = False) -> Self:
         model_n = None
         data = cls(strict=strict)
-        for line in lines:
+        for i, line in enumerate(lines):
             if line.startswith("MODEL "):
                 model_n = int(line[10:14])
             if line.startswith("ENDMDL "):
                 model_n = None
             if line.startswith("HETATM") or line.startswith("ATOM  "):
                 data._append_coord_line(line)
+                data.line_no[-1] = i + 1
                 data.model[-1] = model_n
             if line.startswith("TER   "):
                 terminated_resname = data.res_name[-1]
@@ -311,14 +317,14 @@ class PdbData:
     @staticmethod
     def _process_conects(
         lines: Iterable[str],
-        serial_to_index: dict[int, list[int]],
+        serial_to_index: dict[str, list[int]],
         conects: list[set[int]],
         model: Sequence[int | None],
     ) -> list[set[int]]:
         for line in lines:
             if line.startswith("CONECT "):
                 # a is the serial of the first atom in the conect, we need its indices
-                a = dec_hex(line[6:11])
+                a = line[6:11].strip()
                 a_idcs = serial_to_index.get(a, [])
 
                 # Conects are usually provided once for multi-model files
@@ -330,10 +336,10 @@ class PdbData:
 
                 for a_idx, a_model in zip(a_idcs, a_models):
                     for start, stop in [(11, 16), (16, 21), (21, 26), (26, 31)]:
-                        try:
-                            b = dec_hex(line[start:stop])
-                        except (ValueError, IndexError):
+                        if len(line.strip()) <= start:
                             continue
+
+                        b = line[start:stop].strip()
 
                         b_idcs = [
                             i for i in serial_to_index.get(b, []) if model[i] == a_model
@@ -662,4 +668,26 @@ class PdbData:
         return {
             field.name: getattr(self, field.name)[index]
             for field in dataclasses.fields(self)
+        }
+
+    def _generate_atom_metadata(
+        self,
+        pdb_index: int,
+    ) -> dict[str, str | int]:
+        try:
+            res_seq = dec_hex(self.res_seq[pdb_index])
+        except ValueError:
+            res_seq = self.res_seq[pdb_index]
+
+        return {
+            "residue_name": self.res_name[pdb_index],
+            "residue_number": self.res_seq[pdb_index],
+            "res_seq": res_seq,
+            "insertion_code": self.i_code[pdb_index],
+            "chain_id": self.chain_id[pdb_index],
+            "pdb_index": pdb_index,
+            "atom_serial": self.serial[pdb_index],
+            "b_factor": str(self.temp_factor[pdb_index]),
+            "occupancy": str(self.occupancy[pdb_index]),
+            "alt_loc": str(self.alt_loc[pdb_index]),
         }

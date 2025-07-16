@@ -39,10 +39,29 @@ class NoMatchingResidueDefinitionError(ValueError):
         i = res_atom_idcs[0]
         res_name = data.res_name[i]
 
+        line_nos = sorted(
+            [data.line_no[j] for j in res_atom_idcs],
+            key=lambda x: 0 if x is None else x,
+        )
+        first, last = line_nos[0], line_nos[-1]
+        if (
+            first is not None
+            and last is not None
+            and line_nos == list(range(first, last + 1))
+        ):
+            line_no = f"{first}-{last}"
+        else:
+            line_no = first
+
         msg = [
             (
                 "No residue definitions covered all atoms in residue"
                 + f"{data.chain_id[i]}:{res_name}#{data.res_seq[i]}"
+                + (
+                    f" ({data.src_filename}:l{line_no})"
+                    if data.src_filename is not None
+                    else f" (l{line_no})"
+                )
             ),
         ]
         if verbose_errors:
@@ -110,7 +129,7 @@ class MultipleMatchingResidueDefinitionsError(ValueError):
 
 
 class UnknownOrAmbiguousSerialInConectError(ValueError):
-    def __init__(self, serial: int, possible_indices: Collection[int]):
+    def __init__(self, serial: str, possible_indices: Collection[int]):
         self.serial = serial
         self.possible_indices = possible_indices
         msg = f"Atom serial {serial} was found in a CONECT record, "

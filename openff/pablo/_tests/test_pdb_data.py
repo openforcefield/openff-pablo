@@ -191,13 +191,14 @@ class TestPdbData:
         )
 
         assert data == PdbData(
+            line_no=[None],
             model=[None],
-            serial=[16],
+            serial=["16"],
             name=["HD2"],
             alt_loc=[""],
             res_name=["LYS"],
             chain_id=["A"],
-            res_seq=[1],
+            res_seq=["1"],
             i_code=[" "],
             x=[-1.806],
             y=[9.969],
@@ -207,7 +208,7 @@ class TestPdbData:
             element=["H"],
             charge=[None],
             terminated=[False],
-            serial_to_index=default_dict(list, {16: [0]}),
+            serial_to_index=default_dict(list, {"16": [0]}),
             conects=[set()],
             cryst1_a=None,
             cryst1_b=None,
@@ -239,13 +240,14 @@ class TestPdbData:
         data = PdbData.parse_pdb(pdblines)
 
         assert data == PdbData(
+            line_no=[3, 4, 5, 6, 7, 8],
             model=[1, 1, 1, 1, 1, 1],
-            serial=[1, 2, 3, 4, 5, 6],
+            serial=["1", "2", "3", "4", "5", "6"],
             name=["H1", "H2", "O", "H1", "H2", "O"],
             alt_loc=["", "", "", "", "", ""],
             res_name=["HOH", "HOH", "HOH", "HOH", "HOH", "HOH"],
             chain_id=["A", "A", "A", "A", "A", "A"],
-            res_seq=[1, 1, 1, 2, 2, 2],
+            res_seq=["1", "1", "1", "2", "2", "2"],
             i_code=[" ", " ", " ", " ", " ", " "],
             x=[-1.806, -2.806, -1.806, -1.806, -2.806, -1.806],
             y=[8.969, 9.969, 9.969, 8.969, 9.969, 9.969],
@@ -257,7 +259,7 @@ class TestPdbData:
             terminated=[False, False, False, True, True, True],
             serial_to_index=default_dict(
                 list,
-                {1: [0], 2: [1], 3: [2], 4: [3], 5: [4], 6: [5]},
+                {"1": [0], "2": [1], "3": [2], "4": [3], "5": [4], "6": [5]},
             ),
             conects=[{2}, {2}, {0, 1}, {5}, {5}, {3, 4}],
             cryst1_a=10.0,
@@ -269,7 +271,7 @@ class TestPdbData:
         )
 
     def test_process_conects_produces_indices(self):
-        serial_to_index: dict[int, list[int]] = {3: [0], 4: [1]}
+        serial_to_index: dict[str, list[int]] = {"3": [0], "4": [1]}
         lines: list[str] = ["CONECT    3    4"]
 
         conects = PdbData._process_conects(
@@ -282,7 +284,7 @@ class TestPdbData:
         assert conects == [{1}, {0}]
 
     def test_process_conects_works_with_multiple_models(self):
-        serial_to_index: dict[int, list[int]] = {3: [0, 2], 4: [1, 3]}
+        serial_to_index: dict[str, list[int]] = {"3": [0, 2], "4": [1, 3]}
         model = [1, 1, 2, 2]
         conects: list[set[int]] = [set(), set(), set(), set()]
         lines: list[str] = ["CONECT    3    4"]
@@ -297,7 +299,7 @@ class TestPdbData:
         assert conects == [{1}, {0}, {3}, {2}]
 
     def test_process_conects_raises_when_ambiguous(self):
-        serial_to_index: dict[int, list[int]] = {3: [0], 4: [1, 2]}
+        serial_to_index: dict[str, list[int]] = {"3": [0], "4": [1, 2]}
         lines: list[str] = ["CONECT    3    4"]
 
         with pytest.raises(UnknownOrAmbiguousSerialInConectError):
@@ -309,7 +311,7 @@ class TestPdbData:
             )
 
     def test_process_conects_raises_when_serial_missing(self):
-        serial_to_index: dict[int, list[int]] = {3: [0], 4: [1, 2]}
+        serial_to_index: dict[str, list[int]] = {"3": [0], "4": [1, 2]}
         lines: list[str] = ["CONECT    3    5"]
 
         with pytest.raises(UnknownOrAmbiguousSerialInConectError):
@@ -324,7 +326,7 @@ class TestPdbData:
         data = PdbData(
             res_name=["HOH"] * 2 + ["GLY"] * 8,
             chain_id=["A"] * 4 + ["B"] * 6,
-            res_seq=[1] * 6 + [2] * 4,
+            res_seq=["1"] * 6 + ["2"] * 4,
             i_code=[" "] * 8 + ["A"] * 2,
             model=[None] * 10,
             alt_loc=[""] * 10,
@@ -342,7 +344,7 @@ class TestPdbData:
         data = PdbData(
             res_name=["HOH"] * 2 + ["GLY"] * 10,
             chain_id=["A"] * 4 + ["B"] * 8,
-            res_seq=[1] * 6 + [2] * 6,
+            res_seq=["1"] * 6 + ["2"] * 6,
             i_code=[" "] * 8 + ["A"] * 4,
             model=[None] * 10 + [1] * 2,
             alt_loc=[""] * 12,

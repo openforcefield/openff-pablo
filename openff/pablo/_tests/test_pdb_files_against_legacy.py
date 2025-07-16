@@ -144,10 +144,15 @@ def connectivity_and_atom_order_and_net_residue_charge_and_metadata_matches_lega
                 or pablo_atom.metadata["canonical_name"] == legacy_atom.name
             )
             assert pablo_atom.symbol == legacy_atom.symbol
+            # Legacy loader converts "A000" to "10000". New loader is more
+            # hygienic about this, so we need to use `res_seq`, but stringify it
+            assert (
+                str(pablo_atom.metadata["res_seq"])
+                == legacy_atom.metadata["residue_number"]
+            )
             for key in [
                 "residue_name",
                 "chain_id",
-                "residue_number",
                 "insertion_code",
             ]:
                 assert pablo_atom.metadata[key] == legacy_atom.metadata[key]
