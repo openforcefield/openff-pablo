@@ -74,8 +74,10 @@ SLOW_PDBS: list[tuple[str, list[Molecule], list[ResidueDefinition]]] = []
         "2MUM_letters_in_serial",
         "2MUM_reuse_resseq",  # Fails because adjacent PROs can't be distinguished
         "2MUM_reuse_serial",
+        "2MUM_icode",
         "2MUM_discontiguous_serial",
         "2MUM_discontiguous_resseq",
+        "2MUM_composed_function",
     ],
 )
 def test_extended_atom_residue_numbering(

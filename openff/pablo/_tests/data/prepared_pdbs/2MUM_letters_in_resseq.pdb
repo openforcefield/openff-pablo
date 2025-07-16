@@ -1,4 +1,4 @@
-REMARK   1 CREATED WITH OPENMM 8.3, 2025-07-15
+REMARK   1 CREATED WITH OPENMM 8.3, 2025-07-16
 CRYST1    1.000    1.000    1.000  90.00  90.00  90.00 P 1           1 
 ATOM      1  N   THR AA001       6.564  -3.485  -0.458  1.00  0.00           N  
 ATOM      2  CA  THR AA001       5.319  -2.641  -0.516  1.00  0.00           C  
