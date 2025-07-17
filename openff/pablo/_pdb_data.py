@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from io import TextIOBase
 from os import PathLike
-from typing import IO, Any, DefaultDict, Self
+from typing import IO, Any, DefaultDict, Protocol, Self
 
 from ._utils import __UNSET__, charge_int_or_none, dec_hex, with_neighbours
 from .exceptions import (
@@ -22,11 +22,34 @@ __all__ = [
 
 
 @dataclass(frozen=True)
-class ResidueMatch:
+class ResidueMatchProtocol(Protocol):
+    residue_definition: ResidueDefinition
+    index_to_atomdef: Mapping[int, AtomDefinition | None]
+
+    @cached_property
+    def res_atom_idcs(self) -> set[int]:
+        return set(self.index_to_atomdef)
+
+
+@dataclass(frozen=True)
+class ResidueMismatch(ResidueMatchProtocol):
+    residue_definition: ResidueDefinition
+    index_to_atomdef: Mapping[int, AtomDefinition | None]
+    reason: str
+
+    def __bool__(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class ResidueMatch(ResidueMatchProtocol):
     residue_definition: ResidueDefinition
     index_to_atomdef: dict[int, AtomDefinition]
     crosslink: tuple[int, int] | None = None
     """PDB indices of each bonded atom"""
+
+    def __bool__(self) -> bool:
+        return True
 
     def atom(self, identifier: int | str) -> AtomDefinition:
         """Get an atom definition by name or PDB index"""
@@ -49,15 +72,12 @@ class ResidueMatch:
         object.__setattr__(self, "crosslink", (atom1_idx, atom2_idx))
 
     @cached_property
-    def res_atom_idcs(self) -> set[int]:
-        return set(self.index_to_atomdef)
-
-    @cached_property
     def prototype_index(self) -> int:
         return next(iter(self.index_to_atomdef))
 
     @cached_property
     def missing_atoms(self) -> set[str]:
+        """Atoms present in the residue definition that were not matched"""
         return {
             atom.name
             for atom in self.residue_definition.atoms
@@ -392,7 +412,7 @@ class PdbData:
         self,
         res_atom_idcs: Sequence[int],
         residue_definition: ResidueDefinition,
-    ) -> ResidueMatch | None:
+    ) -> ResidueMismatch | ResidueMatch:
         # Raise an error if the match would be empty - this way the
         # return value's truthiness always reflects whether there was a match
         if len(res_atom_idcs) == 0:
@@ -402,10 +422,13 @@ class PdbData:
 
         # Skip definitions with too few atoms
         if len(residue_definition.atoms) < len(res_atom_idcs):
-            logging.debug(
-                f"    Match failed: Too few atoms in residue definition ({len(residue_definition.atoms)} < {len(res_atom_idcs)})",
+            reason = f"Too few atoms in residue definition ({len(residue_definition.atoms)} < {len(res_atom_idcs)})"
+            logging.debug("    Match failed: " + reason)
+            return ResidueMismatch(
+                residue_definition=residue_definition,
+                index_to_atomdef={i: None for i in res_atom_idcs},
+                reason=reason,
             )
-            return None
 
         # Skip non-(cross)linking definitions with the wrong number of atoms
         if (
@@ -416,8 +439,13 @@ class PdbData:
             )
             != len(res_atom_idcs)
         ):
-            logging.debug("    Match failed: No links and wrong number of atoms")
-            return None
+            reason = "No links and wrong number of atoms"
+            logging.debug("    Match failed: " + reason)
+            return ResidueMismatch(
+                residue_definition=residue_definition,
+                index_to_atomdef={i: None for i in res_atom_idcs},
+                reason=reason,
+            )
 
         # Get the map from the canonical names to the indices
         try:
@@ -425,17 +453,25 @@ class PdbData:
                 i: residue_definition.name_to_atom[self.name[i]] for i in res_atom_idcs
             }
         except KeyError:
-            logging.debug("    Match failed: Name missing from residue definition")
-            return None
+            reason = "Name missing from residue definition"
+            logging.debug("    Match failed: " + reason)
+            return ResidueMismatch(
+                residue_definition=residue_definition,
+                index_to_atomdef={i: None for i in res_atom_idcs},
+                reason=reason,
+            )
 
         matched_atoms = {atom.name for atom in index_to_atomdef.values()}
 
         # Fail to match if any atoms in PDB file got matched to more than one name
         if len(matched_atoms) != len(res_atom_idcs):
-            logging.debug(
-                "    Match failed: Atom definition matched multiple PDB coordinate records",
+            reason = "Atom definition matched multiple PDB coordinate records"
+            logging.debug("    Match failed: " + reason)
+            return ResidueMismatch(
+                residue_definition=residue_definition,
+                index_to_atomdef=index_to_atomdef,
+                reason=reason,
             )
-            return None
 
         # This assert should be guaranteed by the above
         assert set(index_to_atomdef.keys()) == set(res_atom_idcs)
@@ -445,8 +481,13 @@ class PdbData:
             self.element[i] != "" and self.element[i].lower() != atom.symbol.lower()
             for i, atom in index_to_atomdef.items()
         ):
-            logging.debug("    Match failed: Element mismatch")
-            return None
+            reason = "Element mismatch"
+            logging.debug("    Match failed: " + reason)
+            return ResidueMismatch(
+                residue_definition=residue_definition,
+                index_to_atomdef=index_to_atomdef,
+                reason=reason,
+            )
 
         # PDB files can not be trusted; ignore charges.
         # # Check that charges match, but tolerate missing columns
@@ -465,8 +506,13 @@ class PdbData:
         # is either entirely present or entirely absent
         missing_atom_names = {atom.name for atom in missing_atoms}
         if any(not atom.leaving for atom in missing_atoms):
-            logging.debug("    Match failed: Missing atom is not leaving atom")
-            return None
+            reason = "Missing atom is not leaving atom"
+            logging.debug("    Match failed: " + reason)
+            return ResidueMismatch(
+                residue_definition=residue_definition,
+                index_to_atomdef=index_to_atomdef,
+                reason=reason,
+            )
         elif (
             (
                 missing_atom_names.issuperset(
@@ -499,8 +545,13 @@ class PdbData:
                 residue_definition=residue_definition,
             )
         else:
-            logging.debug("    Match failed: Missing atoms do not specify link")
-            return None
+            reason = "Missing atoms do not specify link"
+            logging.debug("    Match failed: " + reason)
+            return ResidueMismatch(
+                residue_definition=residue_definition,
+                index_to_atomdef=index_to_atomdef,
+                reason=reason,
+            )
 
     def get_residue_matches(
         self,
@@ -528,7 +579,7 @@ class PdbData:
                     residue_definition,
                 )
 
-                if match is not None:
+                if isinstance(match, ResidueMatch):
                     residue_matches.append(match)
 
             if len(residue_matches) == 0:
@@ -537,7 +588,7 @@ class PdbData:
                         res_atom_idcs,
                         residue_definition,
                     )
-                    if match is not None:
+                    if isinstance(match, ResidueMatch):
                         residue_matches.append(match)
 
             name_matches.append(residue_matches)
