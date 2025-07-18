@@ -24,7 +24,10 @@ class TestResidueMatch:
 
     def test_set_crosslink_mutates_match(self, cys_match: ResidueMatch):
         cys_match.set_crosslink(cys_match.canonical_atom_name_to_index["SG"], 99)
-        assert cys_match.crosslink == (cys_match.canonical_atom_name_to_index["SG"], 99)
+        assert cys_match.crosslink_idcs == (
+            cys_match.canonical_atom_name_to_index["SG"],
+            99,
+        )
 
     def test_set_crosslink_raises_on_wrong_atom(self, cys_match: ResidueMatch):
         with pytest.raises(ValueError):
@@ -71,7 +74,7 @@ class TestResidueMatch:
     ):
         match = ResidueMatch(
             residue_definition=hoh_def,
-            crosslink=None,
+            crosslink_idcs=None,
             index_to_atomdef={
                 i: atom for i, atom in enumerate(hoh_def.atoms) if atom.name != "O"
             },
@@ -88,7 +91,7 @@ class TestResidueMatch:
         expect_prop_suffix: str,
         hoh_match: ResidueMatch,
     ):
-        assert getattr(hoh_match, "expect_" + expect_prop_suffix) is False
+        assert getattr(hoh_match, "expects_" + expect_prop_suffix) is False
 
     @pytest.mark.parametrize(
         "expect_prop_suffix",
@@ -99,13 +102,13 @@ class TestResidueMatch:
         expect_prop_suffix: str,
         cys_match: ResidueMatch,
     ):
-        assert getattr(cys_match, "expect_" + expect_prop_suffix) is False
+        assert getattr(cys_match, "expects_" + expect_prop_suffix) is False
 
     def test_expect_props_false_when_leaving_atoms_missing_from_resdef(
         self,
         cys_match_no_leaving_deprotonated_sidechain: ResidueMatch,
     ):
-        assert cys_match_no_leaving_deprotonated_sidechain.expect_crosslink is False
+        assert cys_match_no_leaving_deprotonated_sidechain.expects_crosslink is False
 
     @pytest.mark.parametrize(
         "expect_prop_suffix",
@@ -116,7 +119,7 @@ class TestResidueMatch:
         expect_prop_suffix: str,
         cys_match_no_leaving: ResidueMatch,
     ):
-        assert getattr(cys_match_no_leaving, "expect_" + expect_prop_suffix) is True
+        assert getattr(cys_match_no_leaving, "expects_" + expect_prop_suffix) is True
 
     def test_match_agrees_with_self(self, any_match: ResidueMatch):
         any_match.agrees_with(any_match)
@@ -503,22 +506,22 @@ class TestPdbData:
         match1 = match1[0]
         match2 = match2[0]
 
-        assert match1.crosslink is not None and match2.crosslink is not None
-        sg1, sg2 = match1.crosslink
-        assert match2.crosslink == (sg2, sg1)
+        assert match1.crosslink_idcs is not None and match2.crosslink_idcs is not None
+        sg1, sg2 = match1.crosslink_idcs
+        assert match2.crosslink_idcs == (sg2, sg1)
         assert vicinal_disulfide_data.name[sg1] == "SG"
         assert vicinal_disulfide_data.name[sg2] == "SG"
 
         assert match1.missing_atoms == {"HXT", "HG", "OXT"}
         assert match2.missing_atoms == {"H2", "HG"}
 
-        assert match1.expect_posterior_bond
-        assert not match1.expect_prior_bond
-        assert match1.expect_crosslink
+        assert match1.expects_posterior_bond
+        assert not match1.expects_prior_bond
+        assert match1.expects_crosslink
 
-        assert not match2.expect_posterior_bond
-        assert match2.expect_prior_bond
-        assert match2.expect_crosslink
+        assert not match2.expects_posterior_bond
+        assert match2.expects_prior_bond
+        assert match2.expects_crosslink
 
         assert match1.residue_definition is cys_def
         assert match2.residue_definition is cys_def

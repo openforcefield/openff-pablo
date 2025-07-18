@@ -704,6 +704,7 @@ class ResidueDefinition:
                 for atom in self.atoms
                 if atom.name != name
             ],
+            description=self.description + f" -{name}",
         )
 
     def protonated_at(
@@ -757,6 +758,7 @@ class ResidueDefinition:
                     leaving=heavy_atom.leaving,
                 ),
             ],
+            description=self.description + f" +{proton_name}",
         )
 
     def vary_protonation(

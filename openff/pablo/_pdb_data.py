@@ -7,13 +7,21 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from io import TextIOBase
 from os import PathLike
-from typing import IO, Any, DefaultDict, Protocol, Self
+from typing import IO, Any, ClassVar, DefaultDict, Protocol, Self
+from collections.abc import Collection
 
-from ._utils import __UNSET__, charge_int_or_none, dec_hex, with_neighbours
+from ._utils import (
+    __UNSET__,
+    charge_int_or_none,
+    dec_hex,
+    flatten,
+    sort_tuple,
+    with_neighbours,
+)
 from .exceptions import (
     UnknownOrAmbiguousSerialInConectError,
 )
-from .residue import AtomDefinition, ResidueDefinition
+from .residue import AtomDefinition, BondDefinition, ResidueDefinition
 
 __all__ = [
     "ResidueMatch",
@@ -21,35 +29,60 @@ __all__ = [
 ]
 
 
+# TODO: Refactor
 @dataclass(frozen=True)
 class ResidueMatchProtocol(Protocol):
-    residue_definition: ResidueDefinition
+    residue_definition: ResidueDefinition | str
     index_to_atomdef: Mapping[int, AtomDefinition | None]
+    is_match: ClassVar[bool]
 
     @cached_property
     def res_atom_idcs(self) -> set[int]:
         return set(self.index_to_atomdef)
+
+    def __bool__(self) -> bool:
+        return self.is_match
+
+    @property
+    def description(self) -> str:
+        if isinstance(self.residue_definition, str):
+            return self.residue_definition
+        else:
+            return self.residue_definition.description
+
+
+@dataclass(frozen=True)
+class NoResidueDefinitions(ResidueMatchProtocol):
+    index_to_atomdef: Mapping[int, None]
+    residue_definition: str
+    is_match = False
+
+    @property
+    def description(self) -> str:
+        return f"No residue definitions for {self.residue_definition}@{list(self.res_atom_idcs)[:1]}"
 
 
 @dataclass(frozen=True)
 class ResidueMismatch(ResidueMatchProtocol):
     residue_definition: ResidueDefinition
     index_to_atomdef: Mapping[int, AtomDefinition | None]
-    reason: str
+    reasons: list[str]
+    is_match = False
 
-    def __bool__(self) -> bool:
-        return False
+    @property
+    def description(self) -> str:
+        return f"{self.residue_definition.description} failed to match because {self.reasons}"
 
 
 @dataclass(frozen=True)
 class ResidueMatch(ResidueMatchProtocol):
     residue_definition: ResidueDefinition
     index_to_atomdef: dict[int, AtomDefinition]
-    crosslink: tuple[int, int] | None = None
+    prior_bond_idcs: tuple[int, int] | None = None
+    posterior_bond_idcs: tuple[int, int] | None = None
+    crosslink_idcs: tuple[int, int] | None = None
     """PDB indices of each bonded atom"""
-
-    def __bool__(self) -> bool:
-        return True
+    is_match = True
 
     def atom(self, identifier: int | str) -> AtomDefinition:
         """Get an atom definition by name or PDB index"""
@@ -69,7 +102,39 @@ class ResidueMatch(ResidueMatchProtocol):
             or atom2_idx in self.res_atom_idcs
         ):
             raise ValueError("bad crosslink index(es)")
-        object.__setattr__(self, "crosslink", (atom1_idx, atom2_idx))
+        object.__setattr__(self, "crosslink_idcs", (atom1_idx, atom2_idx))
+
+    def set_prior_bond(self, d: dict[BondDefinition, int]) -> None:
+        if self.residue_definition.linking_bond is None:
+            raise ValueError("cannot set prior bond without linking_bond")
+
+        prior_bond_idcs: tuple[int, int] = (
+            d[self.residue_definition.linking_bond],
+            self.canonical_atom_name_to_index[
+                self.residue_definition.prior_bond_linking_atom
+            ],
+        )
+        object.__setattr__(
+            self,
+            "prior_bond_idcs",
+            prior_bond_idcs,
+        )
+
+    def set_posterior_bond(self, d: dict[BondDefinition, int]) -> None:
+        if self.residue_definition.linking_bond is None:
+            raise ValueError("cannot set posterior bond without linking_bond")
+
+        posterior_bond_idcs: tuple[int, int] = (
+            d[self.residue_definition.linking_bond],
+            self.canonical_atom_name_to_index[
+                self.residue_definition.posterior_bond_linking_atom
+            ],
+        )
+        object.__setattr__(
+            self,
+            "posterior_bond_idcs",
+            posterior_bond_idcs,
+        )
 
     @cached_property
     def prototype_index(self) -> int:
@@ -97,7 +162,7 @@ class ResidueMatch(ResidueMatchProtocol):
         return {atom.name: i for i, atom in self.index_to_atomdef.items()}
 
     @cached_property
-    def expect_prior_bond(self) -> bool:
+    def expects_prior_bond(self) -> bool:
         if self.residue_definition.linking_bond is None:
             return False
 
@@ -111,7 +176,7 @@ class ResidueMatch(ResidueMatchProtocol):
         )
 
     @cached_property
-    def expect_posterior_bond(self) -> bool:
+    def expects_posterior_bond(self) -> bool:
         if self.residue_definition.linking_bond is None:
             return False
 
@@ -125,7 +190,7 @@ class ResidueMatch(ResidueMatchProtocol):
         )
 
     @cached_property
-    def expect_crosslink(self) -> bool:
+    def expects_crosslink(self) -> bool:
         if self.residue_definition.crosslink is None:
             return False
 
@@ -180,23 +245,84 @@ class ResidueMatch(ResidueMatchProtocol):
         if self_bonds != other_bonds:
             return False
 
-        if self.expect_crosslink and (
-            self.crosslink != other.crosslink
+        if self.expects_crosslink and (
+            self.crosslink_idcs != other.crosslink_idcs
             or self.residue_definition.crosslink != other.residue_definition.crosslink
         ):
             return False
 
-        if (self.expect_prior_bond or self.expect_posterior_bond) and (
+        if (self.expects_prior_bond or self.expects_posterior_bond) and (
             self.residue_definition.linking_bond
             != other.residue_definition.linking_bond
         ):
             return False
 
         return (
-            self.expect_crosslink == other.expect_crosslink
-            and self.expect_prior_bond == other.expect_prior_bond
-            and self.expect_posterior_bond == other.expect_posterior_bond
+            self.expects_crosslink == other.expects_crosslink
+            and self.expects_prior_bond == other.expects_prior_bond
+            and self.expects_posterior_bond == other.expects_posterior_bond
         )
+
+
+@dataclass
+class PossibleResidueMatch:
+    match: ResidueMismatch | ResidueMatch | NoResidueDefinitions
+
+    @classmethod
+    def matched(
+        cls,
+        index_to_atomdef: dict[int, AtomDefinition],
+        residue_definition: ResidueDefinition,
+    ) -> Self:
+        return cls(
+            match=ResidueMatch(
+                residue_definition=residue_definition,
+                index_to_atomdef=index_to_atomdef,
+                crosslink_idcs=None,
+            ),
+        )
+
+    @classmethod
+    def mismatched(
+        cls,
+        index_to_atomdef: dict[int, AtomDefinition | None],
+        residue_definition: ResidueDefinition,
+        reason: str,
+    ) -> Self:
+        return cls(
+            match=ResidueMismatch(
+                residue_definition=residue_definition,
+                index_to_atomdef=index_to_atomdef,
+                reasons=[reason],
+            ),
+        )
+
+    def reject(self, reason: str) -> Self:
+        if isinstance(self.match, ResidueMatch):
+            self.match = ResidueMismatch(
+                residue_definition=self.match.residue_definition,
+                index_to_atomdef=self.match.index_to_atomdef,
+                reasons=[*self._reasons(), reason],
+            )
+        return self
+
+    @property
+    def res_atom_idcs(self) -> set[int]:
+        return self.match.res_atom_idcs
+
+    @property
+    def prototype_index(self) -> int:
+        return next(iter(self.match.index_to_atomdef))
+
+    def _reasons(self) -> list[str]:
+        return self.match.reasons if isinstance(self.match, ResidueMismatch) else []
+
+    def __bool__(self) -> bool:
+        return bool(self.match)
+
+
+def only_matched(iterable: Iterable[PossibleResidueMatch]) -> Iterable[ResidueMatch]:
+    return (p.match for p in iterable if isinstance(p.match, ResidueMatch))
 
 
 @dataclass
@@ -410,9 +536,9 @@ class PdbData:
 
     def subset_matches_residue(
         self,
-        res_atom_idcs: Sequence[int],
+        res_atom_idcs: Collection[int],
         residue_definition: ResidueDefinition,
-    ) -> ResidueMismatch | ResidueMatch:
+    ) -> PossibleResidueMatch:
         # Raise an error if the match would be empty - this way the
         # return value's truthiness always reflects whether there was a match
         if len(res_atom_idcs) == 0:
@@ -424,7 +550,7 @@ class PdbData:
         if len(residue_definition.atoms) < len(res_atom_idcs):
             reason = f"Too few atoms in residue definition ({len(residue_definition.atoms)} < {len(res_atom_idcs)})"
             logging.debug("    Match failed: " + reason)
-            return ResidueMismatch(
+            return PossibleResidueMatch.mismatched(
                 residue_definition=residue_definition,
                 index_to_atomdef={i: None for i in res_atom_idcs},
                 reason=reason,
@@ -441,7 +567,7 @@ class PdbData:
         ):
             reason = "No links and wrong number of atoms"
             logging.debug("    Match failed: " + reason)
-            return ResidueMismatch(
+            return PossibleResidueMatch.mismatched(
                 residue_definition=residue_definition,
                 index_to_atomdef={i: None for i in res_atom_idcs},
                 reason=reason,
@@ -455,11 +581,16 @@ class PdbData:
         except KeyError:
             reason = "Name missing from residue definition"
             logging.debug("    Match failed: " + reason)
-            return ResidueMismatch(
+            return PossibleResidueMatch.mismatched(
                 residue_definition=residue_definition,
                 index_to_atomdef={i: None for i in res_atom_idcs},
                 reason=reason,
             )
+
+        match = PossibleResidueMatch.matched(
+            index_to_atomdef=index_to_atomdef,
+            residue_definition=residue_definition,
+        )
 
         matched_atoms = {atom.name for atom in index_to_atomdef.values()}
 
@@ -467,11 +598,7 @@ class PdbData:
         if len(matched_atoms) != len(res_atom_idcs):
             reason = "Atom definition matched multiple PDB coordinate records"
             logging.debug("    Match failed: " + reason)
-            return ResidueMismatch(
-                residue_definition=residue_definition,
-                index_to_atomdef=index_to_atomdef,
-                reason=reason,
-            )
+            return match.reject(reason)
 
         # This assert should be guaranteed by the above
         assert set(index_to_atomdef.keys()) == set(res_atom_idcs)
@@ -483,11 +610,7 @@ class PdbData:
         ):
             reason = "Element mismatch"
             logging.debug("    Match failed: " + reason)
-            return ResidueMismatch(
-                residue_definition=residue_definition,
-                index_to_atomdef=index_to_atomdef,
-                reason=reason,
-            )
+            return match.reject(reason)
 
         # PDB files can not be trusted; ignore charges.
         # # Check that charges match, but tolerate missing columns
@@ -508,11 +631,7 @@ class PdbData:
         if any(not atom.leaving for atom in missing_atoms):
             reason = "Missing atom is not leaving atom"
             logging.debug("    Match failed: " + reason)
-            return ResidueMismatch(
-                residue_definition=residue_definition,
-                index_to_atomdef=index_to_atomdef,
-                reason=reason,
-            )
+            return match.reject(reason)
         elif (
             (
                 missing_atom_names.issuperset(
@@ -540,28 +659,36 @@ class PdbData:
             )
         ):
             logging.debug("    Match succeeded!")
-            return ResidueMatch(
-                index_to_atomdef=index_to_atomdef,
-                residue_definition=residue_definition,
-            )
+            return match
         else:
             reason = "Missing atoms do not specify link"
             logging.debug("    Match failed: " + reason)
-            return ResidueMismatch(
-                residue_definition=residue_definition,
-                index_to_atomdef=index_to_atomdef,
-                reason=reason,
-            )
+            return match.reject(reason)
 
     def get_residue_matches(
         self,
         residue_database: Mapping[str, Iterable[ResidueDefinition]],
         additional_substructures: Iterable[ResidueDefinition],
     ) -> Iterator[list[ResidueMatch]]:
-        # Identify possible matches based on atom and residue names
-        name_matches: list[list[ResidueMatch]] = []
-        atom_idx_to_res_idx: dict[int, int] = {}
-        for res_idx, res_atom_idcs in enumerate(self.residue_indices):
+        possible_matches = self.match_residues(
+            residue_database,
+            additional_substructures,
+        )
+        return (list(only_matched(matches)) for matches in possible_matches)
+
+    @cached_property
+    def atom_idx_to_res_idx(self) -> dict[int, int]:
+        value: dict[int, int] = {}
+        for res_idx, atom_indices in enumerate(self.residue_indices):
+            for atom_idx in atom_indices:
+                value[atom_idx] = res_idx
+        return value
+
+    def get_name_based_matches(
+        self,
+        residue_database: Mapping[str, Iterable[ResidueDefinition]],
+    ) -> Iterator[list[PossibleResidueMatch]]:
+        for res_atom_idcs in self.residue_indices:
             prototype_index = res_atom_idcs[0]
             res_name = self.res_name[prototype_index]
             logging.debug(f"Beginning name-based match of {res_name} {res_atom_idcs}")
@@ -570,150 +697,376 @@ class PdbData:
                     f"  Atom names are ({', '.join(self.name[i] for i in res_atom_idcs)})",
                 )
 
-            atom_idx_to_res_idx.update({i: res_idx for i in res_atom_idcs})
-
-            residue_matches: list[ResidueMatch] = []
-            for residue_definition in residue_database.get(res_name, []):
-                match = self.subset_matches_residue(
+            matches = [
+                self.subset_matches_residue(
                     res_atom_idcs,
                     residue_definition,
                 )
+                for residue_definition in residue_database.get(res_name, [])
+            ]
+            if len(matches) > 0:
+                yield matches
+            else:
+                yield [
+                    PossibleResidueMatch(
+                        match=NoResidueDefinitions(
+                            residue_definition=res_name,
+                            index_to_atomdef={i: None for i in res_atom_idcs},
+                        ),
+                    ),
+                ]
 
-                if isinstance(match, ResidueMatch):
-                    residue_matches.append(match)
-
-            if len(residue_matches) == 0:
-                for residue_definition in additional_substructures:
-                    match = self.subset_matches_residue(
-                        res_atom_idcs,
-                        residue_definition,
-                    )
-                    if isinstance(match, ResidueMatch):
-                        residue_matches.append(match)
-
-            name_matches.append(residue_matches)
-
-        # Check for polymer bonds
-        prev_filtered_matches: list[ResidueMatch] = []
-        linkage_matches: list[list[ResidueMatch]] = []
-        for _, this_matches, next_matches in with_neighbours(
-            name_matches,
+    def filter_on_polymer_linkages(
+        self,
+        matches: Sequence[Sequence[PossibleResidueMatch]],
+    ) -> None:
+        for prev_matches, this_matches, next_matches in with_neighbours(
+            matches,
             default=(),
         ):
-            if len(this_matches) != 0:
+            if len(list(only_matched(this_matches))) != 0:
                 logging.debug(
                     f"Beginning link-based match of {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
                 )
-            neighbours_support_posterior_bond = any(
-                next_match.expect_prior_bond for next_match in next_matches
-            )
-            neighbours_support_prior_bond = any(
-                prev_match.expect_posterior_bond for prev_match in prev_filtered_matches
-            )
+            # neighbour_supported_posterior_bonds and
+            # neighbour_supported_prior_bonds are maps from possible linking
+            # bonds in this residue to the atom index (in the neighbouring
+            # residue) where the linking atom can be found
+            neighbour_supported_posterior_bonds: dict[BondDefinition, int] = {
+                next_match.residue_definition.linking_bond: next_match.canonical_atom_name_to_index[
+                    next_match.residue_definition.prior_bond_linking_atom
+                ]
+                for next_match in only_matched(next_matches)
+                if next_match.residue_definition.linking_bond is not None
+                and next_match.expects_prior_bond
+            }
+            neighbour_supported_prior_bonds: dict[BondDefinition, int] = {
+                prev_match.residue_definition.linking_bond: prev_match.canonical_atom_name_to_index[
+                    prev_match.residue_definition.posterior_bond_linking_atom
+                ]
+                for prev_match in only_matched(prev_matches)
+                if prev_match.residue_definition.linking_bond is not None
+                and prev_match.expects_posterior_bond
+            }
+
+            valid_next_matches = list(only_matched(next_matches))
             neighbours_support_molecule_end = (
-                any(not next_match.expect_prior_bond for next_match in next_matches)
-                or len(next_matches) == 0
+                any(
+                    not next_match.expects_prior_bond
+                    for next_match in valid_next_matches
+                )
+                or len(valid_next_matches) == 0
             )
+            valid_prev_matches = list(only_matched(prev_matches))
             neighbours_support_molecule_start = (
                 any(
-                    not prev_match.expect_posterior_bond
-                    for prev_match in prev_filtered_matches
+                    not prev_match.expects_posterior_bond
+                    for prev_match in valid_prev_matches
                 )
-                or len(prev_filtered_matches) == 0
+                or len(valid_prev_matches) == 0
             )
-            this_filtered_matches: list[ResidueMatch] = []
-            for match in this_matches:
+            if len(list(only_matched(this_matches))) != 0:
                 logging.debug(
-                    f"  Attempting link-based match against {match.residue_definition.description}",
+                    f"  {neighbour_supported_posterior_bonds=}",
                 )
-                if len(match.missing_atoms) != 0:
-                    prior_bond_mismatched = (
-                        match.expect_prior_bond != neighbours_support_prior_bond
-                    )
-                    if prior_bond_mismatched:
-                        logging.debug("    Match failed: Prior bond mismatched")
-                        logging.debug(
-                            f"    {match.expect_prior_bond=} but {neighbours_support_prior_bond=}",
-                        )
+                logging.debug(
+                    f"  {neighbour_supported_prior_bonds=}",
+                )
+                logging.debug(
+                    f"  {neighbours_support_molecule_end=}",
+                )
+                logging.debug(
+                    f"  {neighbours_support_molecule_start=}",
+                )
+            for match in this_matches:
+                if not isinstance(match.match, ResidueMatch):
+                    continue
+                logging.debug(
+                    f"  Attempting link-based match against {match.match.residue_definition.description}",
+                )
+                if match.match.expects_prior_bond:
+                    if (
+                        match.match.residue_definition.linking_bond
+                        not in neighbour_supported_prior_bonds
+                    ):
+                        reason = "Prior bond expected but not supported by neighbours"
+                        logging.debug(f"    Match failed: {reason}")
+                        match.reject(reason)
                         continue
+                    else:
+                        match.match.set_prior_bond(neighbour_supported_prior_bonds)
+                elif not neighbours_support_molecule_start:
+                    reason = "Prior bond not permitted but required by neighbours"
+                    logging.debug(f"    Match failed: {reason}")
+                    match.reject(reason)
+                    continue
 
-                    posterior_bond_mismatched = (
-                        match.expect_posterior_bond != neighbours_support_posterior_bond
-                    )
-                    if posterior_bond_mismatched:
-                        logging.debug("    Match failed: Posterior bond mismatched")
-                        logging.debug(
-                            f"    {match.expect_posterior_bond=} but {neighbours_support_posterior_bond=}",
+                if match.match.expects_posterior_bond:
+                    if (
+                        match.match.residue_definition.linking_bond
+                        not in neighbour_supported_posterior_bonds
+                    ):
+                        reason = (
+                            "Posterior bond expected but not supported by neighbours"
                         )
+                        logging.debug(f"    Match failed: {reason}")
+                        match.reject(reason)
                         continue
+                    else:
+                        match.match.set_posterior_bond(
+                            neighbour_supported_posterior_bonds,
+                        )
+                elif not neighbours_support_molecule_end:
+                    reason = "Posterior bond not expected but required by neighbours"
+                    logging.debug(f"    Match failed: {reason}")
+                    match.reject(reason)
+                    continue
 
-                    this_filtered_matches.append(match)
-                    logging.debug("    Accepted")
-                elif (
-                    neighbours_support_molecule_end
-                    and neighbours_support_molecule_start
-                ):
-                    this_filtered_matches.append(match)
-                    logging.debug("    Accepted as non-polymer")
+                logging.debug("    Accepted")
 
-            linkage_matches.append(this_filtered_matches)
-            prev_filtered_matches = this_filtered_matches
-
+    def filter_on_crosslinks(
+        self,
+        matches: Sequence[Sequence[PossibleResidueMatch]],
+    ) -> None:
         # Check for crosslinks
         # TODO: This could be simplified if we required crosslinking atoms not to have synonyms
-        for residue_matches in linkage_matches:
+        for residue_matches in matches:
+            if len(list(only_matched(residue_matches))) != 0:
+                logging.debug(
+                    f"Assigning crosslinks for {self.res_name[residue_matches[0].prototype_index]} {residue_matches[0].res_atom_idcs}",
+                )
             for match in residue_matches:
-                if match.crosslink is not None:
+                if not isinstance(match.match, ResidueMatch):
+                    continue
+                logging.debug(
+                    f"  Attempting crosslink-based match against {match.match.residue_definition.description}",
+                )
+                if match.match.crosslink_idcs is not None:
                     # This match's crosslink has already been assigned
+                    logging.debug(
+                        "    Skipping (crosslink already assigned)",
+                    )
                     continue
-                if not match.expect_crosslink:
+                if not match.match.expects_crosslink:
+                    logging.debug(
+                        "    Skipping (crosslink not expected)",
+                    )
                     continue
-                this_crosslink_def = match.residue_definition.crosslink
+                this_crosslink_def = match.match.residue_definition.crosslink
                 if this_crosslink_def is None:
                     # No crosslink defined for this match
+                    logging.debug(
+                        "    Skipping (crosslink not expected 2: electric boogaloo)",
+                    )
                     continue
-                this_crosslink_atom_idx = match.canonical_atom_name_to_index[
+                this_crosslink_atom_idx = match.match.canonical_atom_name_to_index[
                     this_crosslink_def.atom1
                 ]
 
                 this_crosslink_conects = self.conects[this_crosslink_atom_idx]
                 for other_crosslink_atom_idx in this_crosslink_conects:
-                    other_crosslink_res_idx = atom_idx_to_res_idx[
+                    logging.debug(
+                        f"    checking possible partner {other_crosslink_atom_idx}",
+                    )
+                    other_crosslink_res_idx = self.atom_idx_to_res_idx[
                         other_crosslink_atom_idx
                     ]
-                    other_matches = linkage_matches[other_crosslink_res_idx]
+                    other_matches = list(matches[other_crosslink_res_idx])
                     for other_match in other_matches:
-                        other_crosslink_def = other_match.residue_definition.crosslink
-                        other_crosslink_atom_canonical_name = other_match.atom(
+                        if not isinstance(other_match.match, ResidueMatch):
+                            continue
+                        logging.debug(
+                            f"      in {other_match.match.residue_definition.description}",
+                        )
+                        other_crosslink_def = (
+                            other_match.match.residue_definition.crosslink
+                        )
+                        other_crosslink_atom_canonical_name = other_match.match.atom(
                             other_crosslink_atom_idx,
                         ).name
                         if (
-                            other_match.expect_crosslink
+                            other_match.match.expects_crosslink
                             and other_crosslink_def is not None
                             and other_crosslink_def.flipped() == this_crosslink_def
                             and other_crosslink_def.atom2
                             == other_crosslink_atom_canonical_name
                         ):
+                            logging.debug(
+                                "        crosslink found!",
+                            )
                             # We've found a crosslink!
-                            match.set_crosslink(
+                            # TODO: What if there are multiple possible crosslinks?
+                            #       ATM the last one is assigned, then rejected
+                            #       because the other CONECT records are not
+                            #       satisfied
+                            match.match.set_crosslink(
                                 this_crosslink_atom_idx,
                                 other_crosslink_atom_idx,
                             )
-                            other_match.set_crosslink(
+                            other_match.match.set_crosslink(
                                 other_crosslink_atom_idx,
                                 this_crosslink_atom_idx,
                             )
-        # If there is a crosslink, we know we want it because it's in CONECTs
-        # so filter out anything else
-        for residue_matches in linkage_matches:
-            if any(map(lambda x: x.crosslink is not None, residue_matches)):
-                yielded_matches: list[ResidueMatch] = []
-                for match in residue_matches:
-                    if match.crosslink is not None:
-                        yielded_matches.append(match)
-                yield yielded_matches
+                if match.match.expects_crosslink and match.match.crosslink_idcs is None:
+                    match.reject(
+                        "crosslink expected but no matching crosslink partner could be found",
+                    )
+
+    def match_unknown_molecules(
+        self,
+        matches: Iterable[list[PossibleResidueMatch]],
+        additional_substructures: Iterable[ResidueDefinition],
+    ) -> Iterator[list[PossibleResidueMatch]]:
+        for residue_matches in matches:
+            if not any(residue_matches):
+                res_atom_idcs = residue_matches[0].res_atom_idcs
+                additional_matches: list[PossibleResidueMatch] = []
+                for residue_definition in additional_substructures:
+                    additional_matches.append(
+                        self.subset_matches_residue(
+                            res_atom_idcs,
+                            residue_definition,
+                        ),
+                    )
+                yield residue_matches + additional_matches
             else:
-                yield [match for match in residue_matches if not match.expect_crosslink]
+                yield residue_matches
+
+    def filter_on_conect_records(
+        self,
+        matches: Iterable[list[PossibleResidueMatch]],
+    ) -> None:
+        for residue_matches in matches:
+            for match in residue_matches:
+                if not isinstance(match.match, ResidueMatch):
+                    continue
+
+                expected_bonds: set[tuple[int, int]] = set()
+                for bond in match.match.residue_definition.bonds:
+                    try:
+                        atom1_idx = match.match.canonical_atom_name_to_index[bond.atom1]
+                        atom2_idx = match.match.canonical_atom_name_to_index[bond.atom2]
+                    except KeyError:
+                        # Bond is for a missing leaving atom
+                        continue
+                    expected_bonds.add(sort_tuple((atom1_idx, atom2_idx)))
+                if match.match.crosslink_idcs is not None:
+                    expected_bonds.add(sort_tuple(match.match.crosslink_idcs))
+                if match.match.prior_bond_idcs is not None:
+                    expected_bonds.add(sort_tuple(match.match.prior_bond_idcs))
+                if match.match.posterior_bond_idcs is not None:
+                    expected_bonds.add(sort_tuple(match.match.posterior_bond_idcs))
+
+                found_conects = set(
+                    flatten(
+                        (sort_tuple((i, j)) for j in self.conects[i])
+                        for i in match.res_atom_idcs
+                    ),
+                )
+                if not found_conects.issubset(expected_bonds):
+                    print("rejected")
+                    match.reject(
+                        "found CONECT record that could not be matched with a bond",
+                    )
+
+    def filter_on_consecutive_chain_linkages(
+        self,
+        matches: Iterable[list[PossibleResidueMatch]],
+    ) -> None:
+        """If adjacent residues within a chain can be linked, reject matches that don't link them"""
+        # TODO: Nail down the definition of "Adjacent"
+        for prev_matches, this_matches, next_matches in with_neighbours(matches):
+            this_ptype_idx = next(iter(this_matches)).prototype_index
+            prev_ptype_idx = (
+                next(iter(prev_matches)).prototype_index
+                if prev_matches is not None
+                else None
+            )
+            next_ptype_idx = (
+                next(iter(next_matches)).prototype_index
+                if next_matches is not None
+                else None
+            )
+
+            this_chain = self.chain_id[this_ptype_idx]
+            prev_chain = (
+                self.chain_id[prev_ptype_idx] if prev_ptype_idx is not None else None
+            )
+            next_chain = (
+                self.chain_id[next_ptype_idx] if next_ptype_idx is not None else None
+            )
+
+            this_terminated = self.terminated[this_ptype_idx]
+            prev_terminated = (
+                self.terminated[prev_ptype_idx] if prev_ptype_idx is not None else True
+            )
+
+            can_form_prior_bond = any(
+                m.prior_bond_idcs is not None for m in only_matched(this_matches)
+            )
+            can_form_posterior_bond = any(
+                m.posterior_bond_idcs is not None for m in only_matched(this_matches)
+            )
+
+            prev_is_adjacent = (
+                prev_ptype_idx is not None
+                and prev_chain is not None
+                and prev_chain == this_chain
+                and not prev_terminated
+            )
+            next_is_adjacent = (
+                next_ptype_idx is not None
+                and next_chain is not None
+                and next_chain == this_chain
+                and not this_terminated
+            )
+
+            for match in this_matches:
+                if not isinstance(match.match, ResidueMatch):
+                    continue
+
+                current_match_doesnt_form_prior_bond = (
+                    match.match.prior_bond_idcs is None
+                )
+                current_match_doesnt_form_posterior_bond = (
+                    match.match.posterior_bond_idcs is None
+                )
+
+                if (
+                    can_form_prior_bond
+                    and prev_is_adjacent
+                    and current_match_doesnt_form_prior_bond
+                ):
+                    match.reject(
+                        "adjacent residues in unterminated chain can be linked",
+                    )
+                if (
+                    can_form_posterior_bond
+                    and next_is_adjacent
+                    and current_match_doesnt_form_posterior_bond
+                ):
+                    match.reject(
+                        "adjacent residues in unterminated chain can be linked",
+                    )
+
+    def match_residues(
+        self,
+        residue_database: Mapping[str, Iterable[ResidueDefinition]],
+        additional_substructures: Iterable[ResidueDefinition],
+    ) -> list[list[PossibleResidueMatch]]:
+        matches = list(self.get_name_based_matches(residue_database))
+        # self.rescue_partial_matches_with_conect_element_charge(matches)
+        self.filter_on_polymer_linkages(matches)
+        self.filter_on_crosslinks(matches)
+        matches = list(
+            self.match_unknown_molecules(
+                matches,
+                additional_substructures,
+            ),
+        )
+        self.filter_on_conect_records(matches)
+        self.filter_on_consecutive_chain_linkages(matches)
+        return matches
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         return {

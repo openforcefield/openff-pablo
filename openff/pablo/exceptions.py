@@ -10,6 +10,7 @@ __all__ = [
 
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
+from itertools import combinations
 from typing import TYPE_CHECKING
 
 from openff.toolkit import Molecule
@@ -118,9 +119,22 @@ class MultipleMatchingResidueDefinitionsError(ValueError):
                 [
                     msg,
                     *map(
-                        lambda m: m.residue_definition.description
-                        + f" {m.expect_crosslink=} {m.expect_prior_bond=} {m.expect_posterior_bond=}",
-                        matches,
+                        lambda t: f"{t[0]}: {t[1].residue_definition.description!r} {t[1].expects_crosslink=} {t[1].expects_prior_bond=} {t[1].expects_posterior_bond=}",
+                        enumerate(matches),
+                    ),
+                    *filter(
+                        lambda s: " disagrees with " not in s,
+                        map(
+                            lambda t: f"{t[0]} {'agrees with' if matches[t[0]].agrees_with(matches[t[1]]) else 'disagrees with'} {t[1]}",
+                            combinations(range(len(matches)), 2),
+                        ),
+                    ),
+                    *filter(
+                        lambda s: " != " not in s,
+                        map(
+                            lambda t: f"{t[0]} {'==' if matches[t[0]] == matches[t[1]] else '!='} {t[1]}",
+                            combinations(range(len(matches)), 2),
+                        ),
                     ),
                 ],
             )

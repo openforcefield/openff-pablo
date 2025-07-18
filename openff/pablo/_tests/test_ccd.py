@@ -82,6 +82,11 @@ def test_ccdcache_gives_clear_errors(resname: str, expected_message: str):
         CCD_RESIDUE_DEFINITION_CACHE[resname]
 
 
+def test_default_ccdcache_cys_definitions_unique():
+    cys_defs = CCD_RESIDUE_DEFINITION_CACHE["CYS"]
+    assert len(set(cys_defs)) == len(cys_defs)
+
+
 def test_ccdcache_with(hooh_def: ResidueDefinition, hoh_def: ResidueDefinition):
     assert "HOOH" not in CCD_RESIDUE_DEFINITION_CACHE
     new_ccdcache = CCD_RESIDUE_DEFINITION_CACHE.with_([hooh_def])

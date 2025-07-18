@@ -299,7 +299,7 @@ def gly_def_zwitterionic() -> ResidueDefinition:
 def cys_match(cys_def: ResidueDefinition) -> ResidueMatch:
     return ResidueMatch(
         residue_definition=cys_def,
-        crosslink=None,
+        crosslink_idcs=None,
         index_to_atomdef={i: atom for i, atom in enumerate(cys_def.atoms)},
     )
 
@@ -309,7 +309,7 @@ def cys_match_no_leaving(cys_def: ResidueDefinition) -> ResidueMatch:
     counter = iter(range(len(cys_def.atoms)))
     return ResidueMatch(
         residue_definition=cys_def,
-        crosslink=None,
+        crosslink_idcs=None,
         index_to_atomdef={
             next(counter): atom for atom in cys_def.atoms if not atom.leaving
         },
@@ -323,7 +323,7 @@ def cys_match_no_leaving_deprotonated_sidechain(
     counter = iter(range(len(cys_def_deprotonated_sidechain.atoms)))
     return ResidueMatch(
         residue_definition=cys_def_deprotonated_sidechain,
-        crosslink=None,
+        crosslink_idcs=None,
         index_to_atomdef={
             next(counter): atom
             for atom in cys_def_deprotonated_sidechain.atoms
@@ -336,7 +336,7 @@ def cys_match_no_leaving_deprotonated_sidechain(
 def hoh_match(hoh_def: ResidueDefinition) -> ResidueMatch:
     return ResidueMatch(
         residue_definition=hoh_def,
-        crosslink=None,
+        crosslink_idcs=None,
         index_to_atomdef={i: atom for i, atom in enumerate(hoh_def.atoms)},
     )
 

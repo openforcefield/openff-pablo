@@ -218,7 +218,7 @@ def topology_from_pdb(
             or data.model[prototype_index] != prev_model
             or (
                 isinstance(chemical_data, ResidueMatch)
-                and not chemical_data.expect_prior_bond
+                and not chemical_data.expects_prior_bond
             )
         ):
             this_molecule = Molecule()
@@ -248,7 +248,7 @@ def topology_from_pdb(
             or isinstance(chemical_data, Molecule)
             or (
                 isinstance(chemical_data, ResidueMatch)
-                and not chemical_data.expect_posterior_bond
+                and not chemical_data.expects_posterior_bond
             )
         ):
             this_molecule = Molecule()
@@ -408,7 +408,7 @@ def _add_to_molecule(
 ) -> Molecule:
     # Identify the previous linking atom
     linking_atom_idx: None | int = None
-    if residue_match.expect_prior_bond:
+    if residue_match.expects_prior_bond:
         assert residue_match.residue_definition.linking_bond is not None
         linking_atom_name = residue_match.residue_definition.linking_bond.atom1
         for i in reversed(range(this_molecule.n_atoms)):
@@ -470,8 +470,8 @@ def _add_to_molecule(
             invalidate_cache=False,
         )
 
-    if residue_match.crosslink is not None:
-        this_idx, other_idx = residue_match.crosslink
+    if residue_match.crosslink_idcs is not None:
+        this_idx, other_idx = residue_match.crosslink_idcs
         crosslink_bond = residue_match.residue_definition.crosslink
         assert crosslink_bond is not None, "Crosslink cannot be None if in match"
         if other_idx > this_idx:
