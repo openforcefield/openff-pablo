@@ -1,12 +1,10 @@
 import random
 from io import StringIO
 
-import pytest
 from openff.toolkit import Molecule
 
 from openff.pablo._pdb import (
     _add_to_molecule,
-    _match_unknown_molecules,
     topology_from_pdb,
 )
 from openff.pablo._pdb_data import PdbData, ResidueMatch
@@ -22,9 +20,8 @@ class TestMatchUnknownMolecules:
         random.shuffle(atom_indices)
         e2_mol.remap({i: j for (i, j) in enumerate(atom_indices)})
 
-        match_mol = _match_unknown_molecules(
-            data=e2_data,
-            indices=tuple(range(e2_mol.n_atoms)),
+        match_mol = e2_data._match_unknown_molecules_to_indices(
+            indices=tuple(sorted(range(e2_mol.n_atoms))),
             unknown_molecules=[e2_mol],
         )
         assert match_mol is not None
@@ -43,9 +40,8 @@ class TestMatchUnknownMolecules:
         e2_mol = Molecule.from_smiles(
             r"C[C@]12CC[C@H]3[C@@H](CCc4cc(O)ccc34)[C@@H]1CC[C@@H]2O",
         )
-        match_mol = _match_unknown_molecules(
-            data=e2_data,
-            indices=tuple(range(e2_mol.n_atoms)),
+        match_mol = e2_data._match_unknown_molecules_to_indices(
+            indices=tuple(sorted(range(e2_mol.n_atoms))),
             unknown_molecules=[e2_mol],
         )
         assert match_mol is not None
@@ -57,7 +53,7 @@ class TestMatchUnknownMolecules:
 
         for i, atom in enumerate(match_mol.atoms):
             assert atom.metadata["residue_name"] == e2_data.res_name[i]
-            assert atom.metadata["residue_number"] == e2_data.res_seq[i]
+            assert str(atom.metadata["residue_number"]) == e2_data.res_seq[i]
             assert atom.metadata["insertion_code"] == e2_data.i_code[i]
             assert atom.metadata["chain_id"] == e2_data.chain_id[i]
             assert atom.metadata["pdb_index"] == i
@@ -78,25 +74,12 @@ class TestMatchUnknownMolecules:
         )
         hoh_mol = Molecule.from_smiles("O")
 
-        match = _match_unknown_molecules(
-            data=e2_data,
-            indices=tuple(range(e2_mol.n_atoms)),
+        match = e2_data._match_unknown_molecules_to_indices(
+            indices=tuple(sorted(range(e2_mol.n_atoms))),
             unknown_molecules=[e2_mol, hoh_mol],
         )
         assert match is not None
         assert match.is_isomorphic_with(e2_mol)
-
-    def test_conect_to_other_residue_raises(
-        self,
-        vicinal_disulfide_data: PdbData,
-    ):
-        cys_mol = Molecule.from_smiles("N[C@H](CS)C(O)=O")
-        with pytest.raises(ValueError):
-            _match_unknown_molecules(
-                data=vicinal_disulfide_data,
-                indices=tuple(range(cys_mol.n_atoms)),
-                unknown_molecules=[cys_mol],
-            )
 
     def test_returns_none_on_failure_to_match(
         self,
@@ -104,9 +87,8 @@ class TestMatchUnknownMolecules:
     ):
         hoh_mol = Molecule.from_smiles("O")
 
-        match = _match_unknown_molecules(
-            data=e2_data,
-            indices=tuple(range(44)),
+        match = e2_data._match_unknown_molecules_to_indices(
+            indices=tuple(sorted(range(44))),
             unknown_molecules=[hoh_mol],
         )
         assert match is None

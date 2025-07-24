@@ -490,15 +490,19 @@ class TestPdbData:
         data = PdbData(name=["H"], element=["h"], charge=[1])
         assert data.subset_matches_residue([0], resdef)
 
-    def test_get_residue_matches_loads_vicinal_disulfide(
+    def test_match_residues_loads_vicinal_disulfide(
         self,
         vicinal_disulfide_data: PdbData,
         cys_def: ResidueDefinition,
         cys_def_deprotonated_sidechain: ResidueDefinition,
     ):
-        match1, match2, *excess_matches = vicinal_disulfide_data.get_residue_matches(
-            residue_database={"CYS": [cys_def, cys_def_deprotonated_sidechain]},
-            additional_substructures=[],
+        match1, match2, *excess_matches = (
+            [p.match for p in residue_matches if isinstance(p.match, (ResidueMatch))]
+            for residue_matches in vicinal_disulfide_data.match_residues(
+                residue_database={"CYS": [cys_def, cys_def_deprotonated_sidechain]},
+                additional_substructures=[],
+                unknown_molecules=[],
+            )
         )
         assert len(excess_matches) == 0
         assert len(match1) == 1

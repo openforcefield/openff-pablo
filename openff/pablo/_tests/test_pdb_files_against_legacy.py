@@ -138,16 +138,17 @@ def connectivity_and_atom_order_and_net_residue_charge_and_metadata_matches_lega
     assert pablo_top.n_molecules == legacy_top.n_molecules
     for pablo_mol, legacy_mol in zip(pablo_top.molecules, legacy_top.molecules):
         assert pablo_mol.n_atoms == legacy_mol.n_atoms
+        assert pablo_mol.hill_formula == legacy_mol.hill_formula
         for pablo_atom, legacy_atom in zip(pablo_mol.atoms, legacy_mol.atoms):
             assert (
                 pablo_atom.name == legacy_atom.name
-                or pablo_atom.metadata["canonical_name"] == legacy_atom.name
+                or pablo_atom.metadata.get("canonical_name", None) == legacy_atom.name
             )
             assert pablo_atom.symbol == legacy_atom.symbol
             # Legacy loader converts "A000" to "10000". New loader is more
-            # hygienic about this, so we need to use `res_seq`, but stringify it
+            # hygienic about this, so it needs to be stringified
             assert (
-                str(pablo_atom.metadata["res_seq"])
+                str(pablo_atom.metadata["residue_number"])
                 == legacy_atom.metadata["residue_number"]
             )
             for key in [

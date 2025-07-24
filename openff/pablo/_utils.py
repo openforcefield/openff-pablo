@@ -168,10 +168,10 @@ def dec_hex(s: str) -> int:
     For a string of length n, the string is interpreted as decimal if the value
     is < 10^n. This makes the dec_hex representation identical to a decimal
     integer, except for strings that cannot be parsed as a decimal. For these
-    strings, the first hexadecimal number is interpreted as 10^n, and subsequent
-    numbers continue from there. For example, in PDB files, a fixed width column
-    format, residue numbers for large systems sometimes follow this
-    representation:
+    strings, the first hexadecimal number with a leading digit greater than 9 is
+    interpreted as 10^n, and subsequent numbers continue from there. For
+    example, in PDB files, a fixed width column format, residue numbers for
+    large systems sometimes follow thisrepresentation:
 
         "   1" -> 1
         "   2" -> 2

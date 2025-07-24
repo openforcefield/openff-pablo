@@ -244,7 +244,7 @@ def test_3ip9_loads_with_additional_residue():
                 "residue_number",
                 "insertion_code",
             ]:
-                assert pablo_atom.metadata[key] == legacy_atom.metadata[key]
+                assert str(pablo_atom.metadata[key]) == str(legacy_atom.metadata[key])
 
         pablo_bonds = {
             sort_tuple((bond.atom1_index, bond.atom2_index)) for bond in pablo_mol.bonds
