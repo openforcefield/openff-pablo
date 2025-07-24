@@ -3,17 +3,13 @@ Exceptions for the PDB loader.
 """
 
 __all__ = [
-    "NoMatchingResidueDefinitionError",
-    "MultipleMatchingResidueDefinitionsError",
+    "PdbResidueMatchError",
     "UnknownOrAmbiguousSerialInConectError",
 ]
 
 
-from collections.abc import Collection, Iterable, Mapping, Sequence
-from itertools import combinations
+from collections.abc import Collection, Sequence
 from typing import TYPE_CHECKING
-
-from openff.toolkit import Molecule
 
 from openff.pablo._matching import (
     MoleculeMatch,
@@ -21,11 +17,10 @@ from openff.pablo._matching import (
     ResidueMatch,
     ResidueMismatch,
 )
-from openff.pablo._utils import flatten
+from openff.pablo.residue import ResidueDefinition
 
 if TYPE_CHECKING:
     from openff.pablo._pdb_data import PdbData
-    from openff.pablo.residue import ResidueDefinition
 
 
 def _format_src(data: "PdbData", res_atom_idcs: Sequence[int]) -> str:
@@ -44,9 +39,9 @@ def _format_src(data: "PdbData", res_atom_idcs: Sequence[int]) -> str:
         line_no = f"{first}"
 
     return (
-        f" {data.src_filename}:l{line_no}"
+        f"{data.src_filename}:l{line_no}"
         if data.src_filename is not None
-        else f" l{line_no}"
+        else f"l{line_no}"
     )
 
 
@@ -86,139 +81,42 @@ class PdbResidueMatchError(ValueError):
                 msg.append(f"  {resid} ({src}): No residue definitions")
             else:
                 msg.append(f"  {resid} ({src}): No matching residue definitions:")
-            for err in residue_errors:
+
+            residue_mismatch_resdef_description_lens = [
+                len(match.residue_definition.description)
+                for match in residue_errors
+                if isinstance(match.residue_definition, ResidueDefinition)
+            ]
+            residue_mismatch_resdef_description_max_length = (
+                max(residue_mismatch_resdef_description_lens)
+                if residue_mismatch_resdef_description_lens
+                else 0
+            )
+            for err in sorted(residue_errors, key=lambda x: (type(x), x.sort_key())):
                 if isinstance(err, NoResidueDefinitions):
                     continue
                 elif isinstance(err, ResidueMatch):
                     msg.append(
-                        f"    {err.description}: {err.expects_crosslink=} {err.expects_prior_bond=} {err.expects_posterior_bond=}",
+                        f"    ├ {err.residue_definition.description}: {err.expects_crosslink=} {err.expects_prior_bond=} {err.expects_posterior_bond=}",
                     )
                 elif isinstance(err, MoleculeMatch):
                     msg.append(
-                        f"    Unknown molecule {err.description}",
+                        f"    ├ Unknown molecule {err.description}",
+                    )
+                elif isinstance(err, ResidueMismatch):
+                    desc = err.residue_definition.description
+                    padding = residue_mismatch_resdef_description_max_length - len(desc)
+                    msg.append(
+                        f"    ├{'─' * padding} {desc} "
+                        + f"failed to match: {err.reason}",
                     )
                 else:
-                    msg.append(f"    {err.description}: {err.reasons}")
+                    msg.append(f"    ├ {err.description}")
 
+            if msg[-1].startswith("    ├"):
+                msg[-1] = "    ╰" + msg[-1][5:]
 
-class NoMatchingResidueDefinitionError(ValueError):
-    """Exception raised when a residue is missing from the database"""
-
-    def __init__(
-        self,
-        res_atom_idcs: Sequence[int],
-        data: "PdbData",
-        unknown_molecules: Iterable[Molecule],
-        additional_substructures: Iterable["ResidueDefinition"],
-        residue_database: Mapping[
-            str,
-            Iterable["ResidueDefinition"],
-        ],
-        verbose_errors: bool = False,
-    ):
-        i = res_atom_idcs[0]
-        res_name = data.res_name[i]
-
-        line_nos = sorted(
-            [data.line_no[j] for j in res_atom_idcs],
-            key=lambda x: 0 if x is None else x,
-        )
-        first, last = line_nos[0], line_nos[-1]
-        if (
-            first is not None
-            and last is not None
-            and line_nos == list(range(first, last + 1))
-        ):
-            line_no = f"{first}-{last}"
-        else:
-            line_no = first
-
-        msg = [
-            (
-                "No residue definitions covered all atoms in residue"
-                + f"{data.chain_id[i]}:{res_name}#{data.res_seq[i]}"
-                + (
-                    f" ({data.src_filename}:l{line_no})"
-                    if data.src_filename is not None
-                    else f" (l{line_no})"
-                )
-            ),
-        ]
-        if verbose_errors:
-            residue_definitions = list(residue_database[res_name])
-            if len(residue_definitions) == 0:
-                msg.append("  No residues in database for residue name {res_name}")
-            found_names = {data.name[i] for i in res_atom_idcs}
-            for resdef in residue_definitions:
-                extra_names = found_names.difference(
-                    flatten([atom.name, *atom.synonyms] for atom in resdef.atoms),
-                )
-                missing_names = {
-                    "|".join([atom.name, *atom.synonyms])
-                    for atom in resdef.atoms
-                    if atom.name not in found_names
-                    and all([synonym not in found_names for synonym in atom.synonyms])
-                    and not atom.leaving
-                }
-                missing_leavers = {
-                    "|".join([atom.name, *atom.synonyms])
-                    for atom in resdef.atoms
-                    if atom.name not in found_names
-                    and all([synonym not in found_names for synonym in atom.synonyms])
-                    and atom.leaving
-                }
-                msg.append(f"    In {resdef.description}:")
-                msg.append(f"      {sorted(extra_names)} were found but not expected")
-                msg.append(f"      {sorted(missing_names)} were expected but not found")
-                msg.append(
-                    f"      Leaving atoms {sorted(missing_leavers)} were also not found",
-                )
-
-        super().__init__("\n".join(msg))
-
-
-class MultipleMatchingResidueDefinitionsError(ValueError):
-    def __init__(
-        self,
-        matches: Sequence["ResidueMatch"],
-        res_atom_idcs: tuple[int, ...],
-        data: "PdbData",
-        verbose_errors: bool,
-    ):
-        i = res_atom_idcs[0]
-
-        msg = (
-            f"{len(matches)} residue definitions matched residue "
-            + f"{data.chain_id[i]}:{data.res_name[i]}#{data.res_seq[i]}"
-        )
-
-        if verbose_errors:
-            msg += ":"
-            msg = "\n    ".join(
-                [
-                    msg,
-                    *map(
-                        lambda t: f"{t[0]}: {t[1].residue_definition.description!r} {t[1].expects_crosslink=} {t[1].expects_prior_bond=} {t[1].expects_posterior_bond=}",
-                        enumerate(matches),
-                    ),
-                    *filter(
-                        lambda s: " disagrees with " not in s,
-                        map(
-                            lambda t: f"{t[0]} {'agrees with' if matches[t[0]].agrees_with(matches[t[1]]) else 'disagrees with'} {t[1]}",
-                            combinations(range(len(matches)), 2),
-                        ),
-                    ),
-                    *filter(
-                        lambda s: " != " not in s,
-                        map(
-                            lambda t: f"{t[0]} {'==' if matches[t[0]] == matches[t[1]] else '!='} {t[1]}",
-                            combinations(range(len(matches)), 2),
-                        ),
-                    ),
-                ],
-            )
-
-        super().__init__(msg)
+        return super().__init__("\n".join(msg))
 
 
 class UnknownOrAmbiguousSerialInConectError(ValueError):

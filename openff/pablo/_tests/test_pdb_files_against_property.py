@@ -432,10 +432,69 @@ def test_cannot_load_arg_alternate_resonance_form():
     )
 
 
-@pytest.mark.xfail
 def test_misplaced_ter_with_custom_resdef_gives_clear_error():
-    """This needs a clearer error"""
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match="failed to match: Posterior bond expected but cannot form polymer bond across TER record",
+    ):
         topology_from_pdb(
             get_test_data_path("capped_ser_extrater.pdb"),
+        )
+
+
+def test_unknown_residue_gives_clear_error():
+    path = get_test_data_path("5ap1_prepared.pdb").absolute()
+
+    def check_err(err: ValueError) -> bool:
+        expected_error = "\n".join(
+            [
+                "some residues could not be identified",
+                "A topology cannot be created without chemical information for every",
+                "atom and bond. The following residues present in the PDB file could",
+                "not be identified from the provided chemical library:",
+                f"  C:UNK#1 ({path}:l4980-5038): No residue definitions",
+            ],
+        )
+
+        assert err.args[0] == expected_error
+        return True
+
+    with pytest.raises(
+        ValueError,
+        check=check_err,
+    ):
+        topology_from_pdb(path)
+
+
+def test_unmatched_residues_give_clear_error(
+    cys_def_deprotonated_sidechain: ResidueDefinition,
+):
+    path = get_test_data_path("3cu9_vicinal_disulfide.pdb").absolute()
+
+    def check_err(err: ValueError) -> bool:
+        expected_error = "\n".join(
+            [
+                "some residues could not be identified",
+                "A topology cannot be created without chemical information for every",
+                "atom and bond. The following residues present in the PDB file could",
+                "not be identified from the provided chemical library:",
+                f"  A:CYS#221 ({path}:l1-11): No matching residue definitions:",
+                "    ╰ CYSTEINE failed to match: found CONECT record that could not be matched with a bond",
+                f"  A:CYS#222 ({path}:l12-23): No matching residue definitions:",
+                "    ╰ CYSTEINE failed to match: found CONECT record that could not be matched with a bond",
+            ],
+        )
+
+        assert err.args[0] == expected_error
+        return err.args[0] == expected_error
+
+    with pytest.raises(
+        ValueError,
+        check=check_err,
+    ):
+        topology_from_pdb(
+            path,
+            residue_database={
+                "CYS": [cys_def_deprotonated_sidechain.replace(crosslink=None)],
+            },
         )

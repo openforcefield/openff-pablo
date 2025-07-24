@@ -438,6 +438,8 @@ class PdbData:
                 logging.debug(
                     f"Beginning link-based match of {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
                 )
+            else:
+                continue
             # neighbour_supported_posterior_bonds and
             # neighbour_supported_prior_bonds are maps from possible linking
             # bonds in this residue to the atom index (in the neighbouring
@@ -475,6 +477,11 @@ class PdbData:
                 )
                 or len(valid_prev_matches) == 0
             )
+            prev_residue_terminated = (
+                len(prev_matches) > 0
+                and self.terminated[prev_matches[0].prototype_index]
+            )
+            this_residue_terminated = self.terminated[this_matches[0].prototype_index]
             if len(list(only_matched(this_matches))) != 0:
                 logging.debug(
                     f"  {neighbour_supported_posterior_bonds=}",
@@ -503,6 +510,11 @@ class PdbData:
                         logging.debug(f"    Match failed: {reason}")
                         match.reject(reason)
                         continue
+                    elif prev_residue_terminated:
+                        reason = "Prior bond expected but cannot form polymer bond across TER record"
+                        logging.debug(f"    Match failed: {reason}")
+                        match.reject(reason)
+                        continue
                     else:
                         match.match.set_prior_bond(neighbour_supported_prior_bonds)
                 elif not neighbours_support_molecule_start:
@@ -519,6 +531,11 @@ class PdbData:
                         reason = (
                             "Posterior bond expected but not supported by neighbours"
                         )
+                        logging.debug(f"    Match failed: {reason}")
+                        match.reject(reason)
+                        continue
+                    elif this_residue_terminated:
+                        reason = "Posterior bond expected but cannot form polymer bond across TER record"
                         logging.debug(f"    Match failed: {reason}")
                         match.reject(reason)
                         continue

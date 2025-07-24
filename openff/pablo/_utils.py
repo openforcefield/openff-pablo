@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import (
@@ -55,7 +56,7 @@ class __UNSET__:
 def dbg(o: T, msg: str = "{}") -> T:
     if "{}" not in msg:
         msg += ": {}"
-    print(msg.format(o))
+    logging.debug(msg.format(o))
     return o
 
 

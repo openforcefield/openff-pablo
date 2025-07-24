@@ -170,32 +170,12 @@ def topology_from_pdb(
 
     this_molecule = Molecule()
     molecules: list[Molecule] = [this_molecule]
-    prev_chain_id = data.chain_id[0]
-    prev_model = data.model[0]
     chemical_data: MoleculeMatch | ResidueMatch
-    for res_atom_idcs, chemical_data in zip(
-        data.residue_indices,
-        data.get_residue_matches(
-            residue_database,
-            additional_substructures,
-            unknown_molecules,
-        ),
+    for chemical_data in data.get_residue_matches(
+        residue_database,
+        additional_substructures,
+        unknown_molecules,
     ):
-        prototype_index = res_atom_idcs[0]
-
-        # Terminate the previous molecule and start a new one if we can see that
-        # this is the start of a new molecule
-        if this_molecule.n_atoms > 0 and (
-            data.chain_id[prototype_index] != prev_chain_id
-            or data.model[prototype_index] != prev_model
-            or (
-                isinstance(chemical_data, ResidueMatch)
-                and not chemical_data.expects_prior_bond
-            )
-        ):
-            this_molecule = Molecule()
-            molecules.append(this_molecule)
-
         # Apply the chemical data we've collected
         if isinstance(chemical_data, MoleculeMatch):
             this_molecule = chemical_data.residue_definition
@@ -214,14 +194,10 @@ def topology_from_pdb(
         else:
             assert_never(chemical_data)
 
-        # Terminate the current molecule if we can see that this is the last residue
-        if (
-            data.terminated[prototype_index]
-            or isinstance(chemical_data, MoleculeMatch)
-            or (
-                isinstance(chemical_data, ResidueMatch)
-                and not chemical_data.expects_posterior_bond
-            )
+        # Terminate the current molecule if this residue has no posterior bond
+        if isinstance(chemical_data, MoleculeMatch) or (
+            isinstance(chemical_data, ResidueMatch)
+            and chemical_data.posterior_bond_idcs is None
         ):
             this_molecule = Molecule()
             molecules.append(this_molecule)
@@ -229,9 +205,6 @@ def topology_from_pdb(
         # TODO: Load other data from PDB file
         # TODO: Incorporate CONECT records
         # TODO: Deal with multi-model files
-
-        prev_chain_id = data.chain_id[prototype_index]
-        prev_model = data.model[prototype_index]
 
     for offmol in molecules:
         offmol._invalidate_cached_properties()

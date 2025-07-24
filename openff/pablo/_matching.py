@@ -35,6 +35,9 @@ class ResidueMatchProtocol(Protocol):
     def prototype_index(self) -> int:
         return next(iter(self.index_to_atomdef))
 
+    def sort_key(self) -> tuple[str, ...]:
+        return (self.description,)
+
 
 @dataclass(frozen=True)
 class NoResidueDefinitions(ResidueMatchProtocol):
@@ -51,12 +54,19 @@ class NoResidueDefinitions(ResidueMatchProtocol):
 class ResidueMismatch(ResidueMatchProtocol):
     residue_definition: ResidueDefinition
     index_to_atomdef: Mapping[int, AtomDefinition | None]
-    reasons: list[str]
+    reason: str
     is_match = False
 
     @property
     def description(self) -> str:
-        return f"{self.residue_definition.description} failed to match because {self.reasons}"
+        return f"{self.residue_definition.description} failed to match: {self.reason}"
+
+    def sort_key(self) -> tuple[str, ...]:
+        return (
+            self.reason,
+            f"{len(self.residue_definition.description):0>10}",
+            self.residue_definition.description,
+        )
 
 
 @dataclass(frozen=True)
@@ -277,7 +287,7 @@ class PossibleResidueMatch:
             match=ResidueMismatch(
                 residue_definition=residue_definition,
                 index_to_atomdef=index_to_atomdef,
-                reasons=[reason],
+                reason=reason,
             ),
         )
 
@@ -286,7 +296,7 @@ class PossibleResidueMatch:
             self.match = ResidueMismatch(
                 residue_definition=self.match.residue_definition,
                 index_to_atomdef=self.match.index_to_atomdef,
-                reasons=[*self._reasons(), reason],
+                reason=reason,
             )
         return self
 
@@ -297,9 +307,6 @@ class PossibleResidueMatch:
     @property
     def prototype_index(self) -> int:
         return self.match.prototype_index
-
-    def _reasons(self) -> list[str]:
-        return self.match.reasons if isinstance(self.match, ResidueMismatch) else []
 
     def __bool__(self) -> bool:
         return bool(self.match)
