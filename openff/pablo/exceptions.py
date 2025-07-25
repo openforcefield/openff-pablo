@@ -18,6 +18,7 @@ from openff.pablo._matching import (
     NoResidueDefinitions,
     ResidueMatch,
     ResidueMismatch,
+    SuccessfulMatch,
 )
 from openff.pablo.residue import ResidueDefinition
 
@@ -51,7 +52,7 @@ class PdbResidueMatchError(ValueError):
     def __init__(
         self,
         data: "PdbData",
-        errors: list[list[MismatchProtocol] | list[MatchProtocol]],
+        errors: list[list[MismatchProtocol] | list[SuccessfulMatch]],
     ):
         msg = [
             "some residues could not be identified",

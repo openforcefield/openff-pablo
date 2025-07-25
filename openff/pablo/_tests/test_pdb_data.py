@@ -497,7 +497,7 @@ class TestPdbData:
         cys_def_deprotonated_sidechain: ResidueDefinition,
     ):
         match1, match2, *excess_matches = (
-            [p.match for p in residue_matches if isinstance(p.match, (ResidueMatch))]
+            [p for p in residue_matches if isinstance(p, ResidueMatch)]
             for residue_matches in vicinal_disulfide_data.match_residues(
                 residue_database={"CYS": [cys_def, cys_def_deprotonated_sidechain]},
                 additional_substructures=[],

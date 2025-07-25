@@ -1,7 +1,7 @@
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from functools import cached_property
-from typing import ClassVar, Protocol, Self
+from typing import ClassVar, Protocol, Self, TypeAlias
 
 from openff.toolkit import Molecule
 
@@ -100,6 +100,13 @@ class ResidueMatch(MatchProtocol):
     crosslink_idcs: tuple[int, int] | None = None
     """PDB indices of each bonded atom"""
     is_match = True
+
+    def reject(self, reason: str) -> ResidueMismatch:
+        return ResidueMismatch(
+            residue_definition=self.residue_definition,
+            index_to_atomdef=self.index_to_atomdef,
+            reason=reason,
+        )
 
     def atom(self, identifier: int | str) -> AtomDefinition:
         """Get an atom definition by name or PDB index"""
@@ -297,32 +304,11 @@ class MoleculeMatch(MatchProtocol):
         return self
 
 
-@dataclass
-class PossibleResidueMatch:
-    match: MatchProtocol | MismatchProtocol
-
-    def reject(self, reason: str) -> Self:
-        if isinstance(self.match, ResidueMatch):
-            self.match = ResidueMismatch(
-                residue_definition=self.match.residue_definition,
-                index_to_atomdef=self.match.index_to_atomdef,
-                reason=reason,
-            )
-        return self
-
-    @property
-    def res_atom_idcs(self) -> tuple[int, ...]:
-        return self.match.res_atom_idcs
-
-    @property
-    def prototype_index(self) -> int:
-        return self.match.prototype_index
-
-    def __bool__(self) -> bool:
-        return bool(self.match)
+SuccessfulMatch: TypeAlias = ResidueMatch | MoleculeMatch
+PossibleResidueMatch: TypeAlias = SuccessfulMatch | MismatchProtocol
 
 
 def only_matched(
     iterable: Iterable[PossibleResidueMatch],
 ) -> Iterable[MatchProtocol]:
-    return (p.match for p in iterable if isinstance(p.match, MatchProtocol))
+    return (p for p in iterable if isinstance(p, MatchProtocol))
