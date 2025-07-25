@@ -1,9 +1,12 @@
 from pathlib import Path
 
 import pytest
+from openff.toolkit import Molecule
 
+from openff.pablo._matching import MoleculeMatch, NoResidueDefinitions, ResidueMismatch
 from openff.pablo._pdb_data import PdbData, ResidueMatch
 from openff.pablo._utils import default_dict
+from openff.pablo.ccd import CCD_RESIDUE_DEFINITION_CACHE
 from openff.pablo.exceptions import UnknownOrAmbiguousSerialInConectError
 from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
 
@@ -144,7 +147,7 @@ def test_parse_waters_pdb():
         temp_factor=[0.00, 0.00, 0.00, 0.00, 0.00, 0.00],
         element=["H", "H", "O", "H", "H", "O"],
         charge=[None, None, None, None, None, None],
-        terminated=[False, False, False, True, True, True],
+        terminated=[False, False, False, False, False, True],
         serial_to_index=default_dict(
             list,
             {"1": [0], "2": [1], "3": [2], "4": [3], "5": [4], "6": [5]},
@@ -217,12 +220,13 @@ def test_process_conects_raises_when_serial_missing():
 
 def test_residue_indices():
     data = PdbData(
-        res_name=["HOH"] * 2 + ["GLY"] * 8,
-        chain_id=["A"] * 4 + ["B"] * 6,
-        res_seq=["1"] * 6 + ["2"] * 4,
-        i_code=[" "] * 8 + ["A"] * 2,
-        model=[None] * 10,
-        alt_loc=[""] * 10,
+        res_name=["HOH"] * 2 + ["GLY"] * 10,
+        chain_id=["A"] * 4 + ["B"] * 8,
+        res_seq=["1"] * 6 + ["2"] * 6,
+        i_code=[" "] * 8 + ["A"] * 4,
+        model=[None] * 12,
+        alt_loc=[""] * 12,
+        terminated=[False] * 9 + [True] + [False] * 2,
     )
 
     assert list(data.residue_indices) == [
@@ -231,6 +235,7 @@ def test_residue_indices():
         (4, 5),
         (6, 7),
         (8, 9),
+        (10, 11),
     ]
 
 
@@ -242,6 +247,7 @@ def test_residue_indices_multimodel():
         i_code=[" "] * 8 + ["A"] * 4,
         model=[None] * 10 + [1] * 2,
         alt_loc=[""] * 12,
+        terminated=[False] * 12,
     )
 
     with pytest.warns(match="Multi-model files not supported"):
@@ -423,3 +429,109 @@ def test_match_residues_loads_vicinal_disulfide(
 
     assert match1.residue_definition is cys_def
     assert match2.residue_definition is cys_def
+
+
+def test_get_name_based_matches_one_per_residue(pdbfn: Path):
+    data = PdbData.from_file(pdbfn)
+    results = list(data.get_name_based_matches(CCD_RESIDUE_DEFINITION_CACHE))
+    assert len(results) == len(list(data.residue_indices))
+    assert data.res_idx is not None
+    assert len(list(data.residue_indices)) == len(set(data.res_idx))
+    assert len(data.res_idx) == len(data.serial)
+    assert sorted(set(data.res_idx)) == list(range(data.res_idx[-1] + 1))
+    assert len(results) == len(set(data.res_idx))
+    assert len(results) == data.res_idx[-1] + 1
+
+
+def test_get_name_based_matches_subsequence_contains_noresiduedefs_when_unmatched(
+    he_data: PdbData,
+):
+    results = list(he_data.get_name_based_matches({}))
+    assert len(results) == 1
+    assert len(results[0]) == 1
+    assert isinstance(results[0][0], NoResidueDefinitions)
+
+
+def test_filter_on_polymer_linkages_yields_all_matches_simple(cys_data: PdbData):
+    matches = list(cys_data.get_name_based_matches(CCD_RESIDUE_DEFINITION_CACHE))
+    residue_matches = matches[0]
+    residue_matches.append(
+        MoleculeMatch(
+            index_to_atomdef={i: None for i in residue_matches[0].res_atom_idcs},
+            residue_definition=Molecule.from_smiles("N[C@@H](CS)C(=O)O"),
+        ),
+    )
+    results = list(
+        cys_data.filter_on_polymer_linkages(residue_matches, (), (), [residue_matches]),
+    )
+
+    for before, after in zip(residue_matches, results):
+        if isinstance(before, ResidueMatch):
+            assert isinstance(after, (ResidueMatch, ResidueMismatch))
+        else:
+            assert type(before) is type(after)
+        assert before.residue_definition == after.residue_definition
+
+
+def test_filter_on_polymer_linkages_yields_all_matches():
+    from openff.pablo._tests.utils import get_test_data_path
+    from openff.pablo.chem import PEPTIDE_BOND
+
+    # Loading this PDB file with this augmented CCD cache will test all kinds
+    # of residue-residue interface; see prepared_pdbs/polyglycines.py
+    data = PdbData.from_file(get_test_data_path("prepared_pdbs/polyglycines.pdb"))
+    matches = list(
+        data.get_name_based_matches(
+            CCD_RESIDUE_DEFINITION_CACHE.with_(
+                [
+                    ResidueDefinition.from_smiles(
+                        mapped_smiles="[N-:1]([H:2])[C:3]([H:4])([H:5])[C:6](=[O:7])[O:8][H:9]",
+                        atom_names={
+                            1: "N",
+                            2: "H",
+                            3: "CA",
+                            4: "HA1",
+                            5: "HA2",
+                            6: "C",
+                            7: "O",
+                            8: "OXT",
+                            9: "HXT",
+                        },
+                        residue_name="GLY",
+                        leaving_atoms=(8, 9),
+                        linking_bond=PEPTIDE_BOND,
+                        description="GLYCINE w/ negative formal charge on N",
+                    ),
+                    ResidueDefinition.from_smiles(
+                        mapped_smiles="[N:1]([H:2])([H:8])[C:3]([H:4])([H:5])[C-:6]=[O:7]",
+                        atom_names={
+                            1: "N",
+                            2: "H",
+                            3: "CA",
+                            4: "HA1",
+                            5: "HA2",
+                            6: "C",
+                            7: "O",
+                            8: "H2",
+                        },
+                        residue_name="GLY",
+                        leaving_atoms=(8,),
+                        linking_bond=PEPTIDE_BOND,
+                        description="GLYCINE w/ negative formal charge on C",
+                    ),
+                ],
+            ),
+        ),
+    )
+
+    for residue_matches in matches:
+        results = list(
+            data.filter_on_polymer_linkages(residue_matches, (), (), [residue_matches]),
+        )
+
+        for before, after in zip(residue_matches, results):
+            if isinstance(before, ResidueMatch):
+                assert isinstance(after, (ResidueMatch, ResidueMismatch))
+            else:
+                assert type(before) is type(after)
+            assert before.residue_definition == after.residue_definition

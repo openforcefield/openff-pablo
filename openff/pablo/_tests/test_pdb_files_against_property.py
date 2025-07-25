@@ -450,9 +450,10 @@ def test_unknown_residue_gives_clear_error():
             [
                 "some residues could not be identified",
                 "A topology cannot be created without chemical information for every",
-                "atom and bond. The following residues present in the PDB file could",
-                "not be identified from the provided chemical library:",
-                f"  C:UNK#1 ({path}:l4980-5038): No residue definitions",
+                "atom and bond. The following residues present in PDB file",
+                str(path),
+                "could not be identified from the provided chemical library:",
+                "  C:UNK#1 (l4980-5038): No residue definitions",
             ],
         )
 
@@ -476,11 +477,13 @@ def test_unmatched_residues_give_clear_error(
             [
                 "some residues could not be identified",
                 "A topology cannot be created without chemical information for every",
-                "atom and bond. The following residues present in the PDB file could",
-                "not be identified from the provided chemical library:",
-                f"  A:CYS#221 ({path}:l1-11): No matching residue definitions:",
+                "atom and bond. The following residues present in PDB file",
+                str(path),
+                "could not be identified from the provided chemical library:",
+                "  A:CYS#221 (l1-11): No matching residue definitions:",
                 "    ╰ CYSTEINE failed to match: found CONECT record that could not be matched with a bond",
-                f"  A:CYS#222 ({path}:l12-23): No matching residue definitions:",
+                "",
+                "  A:CYS#222 (l12-23): No matching residue definitions:",
                 "    ╰ CYSTEINE failed to match: found CONECT record that could not be matched with a bond",
             ],
         )
@@ -498,3 +501,65 @@ def test_unmatched_residues_give_clear_error(
                 "CYS": [cys_def_deprotonated_sidechain.replace(crosslink=None)],
             },
         )
+
+
+def test_polyglycines_loads_with_augmented_ccd():
+    # Loading this PDB file with this augmented CCD cache will test all kinds
+    # of residue-residue interface; see prepared_pdbs/polyglycines.py
+    topology = topology_from_pdb(
+        get_test_data_path("prepared_pdbs/polyglycines.pdb"),
+        residue_database=CCD_RESIDUE_DEFINITION_CACHE.with_(
+            [
+                ResidueDefinition.from_smiles(
+                    mapped_smiles="[N-:1]([H:2])[C:3]([H:4])([H:5])[C:6](=[O:7])[O:8][H:9]",
+                    atom_names={
+                        1: "N",
+                        2: "H",
+                        3: "CA",
+                        4: "HA1",
+                        5: "HA2",
+                        6: "C",
+                        7: "O",
+                        8: "OXT",
+                        9: "HXT",
+                    },
+                    residue_name="GLY",
+                    leaving_atoms=(8, 9),
+                    linking_bond=PEPTIDE_BOND,
+                    description="GLYCINE w/ negative formal charge on N",
+                ),
+                ResidueDefinition.from_smiles(
+                    mapped_smiles="[N:1]([H:2])([H:8])[C:3]([H:4])([H:5])[C-:6]=[O:7]",
+                    atom_names={
+                        1: "N",
+                        2: "H",
+                        3: "CA",
+                        4: "HA1",
+                        5: "HA2",
+                        6: "C",
+                        7: "O",
+                        8: "H2",
+                    },
+                    residue_name="GLY",
+                    leaving_atoms=(8,),
+                    linking_bond=PEPTIDE_BOND,
+                    description="GLYCINE w/ negative formal charge on C",
+                ),
+            ],
+        ),
+    )
+    assert topology.n_molecules == 103
+
+    triglycine = Molecule.from_smiles(
+        "[N-:1]([H:2])[C:3]([H:4])([H:5])[C:6](=[O:7])"
+        + "[N:8]([H:9])[C:10]([H:11])([H:12])[C:13](=[O:14])"
+        + "[N:15]([H:16])[C:17]([H:18])([H:19])[C-:20](=[O:21])",
+    )
+
+    assert topology.molecule(0).is_isomorphic_with(triglycine)
+    assert topology.molecule(1).is_isomorphic_with(triglycine)
+    assert topology.molecule(2).is_isomorphic_with(triglycine)
+    for i in range(3, 104):
+        molecule = topology.molecule(i)
+        assert molecule.n_atoms == 3
+        assert molecule.hill_formula == "H2O"

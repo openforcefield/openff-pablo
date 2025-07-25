@@ -1,3 +1,4 @@
+from collections import defaultdict
 from pathlib import Path
 
 import pytest
@@ -94,6 +95,37 @@ def cys_data(cys_pdblines: list[str]) -> PdbData:
 @pytest.fixture
 def e2_data() -> PdbData:
     return PdbData.from_file(get_test_data_path("e2_7nel.pdb"))
+
+
+@pytest.fixture
+def he_data() -> PdbData:
+    return PdbData(
+        line_no=[None],
+        model=[None],
+        serial=["1"],
+        name=["HE"],
+        alt_loc=[""],
+        res_name=["HE"],
+        chain_id=["A"],
+        res_seq=["1"],
+        i_code=[" "],
+        x=[-1.806],
+        y=[9.969],
+        z=[9.991],
+        occupancy=[1.00],
+        temp_factor=[0.00],
+        element=["He"],
+        charge=[None],
+        terminated=[False],
+        serial_to_index=defaultdict(list, {"1": [0]}),
+        conects=[set()],
+        cryst1_a=None,
+        cryst1_b=None,
+        cryst1_c=None,
+        cryst1_alpha=None,
+        cryst1_beta=None,
+        cryst1_gamma=None,
+    )
 
 
 @pytest.fixture

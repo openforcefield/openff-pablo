@@ -32,7 +32,7 @@ class PossibleMatchProtocol(Protocol):
 
     @property
     def prototype_index(self) -> int:
-        return next(iter(self.index_to_atomdef))
+        return max(self.index_to_atomdef)
 
     def sort_key(self) -> tuple[str, ...]:
         return (self.description,)

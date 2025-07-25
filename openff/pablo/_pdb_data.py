@@ -29,6 +29,7 @@ from ._utils import (
     charge_int_or_none,
     dec_hex,
     flatten,
+    no_none_in_values,
     sort_tuple,
     unwrap,
     with_neighbours,
@@ -143,25 +144,12 @@ class PdbData:
                 model_n = int(line[10:14])
             if line.startswith("ENDMDL "):
                 model_n = None
-            if line.startswith("HETATM") or line.startswith("ATOM  "):
+            if line.startswith(("ATOM  ", "HETATM")):
                 data._append_coord_line(line)
                 data.line_no[-1] = i + 1
                 data.model[-1] = model_n
             if line.startswith("TER   "):
-                terminated_resname = data.res_name[-1]
-                terminated_chainid = data.chain_id[-1]
-                terminated_resseq = data.res_seq[-1]
-                terminated_icode = data.i_code[-1]
-                for i in range(len(data.res_name) - 1, 0, -1):
-                    if (
-                        data.res_name[i] == terminated_resname
-                        and data.chain_id[i] == terminated_chainid
-                        and data.res_seq[i] == terminated_resseq
-                        and data.i_code[i] == terminated_icode
-                    ):
-                        data.terminated[i] = True
-                    else:
-                        break
+                data.terminated[-1] = True
             if line.startswith("CRYST1"):
                 data.cryst1_a = float(line[6:15])
                 data.cryst1_b = float(line[15:24])
@@ -220,18 +208,23 @@ class PdbData:
 
     @property
     def residue_indices(self) -> Iterator[tuple[int, ...]]:
+        if len(self.model) == 0:
+            return
+        first_model: int | None = self.model[0]
         indices = []
         prev = None
         res_idx = 0
         self.res_idx = []
-        for atom_idx, (alt_loc, *residue_info) in enumerate(
+        for atom_idx, (alt_loc, terminated, *residue_info) in enumerate(
             zip(
                 self.alt_loc,
+                self.terminated,
                 self.model,
                 self.res_name,
                 self.chain_id,
                 self.res_seq,
                 self.i_code,
+                strict=True,
             ),
         ):
             if alt_loc != "":
@@ -241,22 +234,31 @@ class PdbData:
                 )
                 if alt_loc != "A":
                     continue
-            if prev is not None and residue_info[0] != prev[0]:
+            if residue_info[0] != first_model:
                 # TODO: Support multi-model files
                 warnings.warn(
                     "Multi-model files not supported; topology will reflect first model",
                 )
                 break
-            if prev == residue_info or prev is None:
+
+            if prev == residue_info or prev is None or len(indices) == 0:
                 indices.append(atom_idx)
             else:
                 yield tuple(indices)
                 res_idx += 1
                 indices = [atom_idx]
+
             self.res_idx.append(res_idx)
+
+            if terminated:
+                yield tuple(indices)
+                indices = []
+                res_idx += 1
+
             prev = residue_info
 
-        yield tuple(indices)
+        if len(indices) > 0:
+            yield tuple(indices)
 
     def subset_matches_residue(
         self,
@@ -298,12 +300,16 @@ class PdbData:
             )
 
         # Get the map from the canonical names to the indices
-        try:
-            index_to_atomdef = {
-                i: residue_definition.name_to_atom[self.name[i]] for i in res_atom_idcs
-            }
-        except KeyError:
-            reason = "Name missing from residue definition"
+        index_to_atomdef = {
+            i: residue_definition.name_to_atom.get(self.name[i], None)
+            for i in res_atom_idcs
+        }
+        if not no_none_in_values(index_to_atomdef):
+            reason = "Unknown atoms missing from residue definition " + repr(
+                tuple(
+                    self.name[i] for i, atom in index_to_atomdef.items() if atom is None
+                ),
+            )
             logging.debug("    Match failed: " + reason)
             return ResidueMismatch(
                 residue_definition=residue_definition,
@@ -353,7 +359,10 @@ class PdbData:
         # is either entirely present or entirely absent
         missing_atom_names = {atom.name for atom in missing_atoms}
         if any(not atom.leaving for atom in missing_atoms):
-            reason = "Missing atom is not leaving atom"
+            reason = "Missing atom(s) are not leaving atoms"
+            reason += (
+                f" {tuple({atom.name for atom in missing_atoms if not atom.leaving})}"
+            )
             logging.debug("    Match failed: " + reason)
             return match.reject(reason)
         elif (

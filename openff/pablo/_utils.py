@@ -6,6 +6,7 @@ from typing import (
     Literal,
     ParamSpec,
     TypeAlias,
+    TypeGuard,
     TypeVar,
     TypeVarTuple,
     no_type_check,
@@ -67,6 +68,10 @@ def default_dict(
     dd: DefaultDict[U, T | V] = defaultdict(default_factory)
     dd.update(map)
     return dd
+
+
+def no_none_in_values(d: dict[T, U | None]) -> TypeGuard[dict[T, U]]:
+    return None not in d.values()
 
 
 def unwrap(container: Iterable[T], msg: str = "") -> T:
