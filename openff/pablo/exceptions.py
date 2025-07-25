@@ -12,6 +12,8 @@ from collections.abc import Collection, Sequence
 from typing import TYPE_CHECKING
 
 from openff.pablo._matching import (
+    MatchProtocol,
+    MismatchProtocol,
     MoleculeMatch,
     NoResidueDefinitions,
     ResidueMatch,
@@ -49,10 +51,7 @@ class PdbResidueMatchError(ValueError):
     def __init__(
         self,
         data: "PdbData",
-        errors: list[
-            list[ResidueMismatch | NoResidueDefinitions]
-            | list[ResidueMatch | MoleculeMatch]
-        ],
+        errors: list[list[MismatchProtocol] | list[MatchProtocol]],
     ):
         msg = [
             "some residues could not be identified",
@@ -70,7 +69,7 @@ class PdbResidueMatchError(ValueError):
             src = _format_src(data, prototype_residue_error.res_atom_idcs)
             resid = f"{data.chain_id[i]}:{data.res_name[i]}#{data.res_seq[i]}"
 
-            if isinstance(prototype_residue_error, ResidueMatch):
+            if isinstance(prototype_residue_error, MatchProtocol):
                 msg.append(
                     f"  {resid} ({src}): Multiple conflicting residue definition matches:",
                 )

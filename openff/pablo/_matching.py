@@ -8,9 +8,8 @@ from openff.toolkit import Molecule
 from .residue import AtomDefinition, BondDefinition, ResidueDefinition
 
 
-# TODO: Refactor
 @dataclass(frozen=True)
-class MatchProtocol(Protocol):
+class PossibleMatchProtocol(Protocol):
     residue_definition: ResidueDefinition | str | Molecule
     index_to_atomdef: Mapping[int, AtomDefinition | None]
     is_match: ClassVar[bool]
@@ -40,7 +39,30 @@ class MatchProtocol(Protocol):
 
 
 @dataclass(frozen=True)
-class NoResidueDefinitions(MatchProtocol):
+class MatchProtocol(PossibleMatchProtocol):
+    @cached_property
+    def expects_prior_bond(self) -> bool:
+        return False
+
+    @cached_property
+    def expects_posterior_bond(self) -> bool:
+        return False
+
+    @cached_property
+    def expects_crosslink(self) -> bool:
+        return False
+
+    def agrees_with(self, other: "MatchProtocol") -> bool:
+        return other == self
+
+
+@dataclass(frozen=True)
+class MismatchProtocol(PossibleMatchProtocol):
+    pass
+
+
+@dataclass(frozen=True)
+class NoResidueDefinitions(MismatchProtocol):
     index_to_atomdef: Mapping[int, None]
     residue_definition: str
     is_match = False
@@ -51,7 +73,7 @@ class NoResidueDefinitions(MatchProtocol):
 
 
 @dataclass(frozen=True)
-class ResidueMismatch(MatchProtocol):
+class ResidueMismatch(MismatchProtocol):
     residue_definition: ResidueDefinition
     index_to_atomdef: Mapping[int, AtomDefinition | None]
     reason: str
@@ -194,13 +216,13 @@ class ResidueMatch(MatchProtocol):
             and expected_leaving_atoms.issubset(self.missing_leaving_atoms)
         )
 
-    def agrees_with(self, other: "Self | MoleculeMatch") -> bool:
+    def agrees_with(self, other: MatchProtocol) -> bool:
         """True if both matches would assign the same chemistry, False otherwise"""
         if set(self.index_to_atomdef.keys()) != set(other.index_to_atomdef.keys()):
             return False
 
-        if isinstance(other, MoleculeMatch):
-            return False
+        if not isinstance(other, ResidueMatch):
+            return super().agrees_with(other)
 
         name_map: dict[str, str] = {}
         for i, self_atom in self.index_to_atomdef.items():
@@ -258,38 +280,26 @@ class ResidueMatch(MatchProtocol):
         )
 
 
+@dataclass(frozen=True)
+class MoleculeMatch(MatchProtocol):
+    residue_definition: Molecule
+    index_to_atomdef: dict[int, None]
+    is_match = True
+
+    def agrees_with(self, other: MatchProtocol) -> bool:
+        return (  # no-fmt
+            other.residue_definition is self.residue_definition
+            and set(self.index_to_atomdef.keys()) == set(other.index_to_atomdef.keys())
+        )
+
+    @property
+    def match(self) -> Self:
+        return self
+
+
 @dataclass
 class PossibleResidueMatch:
-    match: ResidueMismatch | ResidueMatch | NoResidueDefinitions
-
-    @classmethod
-    def matched(
-        cls,
-        index_to_atomdef: dict[int, AtomDefinition],
-        residue_definition: ResidueDefinition,
-    ) -> Self:
-        return cls(
-            match=ResidueMatch(
-                residue_definition=residue_definition,
-                index_to_atomdef=index_to_atomdef,
-                crosslink_idcs=None,
-            ),
-        )
-
-    @classmethod
-    def mismatched(
-        cls,
-        index_to_atomdef: dict[int, AtomDefinition | None],
-        residue_definition: ResidueDefinition,
-        reason: str,
-    ) -> Self:
-        return cls(
-            match=ResidueMismatch(
-                residue_definition=residue_definition,
-                index_to_atomdef=index_to_atomdef,
-                reason=reason,
-            ),
-        )
+    match: MatchProtocol | MismatchProtocol
 
     def reject(self, reason: str) -> Self:
         if isinstance(self.match, ResidueMatch):
@@ -312,24 +322,7 @@ class PossibleResidueMatch:
         return bool(self.match)
 
 
-@dataclass(frozen=True)
-class MoleculeMatch(MatchProtocol):
-    residue_definition: Molecule
-    index_to_atomdef: dict[int, None]
-    is_match = True
-
-    def agrees_with(self, other: Self | ResidueMatch) -> bool:
-        return (  # no-fmt
-            other.residue_definition is self.residue_definition
-            and set(self.index_to_atomdef.keys()) == set(other.index_to_atomdef.keys())
-        )
-
-    @property
-    def match(self) -> Self:
-        return self
-
-
 def only_matched(
     iterable: Iterable[PossibleResidueMatch],
-) -> Iterable[ResidueMatch]:
-    return (p.match for p in iterable if isinstance(p.match, (ResidueMatch)))
+) -> Iterable[MatchProtocol]:
+    return (p.match for p in iterable if isinstance(p.match, MatchProtocol))

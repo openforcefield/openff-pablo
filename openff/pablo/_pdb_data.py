@@ -14,6 +14,8 @@ from openff.toolkit import Molecule
 from openff.units import elements
 
 from ._matching import (
+    MatchProtocol,
+    MismatchProtocol,
     MoleculeMatch,
     NoResidueDefinitions,
     PossibleResidueMatch,
@@ -271,10 +273,12 @@ class PdbData:
         if len(residue_definition.atoms) < len(res_atom_idcs):
             reason = f"Too few atoms in residue definition ({len(residue_definition.atoms)} < {len(res_atom_idcs)})"
             logging.debug("    Match failed: " + reason)
-            return PossibleResidueMatch.mismatched(
-                residue_definition=residue_definition,
-                index_to_atomdef={i: None for i in res_atom_idcs},
-                reason=reason,
+            return PossibleResidueMatch(
+                ResidueMismatch(
+                    residue_definition=residue_definition,
+                    index_to_atomdef={i: None for i in res_atom_idcs},
+                    reason=reason,
+                ),
             )
 
         # Skip non-(cross)linking definitions with the wrong number of atoms
@@ -288,10 +292,12 @@ class PdbData:
         ):
             reason = "No links and wrong number of atoms"
             logging.debug("    Match failed: " + reason)
-            return PossibleResidueMatch.mismatched(
-                residue_definition=residue_definition,
-                index_to_atomdef={i: None for i in res_atom_idcs},
-                reason=reason,
+            return PossibleResidueMatch(
+                ResidueMismatch(
+                    residue_definition=residue_definition,
+                    index_to_atomdef={i: None for i in res_atom_idcs},
+                    reason=reason,
+                ),
             )
 
         # Get the map from the canonical names to the indices
@@ -302,15 +308,19 @@ class PdbData:
         except KeyError:
             reason = "Name missing from residue definition"
             logging.debug("    Match failed: " + reason)
-            return PossibleResidueMatch.mismatched(
-                residue_definition=residue_definition,
-                index_to_atomdef={i: None for i in res_atom_idcs},
-                reason=reason,
+            return PossibleResidueMatch(
+                ResidueMismatch(
+                    residue_definition=residue_definition,
+                    index_to_atomdef={i: None for i in res_atom_idcs},
+                    reason=reason,
+                ),
             )
 
-        match = PossibleResidueMatch.matched(
-            index_to_atomdef=index_to_atomdef,
-            residue_definition=residue_definition,
+        match = PossibleResidueMatch(
+            ResidueMatch(
+                index_to_atomdef=index_to_atomdef,
+                residue_definition=residue_definition,
+            ),
         )
 
         matched_atoms = {atom.name for atom in index_to_atomdef.values()}
@@ -449,7 +459,8 @@ class PdbData:
                     next_match.residue_definition.prior_bond_linking_atom
                 ]
                 for next_match in only_matched(next_matches)
-                if next_match.residue_definition.linking_bond is not None
+                if isinstance(next_match, ResidueMatch)
+                and next_match.residue_definition.linking_bond is not None
                 and next_match.expects_prior_bond
             }
             neighbour_supported_prior_bonds: dict[BondDefinition, int] = {
@@ -457,7 +468,8 @@ class PdbData:
                     prev_match.residue_definition.posterior_bond_linking_atom
                 ]
                 for prev_match in only_matched(prev_matches)
-                if prev_match.residue_definition.linking_bond is not None
+                if isinstance(prev_match, ResidueMatch)
+                and prev_match.residue_definition.linking_bond is not None
                 and prev_match.expects_posterior_bond
             }
 
@@ -752,10 +764,14 @@ class PdbData:
             )
 
             can_form_prior_bond = any(
-                m.prior_bond_idcs is not None for m in only_matched(this_matches)
+                m.prior_bond_idcs is not None
+                for m in only_matched(this_matches)
+                if isinstance(m, ResidueMatch)
             )
             can_form_posterior_bond = any(
-                m.posterior_bond_idcs is not None for m in only_matched(this_matches)
+                m.posterior_bond_idcs is not None
+                for m in only_matched(this_matches)
+                if isinstance(m, ResidueMatch)
             )
 
             prev_is_adjacent = (
@@ -893,7 +909,7 @@ class PdbData:
         self,
         matches: list[list[PossibleResidueMatch]],
         unknown_molecules: Iterable[Molecule],
-    ) -> Iterator[Sequence[PossibleResidueMatch | MoleculeMatch]]:
+    ) -> Iterator[Sequence[PossibleResidueMatch]]:
         for residue_matches in matches:
             if any(residue_matches):
                 yield residue_matches
@@ -917,12 +933,16 @@ class PdbData:
                     f"  Matched {unk_mol_match}",
                 )
                 yield residue_matches + [
-                    MoleculeMatch(
-                        residue_definition=unk_mol_match,
-                        index_to_atomdef={
-                            i: None
-                            for i in unk_mol_match.properties["pdb_idx_to_mol_atom_idx"]
-                        },
+                    PossibleResidueMatch(
+                        match=MoleculeMatch(
+                            residue_definition=unk_mol_match,
+                            index_to_atomdef={
+                                i: None
+                                for i in unk_mol_match.properties[
+                                    "pdb_idx_to_mol_atom_idx"
+                                ]
+                            },
+                        ),
                     ),
                 ]
 
@@ -931,7 +951,7 @@ class PdbData:
         residue_database: Mapping[str, Iterable[ResidueDefinition]],
         additional_substructures: Iterable[ResidueDefinition],
         unknown_molecules: Iterable[Molecule],
-    ) -> list[Sequence[PossibleResidueMatch | MoleculeMatch]]:
+    ) -> list[Sequence[PossibleResidueMatch]]:
         matches = list(self.get_name_based_matches(residue_database))
         # self.rescue_partial_matches_with_conect_element_charge(matches)
         self.filter_on_polymer_linkages(matches)
@@ -953,18 +973,15 @@ class PdbData:
         residue_database: Mapping[str, Iterable[ResidueDefinition]],
         additional_substructures: Iterable[ResidueDefinition],
         unknown_molecules: Iterable[Molecule],
-    ) -> list[ResidueMatch | MoleculeMatch]:
+    ) -> list[MatchProtocol]:
         logging.debug(
             "Getting all residue matches",
         )
         # List of residue matches, one per residue. This list has one residue
         # match for each residue in the PDB file iff every residue could be
         # identified
-        residues: list[ResidueMatch | MoleculeMatch] = []
-        errors: list[
-            list[ResidueMismatch | NoResidueDefinitions]
-            | list[ResidueMatch | MoleculeMatch]
-        ] = []
+        residues: list[MatchProtocol] = []
+        errors: list[list[MismatchProtocol] | list[MatchProtocol]] = []
         all_residues_successful = True
         for possible_residue_matches in self.match_residues(
             residue_database,
@@ -975,10 +992,10 @@ class PdbData:
                 f"  Checking errors for {self.res_name[possible_residue_matches[0].prototype_index]} {possible_residue_matches[0].res_atom_idcs}",
             )
 
-            matches: list[ResidueMatch | MoleculeMatch] = []
-            mismatches: list[ResidueMismatch | NoResidueDefinitions] = []
+            matches: list[MatchProtocol] = []
+            mismatches: list[MismatchProtocol] = []
             for possible_match in possible_residue_matches:
-                if isinstance(possible_match.match, (ResidueMatch, MoleculeMatch)):
+                if isinstance(possible_match.match, MatchProtocol):
                     matches.append(possible_match.match)
                 else:
                     mismatches.append(possible_match.match)

@@ -3,7 +3,7 @@ import warnings
 from collections.abc import Iterable, Mapping, MutableSequence
 from io import TextIOBase
 from os import PathLike
-from typing import IO, assert_never
+from typing import IO
 
 import numpy as np
 from openff.toolkit import Molecule, Topology
@@ -170,7 +170,6 @@ def topology_from_pdb(
 
     this_molecule = Molecule()
     molecules: list[Molecule] = [this_molecule]
-    chemical_data: MoleculeMatch | ResidueMatch
     for chemical_data in data.get_residue_matches(
         residue_database,
         additional_substructures,
@@ -192,7 +191,7 @@ def topology_from_pdb(
                 use_canonical_names,
             )
         else:
-            assert_never(chemical_data)
+            raise TypeError("unknown match type. This is a bug, please report it")
 
         # Terminate the current molecule if this residue has no posterior bond
         if isinstance(chemical_data, MoleculeMatch) or (
