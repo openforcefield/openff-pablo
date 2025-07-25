@@ -10,7 +10,7 @@ from .residue import AtomDefinition, BondDefinition, ResidueDefinition
 
 # TODO: Refactor
 @dataclass(frozen=True)
-class ResidueMatchProtocol(Protocol):
+class MatchProtocol(Protocol):
     residue_definition: ResidueDefinition | str | Molecule
     index_to_atomdef: Mapping[int, AtomDefinition | None]
     is_match: ClassVar[bool]
@@ -40,7 +40,7 @@ class ResidueMatchProtocol(Protocol):
 
 
 @dataclass(frozen=True)
-class NoResidueDefinitions(ResidueMatchProtocol):
+class NoResidueDefinitions(MatchProtocol):
     index_to_atomdef: Mapping[int, None]
     residue_definition: str
     is_match = False
@@ -51,7 +51,7 @@ class NoResidueDefinitions(ResidueMatchProtocol):
 
 
 @dataclass(frozen=True)
-class ResidueMismatch(ResidueMatchProtocol):
+class ResidueMismatch(MatchProtocol):
     residue_definition: ResidueDefinition
     index_to_atomdef: Mapping[int, AtomDefinition | None]
     reason: str
@@ -70,7 +70,7 @@ class ResidueMismatch(ResidueMatchProtocol):
 
 
 @dataclass(frozen=True)
-class ResidueMatch(ResidueMatchProtocol):
+class ResidueMatch(MatchProtocol):
     residue_definition: ResidueDefinition
     index_to_atomdef: dict[int, AtomDefinition]
     prior_bond_idcs: tuple[int, int] | None = None
@@ -313,7 +313,7 @@ class PossibleResidueMatch:
 
 
 @dataclass(frozen=True)
-class MoleculeMatch(ResidueMatchProtocol):
+class MoleculeMatch(MatchProtocol):
     residue_definition: Molecule
     index_to_atomdef: dict[int, None]
     is_match = True
