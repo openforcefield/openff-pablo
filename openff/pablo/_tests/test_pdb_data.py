@@ -893,3 +893,235 @@ def test_filter_on_polymer_linkages_rejects_no_posterior_bond_without_molecule_s
         filtered_matches[0].reason
         == "Posterior bond not expected but required by neighbours"
     )
+
+
+def test_filter_on_crosslinks_sets_crosslink_indices_with_partner_first(
+    cys_def: ResidueDefinition,
+    vicinal_disulfide_data: PdbData,
+):
+    this_match = ResidueMatch(
+        residue_definition=cys_def,
+        index_to_atomdef={
+            0: cys_def.name_to_atom["N"],
+            1: cys_def.name_to_atom["CA"],
+            2: cys_def.name_to_atom["C"],
+            3: cys_def.name_to_atom["O"],
+            4: cys_def.name_to_atom["CB"],
+            5: cys_def.name_to_atom["SG"],
+            6: cys_def.name_to_atom["H"],
+            7: cys_def.name_to_atom["H2"],
+            8: cys_def.name_to_atom["HA"],
+            9: cys_def.name_to_atom["HB2"],
+            10: cys_def.name_to_atom["HB3"],
+        },
+    )
+    assert this_match.expects_crosslink
+    neighbour_match = ResidueMatch(
+        residue_definition=cys_def,
+        index_to_atomdef={
+            11: cys_def.name_to_atom["N"],
+            12: cys_def.name_to_atom["CA"],
+            13: cys_def.name_to_atom["C"],
+            14: cys_def.name_to_atom["O"],
+            15: cys_def.name_to_atom["CB"],
+            16: cys_def.name_to_atom["SG"],
+            17: cys_def.name_to_atom["HA"],
+            18: cys_def.name_to_atom["HXT"],
+            19: cys_def.name_to_atom["HB2"],
+            20: cys_def.name_to_atom["HB3"],
+            21: cys_def.name_to_atom["H"],
+            22: cys_def.name_to_atom["OXT"],
+        },
+    )
+    assert neighbour_match.expects_crosslink
+    assert neighbour_match.crosslink_idcs is None
+
+    filtered_matches = list(
+        vicinal_disulfide_data.filter_on_crosslinks(
+            this_matches=[this_match],
+            prev_matches=[],
+            next_matches=[neighbour_match],
+            all_matches=[[this_match], [neighbour_match]],
+        ),
+    )
+
+    assert len(filtered_matches) == 1
+    assert isinstance(filtered_matches[0], ResidueMatch)
+    assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
+    assert filtered_matches[0].crosslink_idcs == (5, 16)
+
+
+def test_filter_on_crosslinks_sets_crosslink_indices_with_partner_second(
+    cys_def: ResidueDefinition,
+    vicinal_disulfide_data: PdbData,
+):
+    neighbour_match = ResidueMatch(
+        residue_definition=cys_def,
+        index_to_atomdef={
+            0: cys_def.name_to_atom["N"],
+            1: cys_def.name_to_atom["CA"],
+            2: cys_def.name_to_atom["C"],
+            3: cys_def.name_to_atom["O"],
+            4: cys_def.name_to_atom["CB"],
+            5: cys_def.name_to_atom["SG"],
+            6: cys_def.name_to_atom["H"],
+            7: cys_def.name_to_atom["H2"],
+            8: cys_def.name_to_atom["HA"],
+            9: cys_def.name_to_atom["HB2"],
+            10: cys_def.name_to_atom["HB3"],
+        },
+    )
+    assert neighbour_match.expects_crosslink
+    this_match = ResidueMatch(
+        residue_definition=cys_def,
+        index_to_atomdef={
+            11: cys_def.name_to_atom["N"],
+            12: cys_def.name_to_atom["CA"],
+            13: cys_def.name_to_atom["C"],
+            14: cys_def.name_to_atom["O"],
+            15: cys_def.name_to_atom["CB"],
+            16: cys_def.name_to_atom["SG"],
+            17: cys_def.name_to_atom["HA"],
+            18: cys_def.name_to_atom["HXT"],
+            19: cys_def.name_to_atom["HB2"],
+            20: cys_def.name_to_atom["HB3"],
+            21: cys_def.name_to_atom["H"],
+            22: cys_def.name_to_atom["OXT"],
+        },
+    )
+    assert this_match.expects_crosslink
+    assert this_match.crosslink_idcs is None
+
+    filtered_matches = list(
+        vicinal_disulfide_data.filter_on_crosslinks(
+            this_matches=[this_match],
+            prev_matches=[neighbour_match],
+            next_matches=[],
+            all_matches=[[neighbour_match], [this_match]],
+        ),
+    )
+
+    assert len(filtered_matches) == 1
+    assert isinstance(filtered_matches[0], ResidueMatch)
+    assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
+    assert filtered_matches[0].crosslink_idcs == (16, 5)
+
+
+def test_filter_on_crosslinks_rejects_expected_crosslink_without_partner_first(
+    cys_def: ResidueDefinition,
+    cys_def_deprotonated_sidechain: ResidueDefinition,
+    vicinal_disulfide_data: PdbData,
+):
+    this_match = ResidueMatch(
+        residue_definition=cys_def,
+        index_to_atomdef={
+            0: cys_def.name_to_atom["N"],
+            1: cys_def.name_to_atom["CA"],
+            2: cys_def.name_to_atom["C"],
+            3: cys_def.name_to_atom["O"],
+            4: cys_def.name_to_atom["CB"],
+            5: cys_def.name_to_atom["SG"],
+            6: cys_def.name_to_atom["H"],
+            7: cys_def.name_to_atom["H2"],
+            8: cys_def.name_to_atom["HA"],
+            9: cys_def.name_to_atom["HB2"],
+            10: cys_def.name_to_atom["HB3"],
+        },
+    )
+    assert this_match.expects_crosslink
+    neighbour_match = ResidueMatch(
+        residue_definition=cys_def_deprotonated_sidechain,
+        index_to_atomdef={
+            11: cys_def.name_to_atom["N"],
+            12: cys_def.name_to_atom["CA"],
+            13: cys_def.name_to_atom["C"],
+            14: cys_def.name_to_atom["O"],
+            15: cys_def.name_to_atom["CB"],
+            16: cys_def.name_to_atom["SG"],
+            17: cys_def.name_to_atom["HA"],
+            18: cys_def.name_to_atom["HXT"],
+            19: cys_def.name_to_atom["HB2"],
+            20: cys_def.name_to_atom["HB3"],
+            21: cys_def.name_to_atom["H"],
+            22: cys_def.name_to_atom["OXT"],
+        },
+    )
+    assert not neighbour_match.expects_crosslink
+    assert neighbour_match.crosslink_idcs is None
+
+    filtered_matches = list(
+        vicinal_disulfide_data.filter_on_crosslinks(
+            this_matches=[this_match],
+            prev_matches=[],
+            next_matches=[neighbour_match],
+            all_matches=[[this_match], [neighbour_match]],
+        ),
+    )
+
+    assert len(filtered_matches) == 1
+    assert isinstance(filtered_matches[0], ResidueMismatch)
+    assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
+    assert (
+        filtered_matches[0].reason
+        == "crosslink expected but no matching crosslink partner could be found"
+    )
+
+
+def test_filter_on_crosslinks_rejects_expected_crosslink_without_partner_second(
+    cys_def: ResidueDefinition,
+    cys_def_deprotonated_sidechain: ResidueDefinition,
+    vicinal_disulfide_data: PdbData,
+):
+    neighbour_match = ResidueMatch(
+        residue_definition=cys_def_deprotonated_sidechain,
+        index_to_atomdef={
+            0: cys_def.name_to_atom["N"],
+            1: cys_def.name_to_atom["CA"],
+            2: cys_def.name_to_atom["C"],
+            3: cys_def.name_to_atom["O"],
+            4: cys_def.name_to_atom["CB"],
+            5: cys_def.name_to_atom["SG"],
+            6: cys_def.name_to_atom["H"],
+            7: cys_def.name_to_atom["H2"],
+            8: cys_def.name_to_atom["HA"],
+            9: cys_def.name_to_atom["HB2"],
+            10: cys_def.name_to_atom["HB3"],
+        },
+    )
+    assert not neighbour_match.expects_crosslink
+    this_match = ResidueMatch(
+        residue_definition=cys_def,
+        index_to_atomdef={
+            11: cys_def.name_to_atom["N"],
+            12: cys_def.name_to_atom["CA"],
+            13: cys_def.name_to_atom["C"],
+            14: cys_def.name_to_atom["O"],
+            15: cys_def.name_to_atom["CB"],
+            16: cys_def.name_to_atom["SG"],
+            17: cys_def.name_to_atom["HA"],
+            18: cys_def.name_to_atom["HXT"],
+            19: cys_def.name_to_atom["HB2"],
+            20: cys_def.name_to_atom["HB3"],
+            21: cys_def.name_to_atom["H"],
+            22: cys_def.name_to_atom["OXT"],
+        },
+    )
+    assert this_match.expects_crosslink
+    assert this_match.crosslink_idcs is None
+
+    filtered_matches = list(
+        vicinal_disulfide_data.filter_on_crosslinks(
+            this_matches=[this_match],
+            prev_matches=[neighbour_match],
+            next_matches=[],
+            all_matches=[[neighbour_match], [this_match]],
+        ),
+    )
+
+    assert len(filtered_matches) == 1
+    assert isinstance(filtered_matches[0], ResidueMismatch)
+    assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
+    assert (
+        filtered_matches[0].reason
+        == "crosslink expected but no matching crosslink partner could be found"
+    )
