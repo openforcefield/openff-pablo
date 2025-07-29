@@ -36,9 +36,9 @@ ResidueDefinition.from_smiles(
 
 """
 
+from collections.abc import Iterable
 from io import StringIO
 from pathlib import Path
-from collections.abc import Iterable
 
 from openff.toolkit import Molecule, Topology
 from openff.units import Quantity
@@ -87,14 +87,14 @@ def triglycine(chain_id: str = "X", terminated: bool = True) -> Molecule:
     )
 
 
-def water(chain_id: str = "X", terminated: bool = True) -> Molecule:
+def water(chain_id: str = "X", terminated: bool = True, resseq: str = "1") -> Molecule:
     return molecule_from_smiles_and_metadata(
         smiles="[H:2][O:1][H:3]",
         metadata_dict={
             range(1, 4): {
                 "residue_name": "HOH",
                 "chain_id": chain_id,
-                "residue_number": "1",
+                "residue_number": resseq,
             },
             (1,): {"atom_name": "O"},
             (2,): {"atom_name": "H1"},
@@ -155,7 +155,7 @@ def main():
             triglycine("B", terminated=True),
             triglycine("B", terminated=False),
             water("B", terminated=False),
-            water("B", terminated=False),
+            water("B", terminated=False, resseq="2"),
             water("C", terminated=True),
             water(),
         ],
