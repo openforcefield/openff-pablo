@@ -559,7 +559,7 @@ def test_polyglycines_loads_with_augmented_ccd():
     assert topology.molecule(0).is_isomorphic_with(triglycine)
     assert topology.molecule(1).is_isomorphic_with(triglycine)
     assert topology.molecule(2).is_isomorphic_with(triglycine)
-    for i in range(3, 104):
+    for i in range(3, 103):
         molecule = topology.molecule(i)
         assert molecule.n_atoms == 3
         assert molecule.hill_formula == "H2O"

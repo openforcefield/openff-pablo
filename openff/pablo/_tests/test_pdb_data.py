@@ -220,6 +220,9 @@ def test_process_conects_raises_when_serial_missing():
 
 def test_residue_indices():
     data = PdbData(
+        name=list("ABCDEFGHIJKL"),
+        element=[" "] * 12,
+        charge=[None] * 12,
         res_name=["HOH"] * 2 + ["GLY"] * 10,
         chain_id=["A"] * 4 + ["B"] * 8,
         res_seq=["1"] * 6 + ["2"] * 6,
@@ -241,6 +244,9 @@ def test_residue_indices():
 
 def test_residue_indices_multimodel():
     data = PdbData(
+        name=list("ABCDEFGHIJKL"),
+        element=[" "] * 12,
+        charge=[None] * 12,
         res_name=["HOH"] * 2 + ["GLY"] * 10,
         chain_id=["A"] * 4 + ["B"] * 8,
         res_seq=["1"] * 6 + ["2"] * 6,

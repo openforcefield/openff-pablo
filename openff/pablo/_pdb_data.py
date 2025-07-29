@@ -733,14 +733,17 @@ class PdbData:
                 )
                 yield match
 
-    def filter_on_consecutive_chain_linkages(
+    def choose_polymer_bonds(
         self,
         this_matches: Sequence[PossibleResidueMatch],
         prev_matches: Sequence[PossibleResidueMatch],
         next_matches: Sequence[PossibleResidueMatch],
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
     ) -> Iterator[PossibleResidueMatch]:
-        """If adjacent residues within a chain can be linked, reject matches that don't link them"""
+        """
+        If adjacent residues within a chain can be linked, reject matches that
+        don't link them; if they are not adjacent, reject those that do.
+        """
         # TODO: Nail down the definition of "Adjacent"
         logging.debug(
             f"Filtering matches for polymer linkages in {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
@@ -813,15 +816,26 @@ class PdbData:
                 f"  Checking {match.description}",
             )
 
-            current_match_doesnt_form_prior_bond = match.prior_bond_idcs is None
-            current_match_doesnt_form_posterior_bond = match.posterior_bond_idcs is None
+            current_match_forms_prior_bond = match.prior_bond_idcs is not None
+            current_match_forms_posterior_bond = match.posterior_bond_idcs is not None
 
             if (
                 can_form_prior_bond
                 and prev_is_adjacent
-                and current_match_doesnt_form_prior_bond
+                and not current_match_forms_prior_bond
             ):
                 reason = "adjacent residues in unterminated chain can be linked"
+                logging.debug(
+                    f"    REJECTED: {reason}",
+                )
+                yield match.reject(reason)
+                continue
+            elif (
+                can_form_prior_bond
+                and not prev_is_adjacent
+                and current_match_forms_prior_bond
+            ):
+                reason = "non-adjacent residues in unterminated chain cannot be linked"
                 logging.debug(
                     f"    REJECTED: {reason}",
                 )
@@ -830,9 +844,20 @@ class PdbData:
             if (
                 can_form_posterior_bond
                 and next_is_adjacent
-                and current_match_doesnt_form_posterior_bond
+                and not current_match_forms_posterior_bond
             ):
                 reason = "adjacent residues in unterminated chain can be linked"
+                logging.debug(
+                    f"    REJECTED: {reason}",
+                )
+                yield match.reject(reason)
+                continue
+            elif (
+                can_form_posterior_bond
+                and not next_is_adjacent
+                and current_match_forms_posterior_bond
+            ):
+                reason = "non-adjacent residues in unterminated chain cannot be linked"
                 logging.debug(
                     f"    REJECTED: {reason}",
                 )
@@ -973,7 +998,7 @@ class PdbData:
                 additional_substructures=additional_substructures,
             ),
             self.filter_on_conect_records,
-            self.filter_on_consecutive_chain_linkages,
+            self.choose_polymer_bonds,
             functools.partial(
                 self.match_unknown_molecules,
                 unknown_molecules=unknown_molecules,
