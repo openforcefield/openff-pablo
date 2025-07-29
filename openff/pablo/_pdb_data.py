@@ -527,7 +527,7 @@ class PdbData:
                 else:
                     match.set_prior_bond(neighbour_supported_prior_bonds)
             elif not neighbours_support_molecule_start:
-                reason = "Prior bond not permitted but required by neighbours"
+                reason = "Prior bond not expected but required by neighbours"
                 logging.debug(f"    Match failed: {reason}")
                 yield match.reject(reason)
                 continue

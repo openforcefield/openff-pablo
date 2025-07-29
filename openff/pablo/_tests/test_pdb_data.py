@@ -541,3 +541,355 @@ def test_filter_on_polymer_linkages_yields_all_matches():
             else:
                 assert type(before) is type(after)
             assert before.residue_definition == after.residue_definition
+
+
+def test_filter_on_polymer_linkages_rejects_unsupported_prior_bond(
+    gly_def_neutral: ResidueDefinition,
+):
+    """A match expecting a prior bond should be rejected if neighbours do not support it"""
+    data = PdbData(
+        res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
+        terminated=[False] * (len(gly_def_neutral.atoms) * 2),
+    )
+    neighbour_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={i: atom for i, atom in enumerate(gly_def_neutral.atoms)},
+    )
+    assert not neighbour_match.expects_posterior_bond
+    this_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={
+            i + len(gly_def_neutral.atoms): atom
+            for i, atom in enumerate(gly_def_neutral.atoms)
+            if atom.name != "H2"
+        },
+    )
+    assert this_match.expects_prior_bond
+
+    filtered_matches = list(
+        data.filter_on_polymer_linkages(
+            this_matches=[this_match],
+            prev_matches=[neighbour_match],
+            next_matches=[],
+            all_matches=[[neighbour_match], [this_match]],
+        ),
+    )
+
+    assert len(filtered_matches) == 1
+    assert isinstance(filtered_matches[0], ResidueMismatch)
+    assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
+    assert (
+        filtered_matches[0].reason
+        == "Prior bond expected but not supported by neighbours"
+    )
+
+
+def test_filter_on_polymer_linkages_rejects_prior_bond_across_ter(
+    gly_def_neutral: ResidueDefinition,
+):
+    """A match expecting a prior bond should be rejected if the previous residue is terminated"""
+    data = PdbData(
+        res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
+        terminated=[True] * (len(gly_def_neutral.atoms) * 2),
+    )
+    neighbour_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={
+            i: atom
+            for i, atom in enumerate(gly_def_neutral.atoms)
+            if atom.name not in {"HXT", "OXT"}
+        },
+    )
+    assert neighbour_match.expects_posterior_bond
+    this_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={
+            i + len(gly_def_neutral.atoms): atom
+            for i, atom in enumerate(gly_def_neutral.atoms)
+            if atom.name != "H2"
+        },
+    )
+    assert this_match.expects_prior_bond
+
+    filtered_matches = list(
+        data.filter_on_polymer_linkages(
+            this_matches=[this_match],
+            prev_matches=[neighbour_match],
+            next_matches=[],
+            all_matches=[[neighbour_match], [this_match]],
+        ),
+    )
+
+    assert len(filtered_matches) == 1
+    assert isinstance(filtered_matches[0], ResidueMismatch)
+    assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
+    assert (
+        filtered_matches[0].reason
+        == "Prior bond expected but cannot form polymer bond across TER record"
+    )
+
+
+def test_filter_on_polymer_linkages_sets_prior_bond(
+    gly_def_neutral: ResidueDefinition,
+):
+    """A match expecting a prior bond after a match expecting a posterior bond
+    should set the prior_bond_indices attribute"""
+    data = PdbData(
+        res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
+        terminated=[False] * (len(gly_def_neutral.atoms) * 2),
+    )
+    neighbour_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={
+            i: atom
+            for i, atom in enumerate(gly_def_neutral.atoms)
+            if atom.name not in {"HXT", "OXT"}
+        },
+    )
+    assert neighbour_match.expects_posterior_bond
+    this_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={
+            i + len(gly_def_neutral.atoms): atom
+            for i, atom in enumerate(gly_def_neutral.atoms)
+            if atom.name != "H2"
+        },
+    )
+    assert this_match.expects_prior_bond
+    assert this_match.prior_bond_idcs is None
+
+    filtered_matches = list(
+        data.filter_on_polymer_linkages(
+            this_matches=[this_match],
+            prev_matches=[neighbour_match],
+            next_matches=[],
+            all_matches=[[neighbour_match], [this_match]],
+        ),
+    )
+
+    assert len(filtered_matches) == 1
+    assert isinstance(filtered_matches[0], ResidueMatch)
+    assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
+    assert filtered_matches[0].prior_bond_idcs == (2, 10)
+
+
+def test_filter_on_polymer_linkages_rejects_no_prior_bond_without_molecule_start(
+    gly_def_neutral: ResidueDefinition,
+):
+    """If the neighbours do not support starting a new molecule, a match that
+    doesn't expect a prior bond should be rejected
+    """
+    data = PdbData(
+        res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
+        terminated=[False] * (len(gly_def_neutral.atoms) * 2),
+    )
+    neighbour_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={
+            i: atom
+            for i, atom in enumerate(gly_def_neutral.atoms)
+            if atom.name not in {"HXT", "OXT"}
+        },
+    )
+    assert neighbour_match.expects_posterior_bond
+    this_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={
+            i + len(gly_def_neutral.atoms): atom
+            for i, atom in enumerate(gly_def_neutral.atoms)
+        },
+    )
+    assert not this_match.expects_prior_bond
+
+    filtered_matches = list(
+        data.filter_on_polymer_linkages(
+            this_matches=[this_match],
+            prev_matches=[neighbour_match],
+            next_matches=[],
+            all_matches=[[neighbour_match], [this_match]],
+        ),
+    )
+
+    assert len(filtered_matches) == 1
+    assert isinstance(filtered_matches[0], ResidueMismatch)
+    assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
+    assert (
+        filtered_matches[0].reason
+        == "Prior bond not expected but required by neighbours"
+    )
+
+
+def test_filter_on_polymer_linkages_rejects_unsupported_posterior_bond(
+    gly_def_neutral: ResidueDefinition,
+):
+    """A match expecting a posterior bond should be rejected if neighbours do not support it"""
+    data = PdbData(
+        res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
+        terminated=[False] * (len(gly_def_neutral.atoms) * 2),
+    )
+    neighbour_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={
+            i + len(gly_def_neutral.atoms): atom
+            for i, atom in enumerate(gly_def_neutral.atoms)
+        },
+    )
+    assert not neighbour_match.expects_prior_bond
+    this_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={
+            i: atom
+            for i, atom in enumerate(gly_def_neutral.atoms)
+            if atom.name not in {"HXT", "OXT"}
+        },
+    )
+    assert this_match.expects_posterior_bond
+
+    filtered_matches = list(
+        data.filter_on_polymer_linkages(
+            this_matches=[this_match],
+            prev_matches=[],
+            next_matches=[neighbour_match],
+            all_matches=[[this_match], [neighbour_match]],
+        ),
+    )
+
+    assert len(filtered_matches) == 1
+    assert isinstance(filtered_matches[0], ResidueMismatch)
+    assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
+    assert (
+        filtered_matches[0].reason
+        == "Posterior bond expected but not supported by neighbours"
+    )
+
+
+def test_filter_on_polymer_linkages_rejects_posterior_bond_across_ter(
+    gly_def_neutral: ResidueDefinition,
+):
+    """A match expecting a posterior bond should be rejected if the previous residue is terminated"""
+    data = PdbData(
+        res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
+        terminated=[True] * (len(gly_def_neutral.atoms) * 2),
+    )
+    neighbour_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={
+            i + len(gly_def_neutral.atoms): atom
+            for i, atom in enumerate(gly_def_neutral.atoms)
+            if atom.name != "H2"
+        },
+    )
+    assert neighbour_match.expects_prior_bond
+    this_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={
+            i: atom
+            for i, atom in enumerate(gly_def_neutral.atoms)
+            if atom.name not in {"HXT", "OXT"}
+        },
+    )
+    assert this_match.expects_posterior_bond
+
+    filtered_matches = list(
+        data.filter_on_polymer_linkages(
+            this_matches=[this_match],
+            prev_matches=[],
+            next_matches=[neighbour_match],
+            all_matches=[[this_match], [neighbour_match]],
+        ),
+    )
+
+    assert len(filtered_matches) == 1
+    assert isinstance(filtered_matches[0], ResidueMismatch)
+    assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
+    assert (
+        filtered_matches[0].reason
+        == "Posterior bond expected but cannot form polymer bond across TER record"
+    )
+
+
+def test_filter_on_polymer_linkages_sets_posterior_bond(
+    gly_def_neutral: ResidueDefinition,
+):
+    """A match expecting a posterior bond after a match expecting a posterior bond
+    should set the posterior_bond_indices attribute"""
+    data = PdbData(
+        res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
+        terminated=[False] * (len(gly_def_neutral.atoms) * 2),
+    )
+    neighbour_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={
+            i + len(gly_def_neutral.atoms): atom
+            for i, atom in enumerate(gly_def_neutral.atoms)
+            if atom.name != "H2"
+        },
+    )
+    assert neighbour_match.expects_prior_bond
+    this_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={
+            i: atom
+            for i, atom in enumerate(gly_def_neutral.atoms)
+            if atom.name not in {"HXT", "OXT"}
+        },
+    )
+    assert this_match.expects_posterior_bond
+    assert this_match.posterior_bond_idcs is None
+
+    filtered_matches = list(
+        data.filter_on_polymer_linkages(
+            this_matches=[this_match],
+            prev_matches=[],
+            next_matches=[neighbour_match],
+            all_matches=[[this_match], [neighbour_match]],
+        ),
+    )
+
+    assert len(filtered_matches) == 1
+    assert isinstance(filtered_matches[0], ResidueMatch)
+    assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
+    assert filtered_matches[0].posterior_bond_idcs == (10, 2)
+
+
+def test_filter_on_polymer_linkages_rejects_no_posterior_bond_without_molecule_start(
+    gly_def_neutral: ResidueDefinition,
+):
+    """If the neighbours do not support starting a new molecule, a match that
+    doesn't expect a posterior bond should be rejected
+    """
+    data = PdbData(
+        res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
+        terminated=[False] * (len(gly_def_neutral.atoms) * 2),
+    )
+    neighbour_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={
+            i + len(gly_def_neutral.atoms): atom
+            for i, atom in enumerate(gly_def_neutral.atoms)
+            if atom.name not in {"H2"}
+        },
+    )
+    assert neighbour_match.expects_prior_bond
+    this_match = ResidueMatch(
+        residue_definition=gly_def_neutral,
+        index_to_atomdef={i: atom for i, atom in enumerate(gly_def_neutral.atoms)},
+    )
+    assert not this_match.expects_posterior_bond
+
+    filtered_matches = list(
+        data.filter_on_polymer_linkages(
+            this_matches=[this_match],
+            prev_matches=[],
+            next_matches=[neighbour_match],
+            all_matches=[[this_match], [neighbour_match]],
+        ),
+    )
+
+    assert len(filtered_matches) == 1
+    assert isinstance(filtered_matches[0], ResidueMismatch)
+    assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
+    assert (
+        filtered_matches[0].reason
+        == "Posterior bond not expected but required by neighbours"
+    )
