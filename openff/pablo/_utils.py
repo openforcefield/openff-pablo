@@ -2,6 +2,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import (
+    Any,
     DefaultDict,
     Literal,
     ParamSpec,
@@ -12,6 +13,7 @@ from typing import (
     no_type_check,
     overload,
 )
+from collections.abc import Sequence
 
 import rdkit
 import rdkit.Chem
@@ -165,6 +167,11 @@ def float_or_unknown(s: str) -> float | None:
     if s == "?":
         return None
     return float(s)
+
+
+def is_repeated(n_repeats: int, seq: Sequence[Any]) -> bool:
+    ls = list(seq)
+    return ls == ls[: len(ls) // n_repeats] * n_repeats
 
 
 def dec_hex(s: str) -> int:

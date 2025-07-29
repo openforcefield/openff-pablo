@@ -29,6 +29,7 @@ from ._utils import (
     charge_int_or_none,
     dec_hex,
     flatten,
+    is_repeated,
     no_none_in_values,
     sort_tuple,
     unwrap,
@@ -206,15 +207,12 @@ class PdbData:
                         conects[b_idx].add(a_idx)
         return conects
 
-    @property
-    def residue_indices(self) -> Iterator[tuple[int, ...]]:
+    def _residue_indices_inner(self) -> Iterator[tuple[int, ...]]:
         if len(self.model) == 0:
             return
         first_model: int | None = self.model[0]
         indices = []
         prev = None
-        res_idx = 0
-        self.res_idx = []
         for atom_idx, (alt_loc, terminated, *residue_info) in enumerate(
             zip(
                 self.alt_loc,
@@ -245,20 +243,43 @@ class PdbData:
                 indices.append(atom_idx)
             else:
                 yield tuple(indices)
-                res_idx += 1
                 indices = [atom_idx]
-
-            self.res_idx.append(res_idx)
 
             if terminated:
                 yield tuple(indices)
                 indices = []
-                res_idx += 1
 
             prev = residue_info
 
         if len(indices) > 0:
             yield tuple(indices)
+
+    @property
+    def residue_indices(self) -> Iterator[tuple[int, ...]]:
+        this_res_idx: int = 0
+        self.res_idx = []
+        for res_atom_idcs in self._residue_indices_inner():
+            res_atom_names = [self.name[i] for i in res_atom_idcs]
+            subresidue_n_atoms = len(set(res_atom_names))
+            n_subresidues = len(res_atom_idcs) // subresidue_n_atoms
+            subresidues: list[tuple[int, ...]]
+            if (
+                is_repeated(n_subresidues, res_atom_names)
+                and is_repeated(n_subresidues, [self.element[i] for i in res_atom_idcs])
+                and is_repeated(n_subresidues, [self.charge[i] for i in res_atom_idcs])
+            ):
+                subresidues = [
+                    tuple(res_atom_idcs[i : i + subresidue_n_atoms])
+                    for i in range(0, len(res_atom_idcs), subresidue_n_atoms)
+                ]
+            else:
+                subresidues = [res_atom_idcs]
+
+            for subres_atom_idcs in subresidues:
+                for _ in subres_atom_idcs:
+                    self.res_idx.append(this_res_idx)
+                yield subres_atom_idcs
+                this_res_idx += 1
 
     def subset_matches_residue(
         self,
