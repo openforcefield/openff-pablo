@@ -1,4 +1,4 @@
-import itertools
+import logging
 import warnings
 from collections.abc import Iterable, Mapping, MutableSequence
 from io import TextIOBase
@@ -9,6 +9,8 @@ import numpy as np
 from openff.toolkit import Molecule, Topology
 from openff.units import elements, unit
 
+from openff.pablo._matching import MoleculeMatch
+
 from ._pdb_data import PdbData, ResidueMatch
 from ._utils import (
     assign_stereochemistry_from_3d,
@@ -16,10 +18,6 @@ from ._utils import (
     sort_tuple,
 )
 from .ccd import CCD_RESIDUE_DEFINITION_CACHE
-from .exceptions import (
-    MultipleMatchingResidueDefinitionsError,
-    NoMatchingResidueDefinitionError,
-)
 from .residue import ResidueDefinition
 
 __all__ = [
@@ -126,9 +124,13 @@ def topology_from_pdb(
     ``"residue_name"``
         The residue name
     ``"residue_number"``
-        The residue number as the string found in the PDB file
+        The residue number, converted to an ``int``. If the residue number
+        cannot be converted to an ``int``, the residue index instead.
     ``"res_seq"``
-        The residue number, converted to an ``int`` on a best-effort basis.
+        The residue number as the string found in the PDB file
+    ``"residue_index"``
+        The residue index; the first residue has index ``0``, the second ``1``,
+        etc., regardless of the value of the res_seq column.
     ``"insertion_code"``
         The icode for the atom's residue. Used to align residue numbers between
         proteins with indels.
@@ -168,65 +170,14 @@ def topology_from_pdb(
 
     this_molecule = Molecule()
     molecules: list[Molecule] = [this_molecule]
-    prev_chain_id = data.chain_id[0]
-    prev_model = data.model[0]
-    for res_atom_idcs, matches in zip(
-        data.residue_indices,
-        data.get_residue_matches(residue_database, additional_substructures),
+    for chemical_data in data.get_residue_matches(
+        residue_database,
+        additional_substructures,
+        unknown_molecules,
     ):
-        # Check that we have a unique match, and error out or consult
-        # unique_molecules as appropriate
-        chemical_data: Molecule | ResidueMatch
-        if len(matches) == 0:
-            unknown_molecule = _match_unknown_molecules(
-                data,
-                res_atom_idcs,
-                unknown_molecules,
-            )
-            if unknown_molecule is None:
-                raise NoMatchingResidueDefinitionError(
-                    res_atom_idcs,
-                    data,
-                    unknown_molecules,
-                    additional_substructures,
-                    residue_database,
-                    verbose_errors=verbose_errors,
-                )
-            else:
-                chemical_data = unknown_molecule
-        # If all matches would assign the same chemistry, accept it
-        # assert all([]) == True
-        elif all(a.agrees_with(b) for a, b in itertools.pairwise(matches)):
-            chemical_data = matches[0]
-
-            # this is a debug assert, if it triggers there's a bug
-            assert set(res_atom_idcs) == chemical_data.res_atom_idcs
-        else:
-            raise MultipleMatchingResidueDefinitionsError(
-                matches,
-                res_atom_idcs,
-                data,
-                verbose_errors=verbose_errors,
-            )
-
-        prototype_index = res_atom_idcs[0]
-
-        # Terminate the previous molecule and start a new one if we can see that
-        # this is the start of a new molecule
-        if this_molecule.n_atoms > 0 and (
-            data.chain_id[prototype_index] != prev_chain_id
-            or data.model[prototype_index] != prev_model
-            or (
-                isinstance(chemical_data, ResidueMatch)
-                and not chemical_data.expect_prior_bond
-            )
-        ):
-            this_molecule = Molecule()
-            molecules.append(this_molecule)
-
         # Apply the chemical data we've collected
-        if isinstance(chemical_data, Molecule):
-            this_molecule = chemical_data
+        if isinstance(chemical_data, MoleculeMatch):
+            this_molecule = chemical_data.residue_definition
             if molecules[-1].n_atoms == 0:
                 molecules[-1] = this_molecule
             else:
@@ -242,14 +193,10 @@ def topology_from_pdb(
         else:
             assert_never(chemical_data)
 
-        # Terminate the current molecule if we can see that this is the last residue
-        if (
-            data.terminated[prototype_index]
-            or isinstance(chemical_data, Molecule)
-            or (
-                isinstance(chemical_data, ResidueMatch)
-                and not chemical_data.expect_posterior_bond
-            )
+        # Terminate the current molecule if this residue has no posterior bond
+        if isinstance(chemical_data, MoleculeMatch) or (
+            isinstance(chemical_data, ResidueMatch)
+            and chemical_data.posterior_bond_idcs is None
         ):
             this_molecule = Molecule()
             molecules.append(this_molecule)
@@ -257,9 +204,6 @@ def topology_from_pdb(
         # TODO: Load other data from PDB file
         # TODO: Incorporate CONECT records
         # TODO: Deal with multi-model files
-
-        prev_chain_id = data.chain_id[prototype_index]
-        prev_model = data.model[prototype_index]
 
     for offmol in molecules:
         offmol._invalidate_cached_properties()
@@ -272,6 +216,13 @@ def topology_from_pdb(
     positions = np.stack([data.x[:n], data.y[:n], data.z[:n]], axis=-1) * unit.angstrom
     topology.set_positions(positions[topology_pdb_indices])
     if topology_pdb_indices != list(range(n)):
+        logging.debug(
+            "\n".join(
+                f"topology index {j: <n} has pdb index {i: <n}"
+                for i, j in zip(topology_pdb_indices, range(n))
+                if i != j
+            ),
+        )
         warnings.warn(
             "Input PDB has an atom ordering that cannot be represented in an"
             + " OpenFF Topology. The atoms in this topology will not be in same"
@@ -334,71 +285,6 @@ def _set_box_vectors(topology: Topology, data: PdbData):
         )
 
 
-def _match_unknown_molecules(
-    data: PdbData,
-    indices: tuple[int, ...],
-    unknown_molecules: Iterable[Molecule],
-) -> Molecule | None:
-    conects: set[tuple[int, int]] = set()
-    pdb_idx_to_mol_idx: dict[int, int] = {}
-    pdbmol = Molecule()
-    for pdb_index in indices:
-        pdb_idx_to_mol_idx[pdb_index] = pdbmol.add_atom(
-            atomic_number=elements.NUMBERS[data.element[pdb_index]],
-            formal_charge=data.charge[pdb_index] or 0,
-            is_aromatic=False,
-            stereochemistry=None,
-            name=data.name[pdb_index],
-            metadata={
-                "leaving": False,
-                **data._generate_atom_metadata(pdb_index),
-            },
-        )
-        for conect_idx in data.conects[pdb_index]:
-            conects.add(sort_tuple((pdb_index, conect_idx)))
-
-    for a, b in conects:
-        try:
-            pdbmol.add_bond(
-                atom1=pdb_idx_to_mol_idx[a],
-                atom2=pdb_idx_to_mol_idx[b],
-                bond_order=1,
-                is_aromatic=False,
-            )
-        except KeyError:
-            a_summary = f"{data.name[a]}#{data.serial[a]}@{data.chain_id[a]}:{data.res_name[a]}#{data.res_seq[a]}"
-            b_summary = f"{data.name[b]}#{data.serial[b]}@{data.chain_id[b]}:{data.res_name[b]}#{data.res_seq[b]}"
-            raise ValueError(
-                "Cannot match unknown molecule that spans multiple residues: "
-                + f"Found CONECT record between {a_summary} and {b_summary}",
-            )
-
-    for molecule in unknown_molecules:
-        (match_found, mapping) = Molecule.are_isomorphic(
-            molecule,
-            pdbmol,
-            return_atom_map=True,
-            aromatic_matching=False,
-            formal_charge_matching=False,
-            bond_order_matching=False,
-            atom_stereochemistry_matching=False,
-            bond_stereochemistry_matching=False,
-            strip_pyrimidal_n_atom_stereo=True,
-        )
-        if match_found:
-            assert mapping is not None
-            molecule = molecule.remap(mapping)
-            for atom, pdbatom in zip(molecule.atoms, pdbmol.atoms):
-                atom.metadata.update(pdbatom.metadata)
-                atom.name = pdbatom.name
-            molecule.generate_conformers(n_conformers=0, clear_existing=True)
-            molecule.properties["pdb_idx_to_mol_atom_idx"] = pdb_idx_to_mol_idx
-
-            return molecule
-    else:
-        return None
-
-
 def _add_to_molecule(
     molecules: MutableSequence[Molecule],
     this_molecule: Molecule,
@@ -408,7 +294,7 @@ def _add_to_molecule(
 ) -> Molecule:
     # Identify the previous linking atom
     linking_atom_idx: None | int = None
-    if residue_match.expect_prior_bond:
+    if residue_match.expects_prior_bond:
         assert residue_match.residue_definition.linking_bond is not None
         linking_atom_name = residue_match.residue_definition.linking_bond.atom1
         for i in reversed(range(this_molecule.n_atoms)):
@@ -470,8 +356,8 @@ def _add_to_molecule(
             invalidate_cache=False,
         )
 
-    if residue_match.crosslink is not None:
-        this_idx, other_idx = residue_match.crosslink
+    if residue_match.crosslink_idcs is not None:
+        this_idx, other_idx = residue_match.crosslink_idcs
         crosslink_bond = residue_match.residue_definition.crosslink
         assert crosslink_bond is not None, "Crosslink cannot be None if in match"
         if other_idx > this_idx:

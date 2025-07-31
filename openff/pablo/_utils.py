@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import (
@@ -5,6 +6,7 @@ from typing import (
     Literal,
     ParamSpec,
     TypeAlias,
+    TypeGuard,
     TypeVar,
     TypeVarTuple,
     no_type_check,
@@ -55,7 +57,7 @@ class __UNSET__:
 def dbg(o: T, msg: str = "{}") -> T:
     if "{}" not in msg:
         msg += ": {}"
-    print(msg.format(o))
+    logging.debug(msg.format(o))
     return o
 
 
@@ -66,6 +68,10 @@ def default_dict(
     dd: DefaultDict[U, T | V] = defaultdict(default_factory)
     dd.update(map)
     return dd
+
+
+def no_none_in_values(d: dict[T, U | None]) -> TypeGuard[dict[T, U]]:
+    return None not in d.values()
 
 
 def unwrap(container: Iterable[T], msg: str = "") -> T:
@@ -168,10 +174,10 @@ def dec_hex(s: str) -> int:
     For a string of length n, the string is interpreted as decimal if the value
     is < 10^n. This makes the dec_hex representation identical to a decimal
     integer, except for strings that cannot be parsed as a decimal. For these
-    strings, the first hexadecimal number is interpreted as 10^n, and subsequent
-    numbers continue from there. For example, in PDB files, a fixed width column
-    format, residue numbers for large systems sometimes follow this
-    representation:
+    strings, the first hexadecimal number with a leading digit greater than 9 is
+    interpreted as 10^n, and subsequent numbers continue from there. For
+    example, in PDB files, a fixed width column format, residue numbers for
+    large systems sometimes follow thisrepresentation:
 
         "   1" -> 1
         "   2" -> 2

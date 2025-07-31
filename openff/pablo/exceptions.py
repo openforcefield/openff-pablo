@@ -3,129 +3,176 @@ Exceptions for the PDB loader.
 """
 
 __all__ = [
-    "NoMatchingResidueDefinitionError",
-    "MultipleMatchingResidueDefinitionsError",
+    "PdbResidueMatchError",
     "UnknownOrAmbiguousSerialInConectError",
 ]
 
 
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Collection, Sequence
 from typing import TYPE_CHECKING
 
-from openff.toolkit import Molecule
-
+from openff.pablo._matching import (
+    MatchProtocol,
+    MismatchProtocol,
+    MoleculeMatch,
+    NoResidueDefinitions,
+    ResidueMatch,
+    ResidueMismatch,
+    SuccessfulMatch,
+    only_matched,
+)
 from openff.pablo._utils import flatten
+from openff.pablo.residue import ResidueDefinition
 
 if TYPE_CHECKING:
-    from openff.pablo._pdb_data import PdbData, ResidueMatch
-    from openff.pablo.residue import ResidueDefinition
+    from openff.pablo._pdb_data import PdbData
 
 
-class NoMatchingResidueDefinitionError(ValueError):
-    """Exception raised when a residue is missing from the database"""
+def _format_linenos(data: "PdbData", res_atom_idcs: Sequence[int]) -> str:
+    line_nos = sorted(
+        [data.line_no[j] for j in res_atom_idcs],
+        key=lambda x: 0 if x is None else x,
+    )
+    first, last = line_nos[0], line_nos[-1]
+    if (
+        first is not None
+        and last is not None
+        and line_nos == list(range(first, last + 1))
+    ):
+        return f"l{first}-{last}"
+    else:
+        return f"l{first}"
 
+
+class PdbResidueMatchError(ValueError):
     def __init__(
         self,
-        res_atom_idcs: Sequence[int],
         data: "PdbData",
-        unknown_molecules: Iterable[Molecule],
-        additional_substructures: Iterable["ResidueDefinition"],
-        residue_database: Mapping[
-            str,
-            Iterable["ResidueDefinition"],
-        ],
-        verbose_errors: bool = False,
+        errors: list[list[MismatchProtocol] | list[SuccessfulMatch]],
     ):
-        i = res_atom_idcs[0]
-        res_name = data.res_name[i]
-
-        line_nos = sorted(
-            [data.line_no[j] for j in res_atom_idcs],
-            key=lambda x: 0 if x is None else x,
-        )
-        first, last = line_nos[0], line_nos[-1]
-        if (
-            first is not None
-            and last is not None
-            and line_nos == list(range(first, last + 1))
-        ):
-            line_no = f"{first}-{last}"
-        else:
-            line_no = first
-
-        msg = [
+        msg: list[str] = [
+            "some residues could not be identified",
+            "A topology cannot be created without chemical information for every",
             (
-                "No residue definitions covered all atoms in residue"
-                + f"{data.chain_id[i]}:{res_name}#{data.res_seq[i]}"
-                + (
-                    f" ({data.src_filename}:l{line_no})"
-                    if data.src_filename is not None
-                    else f" (l{line_no})"
-                )
+                f"atom and bond. The following residues present in PDB file\n{data.src_filename}"
+                if data.src_filename is not None
+                else "atom and bond. The following residues present in the PDB file"
             ),
+            "could not be identified from the provided chemical library:",
         ]
-        if verbose_errors:
-            residue_definitions = list(residue_database[res_name])
-            if len(residue_definitions) == 0:
-                msg.append("  No residues in database for residue name {res_name}")
-            found_names = {data.name[i] for i in res_atom_idcs}
-            for resdef in residue_definitions:
-                extra_names = found_names.difference(
-                    flatten([atom.name, *atom.synonyms] for atom in resdef.atoms),
-                )
-                missing_names = {
-                    "|".join([atom.name, *atom.synonyms])
-                    for atom in resdef.atoms
-                    if atom.name not in found_names
-                    and all([synonym not in found_names for synonym in atom.synonyms])
-                    and not atom.leaving
-                }
-                missing_leavers = {
-                    "|".join([atom.name, *atom.synonyms])
-                    for atom in resdef.atoms
-                    if atom.name not in found_names
-                    and all([synonym not in found_names for synonym in atom.synonyms])
-                    and atom.leaving
-                }
-                msg.append(f"    In {resdef.description}:")
-                msg.append(f"      {sorted(extra_names)} were found but not expected")
-                msg.append(f"      {sorted(missing_names)} were expected but not found")
-                msg.append(
-                    f"      Leaving atoms {sorted(missing_leavers)} were also not found",
-                )
 
-        super().__init__("\n".join(msg))
+        for residue_errors in errors:
+            if len(residue_errors) == 0:
+                continue
 
+            prototype_residue_error = residue_errors[0]
+            i = prototype_residue_error.prototype_index
+            src = _format_linenos(data, prototype_residue_error.res_atom_idcs)
+            resid = f"{data.chain_id[i]}:{data.res_name[i]}#{data.res_seq[i]}"
 
-class MultipleMatchingResidueDefinitionsError(ValueError):
-    def __init__(
-        self,
-        matches: Sequence["ResidueMatch"],
-        res_atom_idcs: tuple[int, ...],
-        data: "PdbData",
-        verbose_errors: bool,
-    ):
-        i = res_atom_idcs[0]
+            expects_crosslinks = [
+                err.expects_crosslink for err in only_matched(residue_errors)
+            ]
+            expects_posteriors = [
+                err.expects_posterior_bond for err in only_matched(residue_errors)
+            ]
+            expects_priors = [
+                err.expects_prior_bond for err in only_matched(residue_errors)
+            ]
 
-        msg = (
-            f"{len(matches)} residue definitions matched residue "
-            + f"{data.chain_id[i]}:{data.res_name[i]}#{data.res_seq[i]}"
-        )
-
-        if verbose_errors:
-            msg += ":"
-            msg = "\n    ".join(
-                [
-                    msg,
-                    *map(
-                        lambda m: m.residue_definition.description
-                        + f" {m.expect_crosslink=} {m.expect_prior_bond=} {m.expect_posterior_bond=}",
-                        matches,
-                    ),
-                ],
+            residue_mismatch_resdef_description_lens = [
+                len(match.residue_definition.description)
+                for match in residue_errors
+                if isinstance(match.residue_definition, ResidueDefinition)
+            ]
+            max_padding = (
+                max(residue_mismatch_resdef_description_lens)
+                if residue_mismatch_resdef_description_lens
+                else 0
             )
 
-        super().__init__(msg)
+            if isinstance(prototype_residue_error, MatchProtocol):
+                msg.append(
+                    f"  {resid} ({src}): Multiple conflicting residue definition matches:",
+                )
+                consensus_expects_start = (
+                    f"    │{' ' * (max_padding - 10)} Every match expects "
+                )
+                if all(expects_crosslinks):
+                    msg.append(consensus_expects_start + "crosslink")
+                elif not any(expects_crosslinks):
+                    msg.append(consensus_expects_start + "no crosslink")
+                if all(expects_priors):
+                    msg.append(consensus_expects_start + "prior bond")
+                elif not any(expects_priors):
+                    msg.append(consensus_expects_start + "no prior bond")
+                if all(expects_posteriors):
+                    msg.append(consensus_expects_start + "posterior bond")
+                elif not any(expects_posteriors):
+                    msg.append(consensus_expects_start + "no posterior bond")
+            elif (
+                isinstance(prototype_residue_error, NoResidueDefinitions)
+                and len(residue_errors) == 1
+            ):
+                msg.append(f"  {resid} ({src}): No residue definitions")
+            else:
+                msg.append(f"  {resid} ({src}): No matching residue definitions:")
+
+            for err in sorted(residue_errors, key=lambda x: (type(x), x.sort_key())):
+                if isinstance(err, NoResidueDefinitions):
+                    continue
+                elif isinstance(err, ResidueMatch):
+                    desc = err.residue_definition.description
+                    padding = max_padding - len(desc)
+                    expects = ", ".join(
+                        flatten(
+                            [
+                                ("crosslink",)
+                                if err.expects_crosslink
+                                and not all(expects_crosslinks)
+                                and any(expects_crosslinks)
+                                else (),
+                                ("posterior bond",)
+                                if err.expects_posterior_bond
+                                and not all(expects_posteriors)
+                                and any(expects_posteriors)
+                                else (),
+                                ("prior bond",)
+                                if err.expects_prior_bond
+                                and not all(expects_priors)
+                                and any(expects_priors)
+                                else (),
+                            ],
+                        ),
+                    )
+                    if expects == "":
+                        expects = "no other linkages"
+                    msg.append(
+                        f"    ├{'─' * padding} {desc}: expects {expects}",
+                    )
+                elif isinstance(err, MoleculeMatch):
+                    msg.append(
+                        f"    ├ Unknown molecule {err.description}",
+                    )
+                elif isinstance(err, ResidueMismatch):
+                    desc = err.residue_definition.description
+                    padding = max_padding - len(desc)
+                    msg.append(
+                        f"    ├{'─' * padding} {desc} "
+                        + f"failed to match: {err.reason}",
+                    )
+                else:
+                    msg.append(f"    ├ {err.description}")
+
+            if msg[-1].startswith("    ├"):
+                msg[-1] = "    ╰" + msg[-1][5:]
+
+            msg.append("")
+
+        if msg[-1] == "":
+            msg = msg[:-1]
+
+        return super().__init__("\n".join(msg))
 
 
 class UnknownOrAmbiguousSerialInConectError(ValueError):

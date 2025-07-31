@@ -1,3 +1,4 @@
+from collections import defaultdict
 from pathlib import Path
 
 import pytest
@@ -94,6 +95,37 @@ def cys_data(cys_pdblines: list[str]) -> PdbData:
 @pytest.fixture
 def e2_data() -> PdbData:
     return PdbData.from_file(get_test_data_path("e2_7nel.pdb"))
+
+
+@pytest.fixture
+def he_data() -> PdbData:
+    return PdbData(
+        line_no=[None],
+        model=[None],
+        serial=["1"],
+        name=["HE"],
+        alt_loc=[""],
+        res_name=["HE"],
+        chain_id=["A"],
+        res_seq=["1"],
+        i_code=[" "],
+        x=[-1.806],
+        y=[9.969],
+        z=[9.991],
+        occupancy=[1.00],
+        temp_factor=[0.00],
+        element=["He"],
+        charge=[None],
+        terminated=[False],
+        serial_to_index=defaultdict(list, {"1": [0]}),
+        conects=[set()],
+        cryst1_a=None,
+        cryst1_b=None,
+        cryst1_c=None,
+        cryst1_alpha=None,
+        cryst1_beta=None,
+        cryst1_gamma=None,
+    )
 
 
 @pytest.fixture
@@ -299,7 +331,7 @@ def gly_def_zwitterionic() -> ResidueDefinition:
 def cys_match(cys_def: ResidueDefinition) -> ResidueMatch:
     return ResidueMatch(
         residue_definition=cys_def,
-        crosslink=None,
+        crosslink_idcs=None,
         index_to_atomdef={i: atom for i, atom in enumerate(cys_def.atoms)},
     )
 
@@ -309,7 +341,7 @@ def cys_match_no_leaving(cys_def: ResidueDefinition) -> ResidueMatch:
     counter = iter(range(len(cys_def.atoms)))
     return ResidueMatch(
         residue_definition=cys_def,
-        crosslink=None,
+        crosslink_idcs=None,
         index_to_atomdef={
             next(counter): atom for atom in cys_def.atoms if not atom.leaving
         },
@@ -323,7 +355,7 @@ def cys_match_no_leaving_deprotonated_sidechain(
     counter = iter(range(len(cys_def_deprotonated_sidechain.atoms)))
     return ResidueMatch(
         residue_definition=cys_def_deprotonated_sidechain,
-        crosslink=None,
+        crosslink_idcs=None,
         index_to_atomdef={
             next(counter): atom
             for atom in cys_def_deprotonated_sidechain.atoms
@@ -336,7 +368,7 @@ def cys_match_no_leaving_deprotonated_sidechain(
 def hoh_match(hoh_def: ResidueDefinition) -> ResidueMatch:
     return ResidueMatch(
         residue_definition=hoh_def,
-        crosslink=None,
+        crosslink_idcs=None,
         index_to_atomdef={i: atom for i, atom in enumerate(hoh_def.atoms)},
     )
 

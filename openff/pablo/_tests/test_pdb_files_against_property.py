@@ -1,3 +1,5 @@
+from collections.abc import Mapping, Sequence
+
 import pytest
 from openff.toolkit import Molecule, Topology, unit
 
@@ -6,6 +8,7 @@ from openff.pablo._tests.utils import get_test_data_path
 from openff.pablo._utils import sort_tuple
 from openff.pablo.ccd import CCD_RESIDUE_DEFINITION_CACHE
 from openff.pablo.chem import PEPTIDE_BOND
+from openff.pablo.exceptions import PdbResidueMatchError
 from openff.pablo.residue import ResidueDefinition
 
 
@@ -244,7 +247,7 @@ def test_3ip9_loads_with_additional_residue():
                 "residue_number",
                 "insertion_code",
             ]:
-                assert pablo_atom.metadata[key] == legacy_atom.metadata[key]
+                assert str(pablo_atom.metadata[key]) == str(legacy_atom.metadata[key])
 
         pablo_bonds = {
             sort_tuple((bond.atom1_index, bond.atom2_index)) for bond in pablo_mol.bonds
@@ -432,10 +435,206 @@ def test_cannot_load_arg_alternate_resonance_form():
     )
 
 
-@pytest.mark.xfail
 def test_misplaced_ter_with_custom_resdef_gives_clear_error():
-    """This needs a clearer error"""
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match="failed to match: Posterior bond expected but cannot form polymer bond across TER record",
+    ):
         topology_from_pdb(
             get_test_data_path("capped_ser_extrater.pdb"),
+        )
+
+
+def test_unknown_residue_gives_clear_error():
+    path = get_test_data_path("5ap1_prepared.pdb").absolute()
+
+    def check_err(err: ValueError) -> bool:
+        expected_error = "\n".join(
+            [
+                "some residues could not be identified",
+                "A topology cannot be created without chemical information for every",
+                "atom and bond. The following residues present in PDB file",
+                str(path),
+                "could not be identified from the provided chemical library:",
+                "  C:UNK#1 (l4980-5038): No residue definitions",
+            ],
+        )
+
+        assert err.args[0] == expected_error
+        return True
+
+    with pytest.raises(
+        ValueError,
+        check=check_err,
+    ):
+        topology_from_pdb(path)
+
+
+def test_unmatched_residues_give_clear_error(
+    cys_def_deprotonated_sidechain: ResidueDefinition,
+):
+    path = get_test_data_path("3cu9_vicinal_disulfide.pdb").absolute()
+
+    def check_err(err: ValueError) -> bool:
+        expected_error = "\n".join(
+            [
+                "some residues could not be identified",
+                "A topology cannot be created without chemical information for every",
+                "atom and bond. The following residues present in PDB file",
+                str(path),
+                "could not be identified from the provided chemical library:",
+                "  A:CYS#221 (l1-11): No matching residue definitions:",
+                "    ╰ CYSTEINE failed to match: found CONECT record that could not be matched with a bond",
+                "",
+                "  A:CYS#222 (l12-23): No matching residue definitions:",
+                "    ╰ CYSTEINE failed to match: found CONECT record that could not be matched with a bond",
+            ],
+        )
+
+        assert err.args[0] == expected_error
+        return err.args[0] == expected_error
+
+    with pytest.raises(
+        ValueError,
+        check=check_err,
+    ):
+        topology_from_pdb(
+            path,
+            residue_database={
+                "CYS": [cys_def_deprotonated_sidechain.replace(crosslink=None)],
+            },
+        )
+
+
+def test_polyglycines_loads_with_augmented_ccd():
+    # Loading this PDB file with this augmented CCD cache will test all kinds
+    # of residue-residue interface; see prepared_pdbs/polyglycines.py
+    topology = topology_from_pdb(
+        get_test_data_path("prepared_pdbs/polyglycines.pdb"),
+        residue_database=CCD_RESIDUE_DEFINITION_CACHE.with_(
+            [
+                ResidueDefinition.from_smiles(
+                    mapped_smiles="[N-:1]([H:2])[C:3]([H:4])([H:5])[C:6](=[O:7])[O:8][H:9]",
+                    atom_names={
+                        1: "N",
+                        2: "H",
+                        3: "CA",
+                        4: "HA1",
+                        5: "HA2",
+                        6: "C",
+                        7: "O",
+                        8: "OXT",
+                        9: "HXT",
+                    },
+                    residue_name="GLY",
+                    leaving_atoms=(8, 9),
+                    linking_bond=PEPTIDE_BOND,
+                    description="GLYCINE w/ negative formal charge on N",
+                ),
+                ResidueDefinition.from_smiles(
+                    mapped_smiles="[N:1]([H:2])([H:8])[C:3]([H:4])([H:5])[C-:6]=[O:7]",
+                    atom_names={
+                        1: "N",
+                        2: "H",
+                        3: "CA",
+                        4: "HA1",
+                        5: "HA2",
+                        6: "C",
+                        7: "O",
+                        8: "H2",
+                    },
+                    residue_name="GLY",
+                    leaving_atoms=(8,),
+                    linking_bond=PEPTIDE_BOND,
+                    description="GLYCINE w/ negative formal charge on C",
+                ),
+            ],
+        ),
+    )
+    assert topology.n_molecules == 103
+
+    triglycine = Molecule.from_smiles(
+        "[N-:1]([H:2])[C:3]([H:4])([H:5])[C:6](=[O:7])"
+        + "[N:8]([H:9])[C:10]([H:11])([H:12])[C:13](=[O:14])"
+        + "[N:15]([H:16])[C:17]([H:18])([H:19])[C-:20](=[O:21])",
+    )
+
+    assert topology.molecule(0).is_isomorphic_with(triglycine)
+    assert topology.molecule(1).is_isomorphic_with(triglycine)
+    assert topology.molecule(2).is_isomorphic_with(triglycine)
+    for i in range(3, 103):
+        molecule = topology.molecule(i)
+        assert molecule.n_atoms == 3
+        assert molecule.hill_formula == "H2O"
+
+
+def wrong_gly_def() -> ResidueDefinition:
+    from openff.pablo.chem import PEPTIDE_BOND
+    from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
+
+    atoms = (
+        AtomDefinition.with_defaults(name="N", symbol="N"),
+        AtomDefinition.with_defaults(name="CA", symbol="C", stereo="R"),
+        AtomDefinition.with_defaults(name="C", symbol="C"),
+        AtomDefinition.with_defaults(name="O", symbol="O"),
+        AtomDefinition.with_defaults(name="HA2", symbol="H"),
+        AtomDefinition.with_defaults(name="OXT", symbol="O", leaving=True),
+        AtomDefinition.with_defaults(name="H", symbol="H"),
+        AtomDefinition.with_defaults(name="H2", symbol="H", leaving=True),
+        AtomDefinition.with_defaults(name="HA3", symbol="H"),
+        AtomDefinition.with_defaults(name="HXT", symbol="H", leaving=True),
+    )
+
+    bonds = (
+        BondDefinition.with_defaults("N", "CA"),
+        BondDefinition.with_defaults("N", "H"),
+        BondDefinition.with_defaults("N", "H2"),
+        BondDefinition.with_defaults("CA", "C"),
+        BondDefinition.with_defaults("CA", "HA2"),
+        BondDefinition.with_defaults("CA", "HA3"),
+        BondDefinition.with_defaults("C", "O", order=1),  # WRONGNESS
+        BondDefinition.with_defaults("C", "OXT"),
+        BondDefinition.with_defaults("OXT", "HXT"),
+    )
+
+    return ResidueDefinition(
+        atoms=atoms,
+        bonds=bonds,
+        crosslink=None,
+        linking_bond=PEPTIDE_BOND,
+        description="GLYCINE carbonyl single bond",
+        residue_name="GLY",
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "resdb",
+    [
+        CCD_RESIDUE_DEFINITION_CACHE.with_({"GLY": [wrong_gly_def()]}),
+        {**CCD_RESIDUE_DEFINITION_CACHE.without({"PRO"})},
+        {**CCD_RESIDUE_DEFINITION_CACHE.without({"GLY"})},
+        {},
+    ],
+    ids=[
+        "wrong_gly_def",
+        "no_pro",
+        "no_gly",
+        "empty",
+    ],
+)
+def test_5ap1_prepared_fails_with_broken_resdefs(
+    resdb: Mapping[str, Sequence[ResidueDefinition]],
+):
+    path = get_test_data_path("5ap1_prepared.pdb").absolute()
+
+    with pytest.raises(PdbResidueMatchError):
+        topology_from_pdb(
+            path,
+            residue_database=resdb,
+            unknown_molecules=[
+                Molecule.from_smiles(
+                    "O=C([O-])Cn1cc(cn1)c2ccc(cc2OCC#N)Nc3ccc(c(n3)NC4CCCCC4)C#N",
+                ),
+            ],
         )

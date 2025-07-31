@@ -121,7 +121,6 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
     ):
         self._cache_path = cache_path.resolve()
         self._cache_path.mkdir(parents=True, exist_ok=True)
-
         self._library_paths = {path.resolve() for path in library_paths}
 
         self._definitions: dict[str, list[ResidueDefinition]] = {}
@@ -240,7 +239,7 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
             definitions = flatten(map(self._apply_patches, definitions))
 
         stored_definitions = self._definitions.setdefault(res_name, [])
-        stored_definitions.extend(definitions)
+        stored_definitions.extend(set(definitions) - set(stored_definitions))
         return stored_definitions
 
     def _download_cif(self, resname: str) -> str:

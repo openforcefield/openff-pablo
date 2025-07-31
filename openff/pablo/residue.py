@@ -647,18 +647,6 @@ class ResidueDefinition:
 
     def _is_isomorphic_to(self, other: Self) -> bool:
         """Atom and bond ordering insensitive equality test"""
-        if other.linking_bond != self.linking_bond:
-            print(other.linking_bond, "!=", self.linking_bond)
-        if other.crosslink != self.crosslink:
-            print(other.crosslink, "!=", self.crosslink)
-        if set(other.atoms) != set(self.atoms):
-            print(
-                f"{set(other.atoms)-set(self.atoms)=}\n{set(self.atoms)-set(other.atoms)=}",
-            )
-        if set(other.bonds) != set(self.bonds):
-            print(
-                f"{set(other.bonds)-set(self.bonds)=}\n{set(self.bonds)-set(other.bonds)=}",
-            )
         return all(
             [
                 other.linking_bond == self.linking_bond,
@@ -704,6 +692,7 @@ class ResidueDefinition:
                 for atom in self.atoms
                 if atom.name != name
             ],
+            description=self.description + f" -{name}",
         )
 
     def protonated_at(
@@ -757,6 +746,7 @@ class ResidueDefinition:
                     leaving=heavy_atom.leaving,
                 ),
             ],
+            description=self.description + f" +{proton_name}",
         )
 
     def vary_protonation(
