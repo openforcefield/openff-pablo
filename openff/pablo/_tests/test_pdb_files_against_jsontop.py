@@ -46,12 +46,6 @@ FAST_PDBS: list[tuple[str, str, list[Molecule], list[ResidueDefinition]]] = [
         [],
     ),
     (
-        "prepared_pdbs/5eil_fixed.pdb",
-        "prepared_pdbs/5eil_fixed.json",
-        [],
-        [],
-    ),
-    (
         "1A4T.pdb",
         "1A4T.json",
         [],
@@ -64,7 +58,14 @@ FAST_PDBS: list[tuple[str, str, list[Molecule], list[ResidueDefinition]]] = [
         [],
     ),
 ]
-SLOW_PDBS: list[tuple[str, list[Molecule], list[ResidueDefinition]]] = []
+SLOW_PDBS: list[tuple[str, str, list[Molecule], list[ResidueDefinition]]] = [
+    (
+        "prepared_pdbs/5eil_fixed.pdb",
+        "prepared_pdbs/5eil_fixed.json",
+        [],
+        [],
+    ),
+]
 
 
 @pytest.mark.parametrize(

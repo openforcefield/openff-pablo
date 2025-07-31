@@ -1,3 +1,5 @@
+from collections.abc import Mapping, Sequence
+
 import pytest
 from openff.toolkit import Molecule, Topology, unit
 
@@ -6,6 +8,7 @@ from openff.pablo._tests.utils import get_test_data_path
 from openff.pablo._utils import sort_tuple
 from openff.pablo.ccd import CCD_RESIDUE_DEFINITION_CACHE
 from openff.pablo.chem import PEPTIDE_BOND
+from openff.pablo.exceptions import PdbResidueMatchError
 from openff.pablo.residue import ResidueDefinition
 
 
@@ -563,3 +566,75 @@ def test_polyglycines_loads_with_augmented_ccd():
         molecule = topology.molecule(i)
         assert molecule.n_atoms == 3
         assert molecule.hill_formula == "H2O"
+
+
+def wrong_gly_def() -> ResidueDefinition:
+    from openff.pablo.chem import PEPTIDE_BOND
+    from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
+
+    atoms = (
+        AtomDefinition.with_defaults(name="N", symbol="N"),
+        AtomDefinition.with_defaults(name="CA", symbol="C", stereo="R"),
+        AtomDefinition.with_defaults(name="C", symbol="C"),
+        AtomDefinition.with_defaults(name="O", symbol="O"),
+        AtomDefinition.with_defaults(name="HA2", symbol="H"),
+        AtomDefinition.with_defaults(name="OXT", symbol="O", leaving=True),
+        AtomDefinition.with_defaults(name="H", symbol="H"),
+        AtomDefinition.with_defaults(name="H2", symbol="H", leaving=True),
+        AtomDefinition.with_defaults(name="HA3", symbol="H"),
+        AtomDefinition.with_defaults(name="HXT", symbol="H", leaving=True),
+    )
+
+    bonds = (
+        BondDefinition.with_defaults("N", "CA"),
+        BondDefinition.with_defaults("N", "H"),
+        BondDefinition.with_defaults("N", "H2"),
+        BondDefinition.with_defaults("CA", "C"),
+        BondDefinition.with_defaults("CA", "HA2"),
+        BondDefinition.with_defaults("CA", "HA3"),
+        BondDefinition.with_defaults("C", "O", order=1),  # WRONGNESS
+        BondDefinition.with_defaults("C", "OXT"),
+        BondDefinition.with_defaults("OXT", "HXT"),
+    )
+
+    return ResidueDefinition(
+        atoms=atoms,
+        bonds=bonds,
+        crosslink=None,
+        linking_bond=PEPTIDE_BOND,
+        description="GLYCINE carbonyl single bond",
+        residue_name="GLY",
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "resdb",
+    [
+        CCD_RESIDUE_DEFINITION_CACHE.with_({"GLY": [wrong_gly_def()]}),
+        {**CCD_RESIDUE_DEFINITION_CACHE.without({"PRO"})},
+        {**CCD_RESIDUE_DEFINITION_CACHE.without({"GLY"})},
+        {},
+    ],
+    ids=[
+        "wrong_gly_def",
+        "no_pro",
+        "no_gly",
+        "empty",
+    ],
+)
+def test_5ap1_prepared_fails_with_broken_resdefs(
+    resdb: Mapping[str, Sequence[ResidueDefinition]],
+):
+    path = get_test_data_path("5ap1_prepared.pdb").absolute()
+
+    with pytest.raises(PdbResidueMatchError):
+        topology_from_pdb(
+            path,
+            residue_database=resdb,
+            unknown_molecules=[
+                Molecule.from_smiles(
+                    "O=C([O-])Cn1cc(cn1)c2ccc(cc2OCC#N)Nc3ccc(c(n3)NC4CCCCC4)C#N",
+                ),
+            ],
+        )

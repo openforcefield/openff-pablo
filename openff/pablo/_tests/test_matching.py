@@ -119,4 +119,18 @@ class TestResidueMatch:
         assert getattr(cys_match_no_leaving, "expects_" + expect_prop_suffix) is True
 
     def test_match_agrees_with_self(self, any_match: ResidueMatch):
-        any_match.agrees_with(any_match)
+        assert any_match.agrees_with(any_match)
+
+    def test_match_disagrees_with_changed_bond_order(self, any_match: ResidueMatch):
+        changed_bond_order = ResidueMatch(
+            residue_definition=any_match.residue_definition.replace(
+                bonds=[
+                    bond.replace(order=3) for bond in any_match.residue_definition.bonds
+                ],
+            ),
+            crosslink_idcs=any_match.crosslink_idcs,
+            index_to_atomdef=any_match.index_to_atomdef,
+            prior_bond_idcs=any_match.prior_bond_idcs,
+            posterior_bond_idcs=any_match.posterior_bond_idcs,
+        )
+        assert not any_match.agrees_with(changed_bond_order)
