@@ -70,8 +70,13 @@ def default_dict(
     return dd
 
 
-def no_none_in_values(d: dict[T, U | None]) -> TypeGuard[dict[T, U]]:
+def no_none_in_values(d: Mapping[T, U | None]) -> TypeGuard[Mapping[T, U]]:
     return None not in d.values()
+
+
+def option_to_iter(option: T | None) -> Iterator[T]:
+    if option is not None:
+        yield option
 
 
 def unwrap(container: Iterable[T], msg: str = "") -> T:
