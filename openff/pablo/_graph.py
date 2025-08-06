@@ -1,6 +1,5 @@
-from collections.abc import Mapping
-from typing import Generic, TypeVar
-from collections.abc import Callable, Hashable, Iterable, Iterator
+from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping
+from typing import Generic, Literal, TypeVar
 
 import rustworkx as rx
 
@@ -30,6 +29,9 @@ class Graph(Generic[NodeT, EdgeT]):
         self._out_of_bounds_node: int = 1
         super().__init__()
 
+    def __contains__(self, item: NodeT | EdgeT):
+        return item in self._node_idcs or item in self._edge_idcs
+
     def add_edge(self, node_a: NodeT, node_b: NodeT, edge: EdgeT):
         node_a_idx = self._node_idcs.get(node_a, self._out_of_bounds_node)
         node_b_idx = self._node_idcs.get(node_b, self._out_of_bounds_node)
@@ -58,7 +60,7 @@ class Graph(Generic[NodeT, EdgeT]):
         id_order: bool = True,
         call_limit: int | None = None,
     ) -> bool:
-        return _is_isomorphic(
+        iterator = _vf2_mapping(
             first=self._graph,
             second=other._graph,
             node_matcher=node_matcher,
@@ -66,6 +68,12 @@ class Graph(Generic[NodeT, EdgeT]):
             id_order=id_order,
             call_limit=call_limit,
         )
+        try:
+            next(iterator)
+        except StopIteration:
+            return False
+        else:
+            return True
 
     def get_mappings(
         self,
@@ -92,24 +100,6 @@ class Graph(Generic[NodeT, EdgeT]):
             yield {nodes[i]: other_nodes[j] for i, j in mapping.items()}
 
 
-def _is_isomorphic(
-    first: rx.PyGraph[NodeT, EdgeT],
-    second: rx.PyGraph[OtherNodeT, OtherEdgeT],
-    node_matcher: Callable[[NodeT, OtherNodeT], bool] | None = None,
-    edge_matcher: Callable[[EdgeT, OtherEdgeT], bool] | None = None,
-    id_order: bool = True,
-    call_limit: int | None = None,
-) -> bool:
-    return rx.is_isomorphic(
-        first=first,
-        second=second,  # type: ignore
-        node_matcher=node_matcher,  # type: ignore
-        edge_matcher=edge_matcher,  # type: ignore
-        id_order=id_order,
-        call_limit=call_limit,
-    )
-
-
 def _vf2_mapping(
     first: rx.PyGraph[NodeT, EdgeT],
     second: rx.PyGraph[OtherNodeT, OtherEdgeT],
@@ -120,11 +110,49 @@ def _vf2_mapping(
     induced: bool = True,
     call_limit: int | None = None,
 ) -> Iterator[Mapping[int, int]]:
+    first_labeled: rx.PyGraph[
+        tuple[Literal["FIRST", "SECOND"], NodeT | OtherNodeT],
+        tuple[Literal["FIRST", "SECOND"], EdgeT | OtherEdgeT],
+    ] = rx.PyGraph()
+    first_comp_dict = first_labeled.compose(
+        first,  # type: ignore[compose type annotation is incorrect]
+        {},
+        node_map_func=lambda x: ("FIRST", x),  # type: ignore
+        edge_map_func=lambda x: ("FIRST", x),  # type: ignore
+    )
+    assert first_comp_dict == {i: i for i in range(first.num_nodes())}
+    second_labeled: rx.PyGraph[
+        tuple[Literal["FIRST", "SECOND"], NodeT | OtherNodeT],
+        tuple[Literal["FIRST", "SECOND"], EdgeT | OtherEdgeT],
+    ] = rx.PyGraph()
+    second_comp_dict = second_labeled.compose(
+        second,  # type: ignore[compose type annotation is incorrect]
+        {},
+        node_map_func=lambda x: ("SECOND", x),  # type: ignore
+        edge_map_func=lambda x: ("SECOND", x),  # type: ignore
+    )
+    assert second_comp_dict == {i: i for i in range(second.num_nodes())}
     return rx.vf2_mapping(
-        first=first,
-        second=second,  # type: ignore
-        node_matcher=node_matcher,  # type: ignore
-        edge_matcher=edge_matcher,  # type: ignore
+        first_labeled,
+        second_labeled,
+        node_matcher=(
+            None
+            if node_matcher is None
+            else lambda a, b: (
+                node_matcher(a[1], b[1])  # type: ignore
+                if a[0] == "FIRST"
+                else node_matcher(b[1], a[1])  # type: ignore
+            )
+        ),
+        edge_matcher=(
+            None
+            if edge_matcher is None
+            else lambda a, b: (
+                edge_matcher(a[1], b[1])  # type: ignore
+                if a[0] == "FIRST"
+                else edge_matcher(b[1], a[1])  # type: ignore
+            )
+        ),
         id_order=id_order,
         subgraph=subgraph,
         induced=induced,

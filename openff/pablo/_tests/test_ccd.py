@@ -1,6 +1,9 @@
+from tempfile import TemporaryDirectory
+
 import pytest
 
 from openff.pablo.ccd import CCD_RESIDUE_DEFINITION_CACHE
+from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.residue import ResidueDefinition
 
 
@@ -119,3 +122,71 @@ def test_ccdcache_without(hooh_def: ResidueDefinition):
     assert new_ccdcache is not ccdcache_with_hooh
     assert "HOOH" not in new_ccdcache
     assert "HOOH" in ccdcache_with_hooh
+
+
+def test_with_patch():
+    def test_patch(resdef: ResidueDefinition) -> list[ResidueDefinition]:
+        return [
+            resdef.replace(description=resdef.description + " test with_patch 1"),
+            resdef.replace(description=resdef.description + " test with_patch 2"),
+        ]
+
+    with (
+        TemporaryDirectory() as tmpdir0,
+        TemporaryDirectory() as tmpdir1,
+        TemporaryDirectory() as tmpdir2,
+        TemporaryDirectory() as tmpdir3,
+    ):
+        cache0: CcdCache = CcdCache(
+            library_paths=[],
+            cache_path=tmpdir0,
+            patches=[{"ACE": test_patch}],
+            preload=["ACE"],
+        )
+
+        cache1: CcdCache = CcdCache(
+            library_paths=[],
+            cache_path=tmpdir1,
+            patches=[{"ACE": test_patch}],
+        )
+
+        cache2: CcdCache = CcdCache(
+            library_paths=[],
+            cache_path=tmpdir2,
+        ).with_patch("ACE", test_patch)
+
+        cache3: CcdCache = CcdCache(
+            library_paths=[],
+            cache_path=tmpdir3,
+            preload=["ACE"],
+        ).with_patch("ACE", test_patch)
+
+        correct_desc_seq = [
+            "ACETYL GROUP test with_patch 1",
+            "ACETYL GROUP test with_patch 2",
+        ]
+        assert [resdef.description for resdef in cache0["ACE"]] == correct_desc_seq, (
+            "cache0 is out of order (patches arg with preload)"
+        )
+        assert [resdef.description for resdef in cache1["ACE"]] == correct_desc_seq, (
+            "cache1 is out of order (patches arg without preload)"
+        )
+        assert [resdef.description for resdef in cache2["ACE"]] == correct_desc_seq, (
+            "cache2 is out of order (with_patches method without preload)"
+        )
+        assert [resdef.description for resdef in cache3["ACE"]] == correct_desc_seq, (
+            "cache3 is out of order (with_patches method with preload)"
+        )
+
+        assert cache0 == cache1
+        assert cache1 == cache2
+        assert cache2 == cache3
+        assert cache0._patches == cache1._patches
+        assert cache1._patches == cache2._patches
+        assert cache2._patches == cache3._patches
+        assert cache0._definitions == cache1._definitions
+        assert cache1._definitions == cache2._definitions
+        assert cache2._definitions == cache3._definitions
+        assert cache0["ACE"] == cache1["ACE"]
+        assert cache1["ACE"] == cache2["ACE"]
+        assert cache2["ACE"] == cache3["ACE"]

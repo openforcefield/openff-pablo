@@ -235,6 +235,8 @@ class PdbData:
                     "Alt locs not supported; only empty or 'A' alt locs will be read",
                 )
                 if alt_loc != "A":
+                    # TODO: Improve this res_idx behavior
+                    self.res_idx.append(res_idx)
                     continue
             if residue_info[0] != first_model:
                 # TODO: Support multi-model files
@@ -307,10 +309,15 @@ class PdbData:
             for i in res_atom_idcs
         }
         if not no_none_in_values(index_to_atomdef):
-            reason = "Unknown atoms missing from residue definition " + repr(
-                tuple(
+            matched_atoms = {
+                atom.name for atom in index_to_atomdef.values() if atom is not None
+            }
+            reason = (
+                "The following atoms had unknown names: "
+                + ", ".join(
                     self.name[i] for i, atom in index_to_atomdef.items() if atom is None
-                ),
+                )
+                + f" (expected {'; '.join(sorted((atom.name + (' or synonyms ' if atom.synonyms else '') + ', '.join(atom.synonyms) for atom in residue_definition.atoms if atom.name not in matched_atoms), key=len))})"
             )
             logging.debug("    Match failed: " + reason)
             return ResidueMismatch(
@@ -367,31 +374,8 @@ class PdbData:
             )
             logging.debug("    Match failed: " + reason)
             return match.reject(reason)
-        elif (
-            (
-                missing_atom_names.issuperset(
-                    residue_definition.prior_bond_leaving_atoms,
-                )
-                or missing_atom_names.isdisjoint(
-                    residue_definition.prior_bond_leaving_atoms,
-                )
-            )
-            and (
-                missing_atom_names.issuperset(
-                    residue_definition.posterior_bond_leaving_atoms,
-                )
-                or missing_atom_names.isdisjoint(
-                    residue_definition.posterior_bond_leaving_atoms,
-                )
-            )
-            and (
-                missing_atom_names.issuperset(
-                    residue_definition.crosslink_leaving_atoms,
-                )
-                or missing_atom_names.isdisjoint(
-                    residue_definition.crosslink_leaving_atoms,
-                )
-            )
+        elif residue_definition._missing_atoms_are_valid_leaving_atoms(
+            missing_atom_names,
         ):
             logging.debug("    Match succeeded!")
             return match
@@ -982,160 +966,125 @@ class PdbData:
         next_matches: Sequence[PossibleResidueMatch],
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
     ) -> Iterator[PossibleResidueMatch]:
+        # Don't try to rescue if there is a successful name-based match
+        if any(isinstance(match, SuccessfulMatch) for match in this_matches):
+            yield from this_matches
+            return
+
+        res_atom_idcs = this_matches[0].res_atom_idcs
+
+        # in conects, node data is the pdb index, edge data is the sorted
+        # pdb indices of the two atoms in the CONECT record
+        # bonds to other residues are ignored - we'll deal with them later
+        conects = Graph[int, tuple[int, int]]()
+        conects.add_nodes_from(res_atom_idcs)
+        external_conects: list[tuple[int, int]] = []
+        for pdb_idx in res_atom_idcs:
+            for j in self.conects[pdb_idx]:
+                if j not in res_atom_idcs:
+                    external_conects.append((pdb_idx, j))
+                    continue
+                conects.add_edge(
+                    pdb_idx,
+                    j,
+                    sort_tuple((pdb_idx, j)),
+                )
+
         for match in this_matches:
+            # Always yield the original mismatch as a record that this rescue
+            # took place
+            yield match
             if not isinstance(match, ResidueMismatch):
-                yield match
+                # Only attempt to rescue ResidueMismatch
                 continue
 
             resdef = match.residue_definition
 
-            # TODO: Consider moving most of this block to subset_matches_indices
-            # In index_to_atomdef, None signifies we haven't found an atomdef
-            # for this pdb index yet
-            index_to_atomdef: dict[int, AtomDefinition | None] = {}
-            # In index_to_atomdef, None signifies that this atom name has been
-            # assigned to multiple pdb indices, which we treat as ambiguous
-            canonical_name_to_idx_or_none: dict[str, int | None] = {}
-            # in conects, node data is the pdb index, edge data is the sorted
-            # pdb indices of the two atoms in the CONECT record
-            conects = Graph[int, tuple[int, int]]()
-            conects.add_node(-1)  # -1 means this is an atom in another residue
-            conects.add_nodes_from(match.res_atom_idcs)
-            for pdb_idx in match.res_atom_idcs:
-                atomdef = resdef.name_to_atom.get(self.name[pdb_idx], None)
+            # Check that the CONECTs between this residue and another are
+            # compatible with this resdef
+            prior_conects: list[tuple[int, int]] = []
+            posterior_conects: list[tuple[int, int]] = []
+            crosslink_conects: list[tuple[int, int]] = []
+            unknown_conects: list[tuple[int, int]] = []
+            for pdb_idx, j in external_conects:
                 if (
-                    atomdef is None
-                    or (
-                        self.element[pdb_idx] != ""
-                        and atomdef.symbol.lower() != self.element[pdb_idx].lower()
-                    )
-                    or (
-                        self.charge[pdb_idx] is not None
-                        and atomdef.charge != self.charge[pdb_idx]
-                    )
+                    len(prev_matches) > 0
+                    and j in prev_matches[0].res_atom_idcs
+                    and (self.name[j], self.name[pdb_idx])
+                    in resdef.possible_prior_bond_names
                 ):
-                    # This atomdef doesn't match this atom
-                    index_to_atomdef[pdb_idx] = None
-                elif atomdef.name in canonical_name_to_idx_or_none:
-                    # This atomdef has already been assigned, but we don't want
-                    # duplicates. We clear it from index_to_atomdef, but not
-                    # from canonical_name_to_idx_or_none because if it comes up
-                    # again we still need to be able to recognize it
-                    other_idx = canonical_name_to_idx_or_none[atomdef.name]
-                    if other_idx is not None:
-                        index_to_atomdef[other_idx] = None
-                    index_to_atomdef[pdb_idx] = None
-                    canonical_name_to_idx_or_none[atomdef.name] = None
+                    prior_conects.append((j, pdb_idx))
+                elif (
+                    len(next_matches) > 0
+                    and j in next_matches[0].res_atom_idcs
+                    and (self.name[pdb_idx], self.name[j])
+                    in resdef.possible_posterior_bond_names
+                ):
+                    posterior_conects.append((pdb_idx, j))
+                elif (
+                    self.name[pdb_idx],
+                    self.name[j],
+                ) in resdef.possible_crosslink_bond_names:
+                    crosslink_conects.append((pdb_idx, j))
                 else:
-                    # This atomdef is safe
-                    index_to_atomdef[pdb_idx] = atomdef
+                    unknown_conects.append((pdb_idx, j))
+            if (
+                len(unknown_conects) > 0
+                or len(posterior_conects) > 1
+                or len(prior_conects) > 1
+                or len(crosslink_conects) > 1
+            ):
+                # Conects between this residue and another are incompatible with
+                # rescuing this resdef
+                continue
 
-                # While we're iterating, build up the conects graph
-                for j in self.conects[pdb_idx]:
-                    conects.add_edge(
-                        pdb_idx,
-                        j if j in match.res_atom_idcs else -1,
-                        sort_tuple((pdb_idx, j)),
-                    )
-            # Now we filter out Nones so that canonical_name_to_idx simply lacks
-            # any unmatched atomdefs
-            canonical_name_to_idx: dict[str, int] = {
-                k: v for k, v in canonical_name_to_idx_or_none.items() if v is not None
-            }
-            # Build up a map from sorted pdb index pairs representing expected
-            # bonds to the matched bonddef
-            idcs_to_bonddef: dict[tuple[int, int], BondDefinition] = {
-                sort_tuple(
-                    (
-                        canonical_name_to_idx[bond.atom1],
-                        canonical_name_to_idx[bond.atom2],
-                    ),
-                ): bond
-                for bond in resdef.bonds
-                if (
-                    bond.atom1 in canonical_name_to_idx
-                    and bond.atom2 in canonical_name_to_idx
-                )
-            }
-
-            # in bonds, int means we've matched to a PDB index and is that pdb
-            # index, AtomDefinition means we have yet to find a pdb index for
-            # that atomdef
-            # This means that bonds and conects' nodes will match exactly for
-            # already-matched atoms
-            bonds = Graph[int | AtomDefinition, BondDefinition]()
-            bonds.add_nodes_from(
-                canonical_name_to_idx.get(atom.name, atom) for atom in resdef.atoms
-            )
+            # Build up a graph of the internal bonds we expect from the residue definition
+            bonds = Graph[AtomDefinition, BondDefinition]()
+            bonds.add_nodes_from(resdef.atoms)
             bonds.add_edges_from(
-                (
-                    -1  # Same as in conects
-                    if bond.atom1 == "EXTERNAL_ATOM"
-                    else resdef.canonical_name_to_atom[bond.atom1],
-                    -1
-                    if bond.atom2 == "EXTERNAL_ATOM"
-                    else resdef.canonical_name_to_atom[bond.atom2],
-                    bond,
-                )
-                for bond in (
-                    *resdef.bonds,
-                    *(
-                        ()
-                        if resdef.crosslink is None
-                        else (resdef.crosslink.replace(atom2="EXTERNAL_ATOM"),)
-                    ),
-                    *(
-                        ()
-                        if resdef.linking_bond is None
-                        else (
-                            resdef.linking_bond.replace(atom2="EXTERNAL_ATOM"),
-                            resdef.linking_bond.replace(atom1="EXTERNAL_ATOM"),
-                        )
-                    ),
-                )
+                (resdef.name_to_atom[bond.atom1], resdef.name_to_atom[bond.atom2], bond)
+                for bond in resdef.bonds
             )
 
-            # TODO: Figure out how to accept matches with some missing leaving atoms
+            # Iterate over the subgraph matches
             for mapping in conects.get_mappings(
                 bonds,
                 node_matcher=lambda c, b: (
-                    c
-                    == b  # If the atoms are already assigned or are external to this residue
-                    or (
-                        not isinstance(
-                            b,
-                            int,
-                        )  # unequal ints should be a failure, c is always int
-                        and b.symbol.lower()
-                        == self.element[c].lower()  # elements must match
-                        and b.charge == (self.charge[c] or 0)  # charges must match
+                    self.element[c] == b.symbol
+                    and (
+                        (self.name[c] in (b.name, *b.synonyms))
+                        or ((self.charge[c] or 0) == b.charge)
                     )
                 ),
-                edge_matcher=lambda c, b: idcs_to_bonddef.get(c, b).order == b.order,
+                subgraph=True,
+                induced=False,  # CONECT records are optional as long as they're unambiguous
             ):
-                this_index_to_atomdef = dict(index_to_atomdef)
-                for c, b in mapping.items():
-                    if isinstance(b, int):
-                        continue
-                    assert this_index_to_atomdef[c] is None, (
-                        "otherwise mapping does not represent an isomorphism"
-                    )
-                    this_index_to_atomdef[c] = b
-                assert no_none_in_values(this_index_to_atomdef), (
-                    "otherwise mapping does not represent an isomorphism"
+                assert set(mapping) == set(match.res_atom_idcs)
+                match = ResidueMatch(
+                    residue_definition=resdef,
+                    index_to_atomdef=mapping,
                 )
+                missing_atoms = {
+                    atom for atom in resdef.atoms if atom not in mapping.values()
+                }
+                if (  # nofmt
+                    # All missing atoms must be leaving atoms
+                    any(not atom.leaving for atom in missing_atoms)
+                    # Missing atoms must exactly define linking bonds
+                    or not resdef._missing_atoms_are_valid_leaving_atoms(
+                        {atom.name for atom in resdef.atoms},
+                    )
+                    # If there are conect records, match must agree
+                    or (bool(crosslink_conects) and not match.expects_crosslink)
+                    or (bool(posterior_conects) and not match.expects_posterior_bond)
+                    or (bool(prior_conects) and not match.expects_prior_bond)
+                ):
+                    continue
                 # Yield multiple residue matches for multiple mappings and let
                 # the remaining filters sort it out; if we end up with multiple
                 # matches at the end of filtering, then we couldn't
                 # unambiguously rescue this match
-                yield ResidueMatch(
-                    residue_definition=resdef,
-                    index_to_atomdef=dict(this_index_to_atomdef),
-                )
-
-            # Still yield the original mismatch as a record that this rescue
-            # took place
-            yield match
+                yield match
 
     def match_residues(
         self,

@@ -105,8 +105,8 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
 
     def __init__(
         self,
-        library_paths: Iterable[Path],
-        cache_path: Path = Path(
+        library_paths: Iterable[Path | str],
+        cache_path: Path | str = Path(
             xdg_base_dir.save_cache_path("openff-pablo"),
             "ccd_cache",
         ),
@@ -119,9 +119,9 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         ] = {},
         extra_definitions: Mapping[str, Iterable[ResidueDefinition]] = {},
     ):
-        self._cache_path = cache_path.resolve()
+        self._cache_path = Path(cache_path).resolve()
         self._cache_path.mkdir(parents=True, exist_ok=True)
-        self._library_paths = {path.resolve() for path in library_paths}
+        self._library_paths = {Path(path).resolve() for path in library_paths}
 
         self._definitions: dict[str, list[ResidueDefinition]] = {}
         self._patches: list[
@@ -153,7 +153,6 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         if res_name in ["UNK", "UNL"] and res_name not in self._definitions:
             # These residue names are reserved for unknown ligands/peptide residues
             raise KeyError(res_name, "reserved residue name")
-
         # Check the loaded definitions
         try:
             return self._definitions[res_name]
@@ -192,16 +191,15 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         with _skip_residue_definition_validation():
             definitions: list[ResidueDefinition] = [residue_definition]
             for patch_dict in self._patches:
+                star_patch = patch_dict.get("*", lambda x: [x])
+                res_patch = patch_dict.get(
+                    residue_definition.residue_name.upper(),
+                    lambda x: [x],
+                )
                 patched_definitions: list[ResidueDefinition] = []
                 for definition in definitions:
-                    star_patch = patch_dict.get("*", lambda x: [x])
-                    res_patch = patch_dict.get(
-                        residue_definition.residue_name.upper(),
-                        lambda x: [x],
-                    )
                     for star_patched_res in star_patch(definition):
-                        for patched_res in res_patch(star_patched_res):
-                            patched_definitions.append(patched_res)
+                        patched_definitions.extend(res_patch(star_patched_res))
                 definitions = patched_definitions
 
         for definition in definitions:
@@ -216,7 +214,6 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         patch: bool = False,
     ) -> list[ResidueDefinition]:
         definition = self._res_def_from_ccd_str(s)
-
         if res_name is None:
             res_name = definition.residue_name.upper()
 
@@ -228,18 +225,23 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         res_name: str,
         patch: bool = False,
     ) -> list[ResidueDefinition]:
+        definitions = list(definitions)
         for definition in definitions:
             if res_name != definition.residue_name.upper():
                 raise ValueError(
                     f"ResidueDefinition {definition.residue_name}"
                     + f" ({definition.description}) must have residue name {res_name}",
                 )
-
         if patch:
             definitions = flatten(map(self._apply_patches, definitions))
 
         stored_definitions = self._definitions.setdefault(res_name, [])
-        stored_definitions.extend(set(definitions) - set(stored_definitions))
+        # Using a dict comprehension here rather than simple
+        # set(definitions) - set(stored_definitions) to preserve ordering
+        old_definitions = set(stored_definitions)
+        stored_definitions.extend(
+            {k: None for k in definitions if k not in old_definitions},
+        )
         return stored_definitions
 
     def _download_cif(self, resname: str) -> str:
@@ -493,6 +495,18 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         for resname in residue_names:
             del new._definitions[resname]
         return new
+
+    def with_patch(
+        self,
+        residue_name: str,
+        patch: Callable[[ResidueDefinition], list[ResidueDefinition]],
+    ) -> Self:
+        self._patches.append({residue_name: patch})
+        if residue_name in self._definitions:
+            self._definitions[residue_name] = list(
+                flatten(patch(resdef) for resdef in self._definitions[residue_name]),
+            )
+        return self
 
 
 # TODO: Fill in this data

@@ -3,7 +3,7 @@ Classes for defining custom residues.
 """
 
 import dataclasses
-from collections.abc import Collection, Iterable, Iterator, Mapping
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
@@ -239,6 +239,9 @@ class ResidueDefinition:
     All atoms must have unique canonical names."""
     bonds: tuple[BondDefinition, ...]
     """The bond definitions that make up this residue"""
+
+    def __repr__(self) -> str:
+        return f"ResidueDefinition(description={self.description}, ...)"
 
     def replace(
         self,
@@ -804,3 +807,101 @@ class ResidueDefinition:
                     ),
                 )
         return variants
+
+    def with_synonyms(self, synonyms: Mapping[str, Sequence[str]]) -> Self:
+        """Return a copy of self with the given synonyms added
+
+        ``synonyms`` is a mapping from canonical atom names to its additional
+        synonyms. Existing synonyms are preserved.
+        """
+        return self.replace(
+            atoms=(
+                atom.replace(
+                    synonyms={
+                        *atom.synonyms,
+                        *synonyms.get(
+                            atom.name,
+                            [],
+                        ),
+                    },
+                )
+                for atom in self.atoms
+            ),
+        )
+
+    def _missing_atoms_are_valid_leaving_atoms(
+        self,
+        missing_atom_names: Collection[str],
+    ) -> bool:
+        """
+        ``True`` if the missing atom names form a valid set of leaving atoms, ``False`` if not.
+
+        A valid set must all be marked as leaving atoms and must all be
+        assignable to a linking or crosslinking bond.
+        """
+        missing_atom_names = set(missing_atom_names)
+        return (
+            (
+                missing_atom_names.issuperset(
+                    self.prior_bond_leaving_atoms,
+                )
+                or missing_atom_names.isdisjoint(
+                    self.prior_bond_leaving_atoms,
+                )
+            )
+            and (
+                missing_atom_names.issuperset(
+                    self.posterior_bond_leaving_atoms,
+                )
+                or missing_atom_names.isdisjoint(
+                    self.posterior_bond_leaving_atoms,
+                )
+            )
+            and (
+                missing_atom_names.issuperset(
+                    self.crosslink_leaving_atoms,
+                )
+                or missing_atom_names.isdisjoint(
+                    self.crosslink_leaving_atoms,
+                )
+            )
+        )
+
+    def _possible_prior_bond_names(self) -> Iterator[tuple[str, str]]:
+        if self.linking_bond is None:
+            return
+        linking_atom = self.canonical_name_to_atom[self.prior_bond_linking_atom]
+        partner_atom = self.canonical_name_to_atom[self.posterior_bond_linking_atom]
+        for linking_name in (linking_atom.name, *linking_atom.synonyms):
+            for partner_name in (partner_atom.name, *linking_atom.synonyms):
+                yield (partner_name, linking_name)
+
+    @cached_property
+    def possible_prior_bond_names(self) -> set[tuple[str, str]]:
+        return set(self._possible_prior_bond_names())
+
+    def _possible_posterior_bond_names(self) -> Iterator[tuple[str, str]]:
+        if self.linking_bond is None:
+            return
+        linking_atom = self.canonical_name_to_atom[self.posterior_bond_linking_atom]
+        partner_atom = self.canonical_name_to_atom[self.prior_bond_linking_atom]
+        for linking_name in (linking_atom.name, *linking_atom.synonyms):
+            for partner_name in (partner_atom.name, *linking_atom.synonyms):
+                yield (linking_name, partner_name)
+
+    @cached_property
+    def possible_posterior_bond_names(self) -> set[tuple[str, str]]:
+        return set(self._possible_posterior_bond_names())
+
+    def _possible_crosslink_bond_names(self) -> Iterator[tuple[str, str]]:
+        if self.crosslink is None:
+            return
+        linking_atom = self.canonical_name_to_atom[self.crosslink.atom1]
+        partner_atom = self.canonical_name_to_atom[self.crosslink.atom2]
+        for linking_name in (linking_atom.name, *linking_atom.synonyms):
+            for partner_name in (partner_atom.name, *linking_atom.synonyms):
+                yield (linking_name, partner_name)
+
+    @cached_property
+    def possible_crosslink_bond_names(self) -> set[tuple[str, str]]:
+        return set(self._possible_crosslink_bond_names())

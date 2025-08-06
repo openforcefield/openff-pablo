@@ -212,14 +212,13 @@ def topology_from_pdb(
     topology = Topology.from_molecules(filter(lambda m: m.n_atoms != 0, molecules))
 
     topology_pdb_indices = [atom.metadata["pdb_index"] for atom in topology.atoms]
-    n = len(topology_pdb_indices)
-    positions = np.stack([data.x[:n], data.y[:n], data.z[:n]], axis=-1) * unit.angstrom
+    positions = np.stack([data.x, data.y, data.z], axis=-1) * unit.angstrom
     topology.set_positions(positions[topology_pdb_indices])
-    if topology_pdb_indices != list(range(n)):
+    if topology_pdb_indices != list(range(len(topology_pdb_indices))):
         logging.debug(
             "\n".join(
-                f"topology index {j: <n} has pdb index {i: <n}"
-                for i, j in zip(topology_pdb_indices, range(n))
+                f"topology index {j: <7} has pdb index {i: <7}"
+                for j, i in enumerate(topology_pdb_indices)
                 if i != j
             ),
         )

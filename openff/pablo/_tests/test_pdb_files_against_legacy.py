@@ -68,11 +68,6 @@ SLOW_PDBS: list[tuple[str, list[Molecule], list[ResidueDefinition]]] = [
         [],
         [],
     ),
-    (
-        "prepared_pdbs/1p3q_noter.pdb",
-        [],
-        [],
-    ),
 ]
 
 

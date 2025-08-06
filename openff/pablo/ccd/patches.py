@@ -172,23 +172,7 @@ def add_synonyms(res: ResidueDefinition) -> list[ResidueDefinition]:
     """
     Patch a residue definition to include synonyms from :py:data:`ATOM_NAME_SYNONYMS`.
     """
-    patched_residues = [
-        res.replace(
-            atoms=(
-                atom.replace(
-                    synonyms={
-                        *atom.synonyms,
-                        *ATOM_NAME_SYNONYMS.get(res.residue_name, {}).get(
-                            atom.name,
-                            [],
-                        ),
-                    },
-                )
-                for atom in res.atoms
-            ),
-        ),
-    ]
-    return patched_residues
+    return [res.with_synonyms(ATOM_NAME_SYNONYMS.get(res.residue_name, {}))]
 
 
 def disambiguate_alt_ids(res: ResidueDefinition) -> list[ResidueDefinition]:

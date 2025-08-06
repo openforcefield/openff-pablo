@@ -1,3 +1,4 @@
+from collections import defaultdict
 from collections.abc import Mapping, Sequence
 
 import pytest
@@ -747,3 +748,65 @@ def test_microviridin_crosslinks():
         get_test_data_path("microviridin_edited.pdb").absolute(),
         residue_database=custom_residue_database,
     )
+
+
+@pytest.mark.slow
+def test_complex_pdb_1flr():
+    ligand = Molecule.from_file(
+        get_test_data_path("prepared_pdbs/1FLR_Ligand.sdf"),
+        file_format="SDF",
+    )
+    assert isinstance(ligand, Molecule)
+
+    with pytest.warns(
+        match="Alt locs not supported; only empty or 'A' alt locs will be read",
+    ):
+        topology = topology_from_pdb(
+            get_test_data_path("prepared_pdbs/1FLR_prepared.pdb"),
+            unknown_molecules=[ligand],
+            residue_database=CCD_RESIDUE_DEFINITION_CACHE.with_(
+                {
+                    "NMA": [
+                        ResidueDefinition.from_smiles(
+                            "[N:1]([H:2])([H:7])[C:3]([H:4])([H:5])[H:6]",
+                            atom_names={
+                                1: "N",
+                                2: "H",
+                                7: "H2",
+                                3: "CA",
+                                4: "1HA",
+                                5: "2HA",
+                                6: "3HA",
+                            },
+                            residue_name="NMA",
+                            linking_bond=PEPTIDE_BOND,
+                            leaving_atoms=[7],
+                            description="Maestro NME",
+                        ),
+                    ],
+                },
+            ).with_patch("THR", lambda resdef: [resdef.with_synonyms({"OXT": ["O2"]})]),
+        )
+
+    uniques = {}
+    for mol in topology.molecules:
+        assert isinstance(mol, Molecule)
+        if mol.n_atoms > 3:
+            assert mol.hill_formula not in uniques.keys()
+            uniques[mol.hill_formula] = mol
+        else:
+            if mol.to_smiles in uniques.keys():
+                pass
+            else:
+                uniques[mol.to_smiles()] = mol
+
+    chains: defaultdict[int | str, list[int]] = defaultdict(list)
+    for i, atom in enumerate(topology.atoms):
+        chains[atom.metadata["chain_id"]].append(i)
+
+    # Hardcorded from match counts of regexes:
+    #   (ATOM  |HETATM).{10}(A| )
+    #   (ATOM  |HETATM).{10}(A| ).{4}H
+    #   (ATOM  |HETATM).{10}(A| ).{4}L
+    assert topology.n_atoms == 7539
+    assert {k: len(v) for k, v in chains.items()} == {"H": 3712, "L": 3827}
