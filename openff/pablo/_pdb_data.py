@@ -512,7 +512,7 @@ class PdbData:
                     yield match.reject(reason)
                     continue
                 else:
-                    match.set_prior_bond(
+                    bond_idcs = (
                         neighbour_supported_prior_bonds[
                             match.residue_definition.linking_bond
                         ],
@@ -520,6 +520,15 @@ class PdbData:
                             match.residue_definition.prior_bond_linking_atom
                         ],
                     )
+                    if (
+                        match.prior_bond_idcs is not None
+                        and match.prior_bond_idcs != bond_idcs
+                    ):
+                        reason = "Multiple inconsistent prior bonds identified"
+                        logging.debug(f"    Match failed: {reason}")
+                        yield match.reject(reason)
+                        continue
+                    match.set_prior_bond(*bond_idcs)
             elif not neighbours_support_molecule_start:
                 reason = "Prior bond not expected but required by neighbours"
                 logging.debug(f"    Match failed: {reason}")
@@ -541,7 +550,7 @@ class PdbData:
                     yield match.reject(reason)
                     continue
                 else:
-                    match.set_posterior_bond(
+                    bond_idcs = (
                         match.canonical_atom_name_to_index[
                             match.residue_definition.posterior_bond_linking_atom
                         ],
@@ -549,6 +558,15 @@ class PdbData:
                             match.residue_definition.linking_bond
                         ],
                     )
+                    if (
+                        match.posterior_bond_idcs is not None
+                        and match.posterior_bond_idcs != bond_idcs
+                    ):
+                        reason = "Multiple inconsistent posterior bonds identified"
+                        logging.debug(f"    Match failed: {reason}")
+                        yield match.reject(reason)
+                        continue
+                    match.set_posterior_bond(*bond_idcs)
             elif not neighbours_support_molecule_end:
                 reason = "Posterior bond not expected but required by neighbours"
                 logging.debug(f"    Match failed: {reason}")
