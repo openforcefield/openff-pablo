@@ -90,6 +90,13 @@ class PdbData:
     - residue name may extend into column 21 iff the reside name has 4
     non-whitespace characters"""
 
+    def __repr__(self) -> str:
+        return (
+            f"PdbData.from_file({self.src_filename})"
+            if self.src_filename is not None
+            else f"<PdbData with {len(self.name)} records>"
+        )
+
     @classmethod
     def from_file(cls, path: str | PathLike[str]) -> Self:
         with open(path) as f:
@@ -276,6 +283,34 @@ class PdbData:
             raise ValueError("cannot match empty res_atom_idcs")
 
         logging.debug(f"  Attempting match against {residue_definition.description}")
+
+        # Drop virtual sites
+        expected_vsites = list(residue_definition.virtual_sites)
+        res_atom_idcs_without_vsites: list[int] = []
+        for i in tuple(res_atom_idcs):
+            name = self.name[i]
+            if name in residue_definition.virtual_sites:
+                try:
+                    expected_vsites.pop(expected_vsites.index(name))
+                except (ValueError, IndexError):
+                    reason = f"Required virtual site {name} appeared too many times"
+                    logging.debug("    Match failed: " + reason)
+                    return ResidueMismatch(
+                        residue_definition=residue_definition,
+                        index_to_atomdef={i: None for i in res_atom_idcs},
+                        reason=reason,
+                    )
+            else:
+                res_atom_idcs_without_vsites.append(i)
+        if len(expected_vsites) != 0:
+            reason = f"Required virtual sites not found in PDB file: {', '.join(expected_vsites)}"
+            logging.debug("    Match failed: " + reason)
+            return ResidueMismatch(
+                residue_definition=residue_definition,
+                index_to_atomdef={i: None for i in res_atom_idcs},
+                reason=reason,
+            )
+        res_atom_idcs = res_atom_idcs_without_vsites
 
         # Skip definitions with too few atoms
         if len(residue_definition.atoms) < len(res_atom_idcs):

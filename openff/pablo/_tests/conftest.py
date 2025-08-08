@@ -170,6 +170,7 @@ def cys_def() -> ResidueDefinition:
         linking_bond=PEPTIDE_BOND,
         description="CYSTEINE",
         residue_name="CYS",
+        virtual_sites=(),
     )
 
 
@@ -195,6 +196,7 @@ def cys_def_deprotonated_sidechain(
         linking_bond=PEPTIDE_BOND,
         description="CYSTEINE",
         residue_name="CYS",
+        virtual_sites=(),
     )
 
 
@@ -218,6 +220,7 @@ def hoh_def() -> ResidueDefinition:
         linking_bond=None,
         description="water",
         residue_name="HOH",
+        virtual_sites=(),
     )
 
 
@@ -250,6 +253,7 @@ def hoh_def_with_synonyms() -> ResidueDefinition:
         linking_bond=None,
         description="water",
         residue_name="HOH",
+        virtual_sites=(),
     )
 
 
@@ -287,6 +291,7 @@ def gly_def_neutral() -> ResidueDefinition:
         linking_bond=PEPTIDE_BOND,
         description="GLYCINE",
         residue_name="GLY",
+        virtual_sites=(),
     )
 
 
@@ -324,6 +329,7 @@ def gly_def_zwitterionic() -> ResidueDefinition:
         linking_bond=PEPTIDE_BOND,
         description="GLYCINE",
         residue_name="GLY",
+        virtual_sites=(),
     )
 
 

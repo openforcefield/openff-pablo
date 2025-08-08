@@ -246,6 +246,19 @@ class ResidueDefinition:
     All atoms must have unique canonical names."""
     bonds: tuple[BondDefinition, ...]
     """The bond definitions that make up this residue"""
+    virtual_sites: tuple[str, ...]
+    """Atom names that represent virtual sites.
+
+    All these names must be present for the residue definition to match."""
+
+    @property
+    def n_expected_atoms(self) -> int:
+        """The number of atoms that a matching residue without any linkages has.
+
+        In practice, the number of atoms including leaving atoms, plus the
+        number of virtual sites.
+        """
+        return len(self.atoms) + len(self.virtual_sites)
 
     def __repr__(self) -> str:
         return f"ResidueDefinition(description={self.description!r}, ...)"
@@ -259,6 +272,7 @@ class ResidueDefinition:
         crosslink: BondDefinition | None | __UNSET__ = __UNSET__(),
         atoms: Iterable[AtomDefinition] | __UNSET__ = __UNSET__(),
         bonds: Iterable[BondDefinition] | __UNSET__ = __UNSET__(),
+        virtual_sites: Iterable[str] | __UNSET__ = __UNSET__(),
     ) -> Self:
         return self.__class__(
             residue_name=(
@@ -277,6 +291,11 @@ class ResidueDefinition:
             crosslink=self.crosslink if isinstance(crosslink, __UNSET__) else crosslink,
             atoms=self.atoms if isinstance(atoms, __UNSET__) else tuple(atoms),
             bonds=self.bonds if isinstance(bonds, __UNSET__) else tuple(bonds),
+            virtual_sites=(
+                self.virtual_sites
+                if isinstance(virtual_sites, __UNSET__)
+                else tuple(virtual_sites)
+            ),
         )
 
     def __post_init__(self):
@@ -422,6 +441,7 @@ class ResidueDefinition:
             crosslink=crosslink,
             atoms=tuple(atoms),
             bonds=tuple(bonds),
+            virtual_sites=(),
         )
 
     @classmethod

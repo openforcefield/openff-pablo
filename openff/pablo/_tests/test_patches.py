@@ -23,6 +23,7 @@ def test_disambiguate_alt_ids():
             description="water with clashing synonyms",
             linking_bond=BondDefinition.with_defaults("O", "H2", order=0),
             residue_name="HOH",
+            virtual_sites=(),
         )
         res1, res2 = disambiguate_alt_ids(with_synonyms)
 
