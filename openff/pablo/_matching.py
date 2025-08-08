@@ -5,7 +5,7 @@ from typing import ClassVar, Protocol, Self, TypeAlias
 
 from openff.toolkit import Molecule
 
-from .residue import AtomDefinition, BondDefinition, ResidueDefinition
+from .residue import AtomDefinition, ResidueDefinition
 
 
 @dataclass(frozen=True)
@@ -128,36 +128,32 @@ class ResidueMatch(MatchProtocol):
             raise ValueError("bad crosslink index(es)")
         object.__setattr__(self, "crosslink_idcs", (atom1_idx, atom2_idx))
 
-    def set_prior_bond(self, d: dict[BondDefinition, int]) -> None:
+    def set_prior_bond(self, atom1_idx: int, atom2_idx: int) -> None:
         if self.residue_definition.linking_bond is None:
             raise ValueError("cannot set prior bond without linking_bond")
+        if atom1_idx in self.res_atom_idcs:
+            raise ValueError("atom1 in prior bond should be in previous residue")
+        if atom2_idx not in self.res_atom_idcs:
+            raise ValueError("atom2 in prior bond should be in this residue")
 
-        prior_bond_idcs: tuple[int, int] = (
-            d[self.residue_definition.linking_bond],
-            self.canonical_atom_name_to_index[
-                self.residue_definition.prior_bond_linking_atom
-            ],
-        )
         object.__setattr__(
             self,
             "prior_bond_idcs",
-            prior_bond_idcs,
+            (atom1_idx, atom2_idx),
         )
 
-    def set_posterior_bond(self, d: dict[BondDefinition, int]) -> None:
+    def set_posterior_bond(self, atom1_idx: int, atom2_idx: int) -> None:
         if self.residue_definition.linking_bond is None:
             raise ValueError("cannot set posterior bond without linking_bond")
+        if atom1_idx not in self.res_atom_idcs:
+            raise ValueError("atom1 in posterior bond should be in this residue")
+        if atom2_idx in self.res_atom_idcs:
+            raise ValueError("atom2 in posterior bond should be in next residue")
 
-        posterior_bond_idcs: tuple[int, int] = (
-            d[self.residue_definition.linking_bond],
-            self.canonical_atom_name_to_index[
-                self.residue_definition.posterior_bond_linking_atom
-            ],
-        )
         object.__setattr__(
             self,
             "posterior_bond_idcs",
-            posterior_bond_idcs,
+            (atom1_idx, atom2_idx),
         )
 
     @cached_property
@@ -302,6 +298,21 @@ class MoleculeMatch(MatchProtocol):
     @property
     def match(self) -> Self:
         return self
+
+
+class ResidueConectMismatch(ResidueMismatch):
+    @property
+    def description(self) -> str:
+        return f"{self.residue_definition.description} (CONECT-based) failed to match: {self.reason}"
+
+
+class ResidueConectMatch(ResidueMatch):
+    def reject(self, reason: str) -> ResidueConectMismatch:
+        return ResidueConectMismatch(
+            residue_definition=self.residue_definition,
+            index_to_atomdef=self.index_to_atomdef,
+            reason=reason,
+        )
 
 
 SuccessfulMatch: TypeAlias = ResidueMatch | MoleculeMatch

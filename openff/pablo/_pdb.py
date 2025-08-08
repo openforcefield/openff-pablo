@@ -9,7 +9,7 @@ import numpy as np
 from openff.toolkit import Molecule, Topology
 from openff.units import elements, unit
 
-from openff.pablo._matching import MoleculeMatch
+from openff.pablo._matching import MoleculeMatch, SuccessfulMatch
 
 from ._pdb_data import PdbData, ResidueMatch
 from ._utils import (
@@ -27,6 +27,7 @@ __all__ = [
 
 def topology_from_pdb(
     file: PathLike[str] | str | IO[str] | TextIOBase,
+    *,
     unknown_molecules: Iterable[Molecule] = [],
     residue_database: Mapping[
         str,
@@ -36,7 +37,6 @@ def topology_from_pdb(
     use_canonical_names: bool = False,
     ignore_unknown_CONECT_records: bool = False,
     set_stereochemistry_from_3d: bool = True,
-    verbose_errors: bool = False,
 ) -> Topology:
     """
     Load a PDB file into an OpenFF ``Topology``.
@@ -92,8 +92,6 @@ def topology_from_pdb(
         If ``True``, stereochemistry will be set according to the structure of
         the PDB file. This takes considerable time. If ``False``, leave stereo
         as set in the ``ResidueDefinition``.
-    verbose_errors
-        If ``True``, give more detailed error reports. These can get quite long.
 
     Notes
     -----
@@ -115,8 +113,8 @@ def topology_from_pdb(
     atom ordering cannot be represented in :py:class:`openff.toolkit.Topology`
     unless all 3 chains are included in a single
     :py:class:`openff.toolkit.Molecule`, which would then represent two distinct
-    molecules. When this occurs, atoms from the latter chain(s) appear
-    immediately after the first, and atoms from other molecules appear after.
+    chemical molecules. When this occurs, atoms from the latter chain(s) appear
+    immediately after the first, and atoms from other molecules appear later.
 
     The following metadata are specified for all atoms produced by this function
     and can be accessed via ``topology.atom(i).metadata[key]``:
@@ -168,13 +166,39 @@ def topology_from_pdb(
     else:
         data = PdbData.from_file(file)  # type: ignore
 
+    topology = _build_topology(
+        matches=data.get_residue_matches(
+            residue_database,
+            additional_substructures,
+            unknown_molecules,
+        ),
+        data=data,
+        use_canonical_names=use_canonical_names,
+    )
+
+    if set_stereochemistry_from_3d:
+        for molecule in topology.molecules:
+            # TODO: Speed this up
+            #   - Build up molecules in RDMol form to skip conversion step?
+            # This accounts for nearly half of the time to load 5ap1_prepared.pdb
+            assign_stereochemistry_from_3d(molecule)
+
+    if not ignore_unknown_CONECT_records:
+        _check_all_conects(topology, data)
+
+    return topology
+
+
+def _build_topology(
+    matches: Iterable[SuccessfulMatch],
+    data: PdbData,
+    *,
+    use_canonical_names: bool,
+) -> Topology:
     this_molecule = Molecule()
     molecules: list[Molecule] = [this_molecule]
-    for chemical_data in data.get_residue_matches(
-        residue_database,
-        additional_substructures,
-        unknown_molecules,
-    ):
+
+    for chemical_data in matches:
         # Apply the chemical data we've collected
         if isinstance(chemical_data, MoleculeMatch):
             this_molecule = chemical_data.residue_definition
@@ -227,16 +251,6 @@ def topology_from_pdb(
             + " OpenFF Topology. The atoms in this topology will not be in same"
             + " order as those in PDB file",
         )
-
-    if set_stereochemistry_from_3d:
-        for molecule in topology.molecules:
-            # TODO: Speed this up
-            #   - Build up molecules in RDMol form to skip conversion step?
-            # This accounts for nearly half of the time to load 5ap1_prepared.pdb
-            assign_stereochemistry_from_3d(molecule)
-
-    if not ignore_unknown_CONECT_records:
-        _check_all_conects(topology, data)
 
     _set_box_vectors(topology, data)
 

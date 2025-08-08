@@ -32,6 +32,14 @@ class Graph(Generic[NodeT, EdgeT]):
     def __contains__(self, item: NodeT | EdgeT):
         return item in self._node_idcs or item in self._edge_idcs
 
+    @property
+    def n_nodes(self) -> int:
+        return self._graph.num_nodes()
+
+    @property
+    def n_edges(self) -> int:
+        return self._graph.num_edges()
+
     def add_edge(self, node_a: NodeT, node_b: NodeT, edge: EdgeT):
         node_a_idx = self._node_idcs.get(node_a, self._out_of_bounds_node)
         node_b_idx = self._node_idcs.get(node_b, self._out_of_bounds_node)

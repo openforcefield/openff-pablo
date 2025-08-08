@@ -127,7 +127,6 @@ def connectivity_and_atom_order_and_net_residue_charge_and_metadata_matches_lega
         filename,
         unknown_molecules=unknown_molecules,
         additional_substructures=additional_substructures,
-        verbose_errors=True,
     )
 
     assert pablo_top.n_molecules == legacy_top.n_molecules

@@ -849,7 +849,7 @@ def test_filter_on_polymer_linkages_sets_posterior_bond(
     assert len(filtered_matches) == 1
     assert isinstance(filtered_matches[0], ResidueMatch)
     assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
-    assert filtered_matches[0].posterior_bond_idcs == (10, 2)
+    assert filtered_matches[0].posterior_bond_idcs == (2, 10)
 
 
 def test_filter_on_polymer_linkages_rejects_no_posterior_bond_without_molecule_start(

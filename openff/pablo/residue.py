@@ -105,6 +105,13 @@ class AtomDefinition:
             stereo=self.stereo if isinstance(stereo, __UNSET__) else stereo,
         )
 
+    def __repr__(self) -> str:
+        return (
+            f"AtomDefinition(name={self.name!r}"
+            + (f", synonyms={self.synonyms!r}" if self.synonyms else "")
+            + ", ...)"
+        )
+
 
 @dataclass(frozen=True)
 class BondDefinition:
@@ -241,7 +248,7 @@ class ResidueDefinition:
     """The bond definitions that make up this residue"""
 
     def __repr__(self) -> str:
-        return f"ResidueDefinition(description={self.description}, ...)"
+        return f"ResidueDefinition(description={self.description!r}, ...)"
 
     def replace(
         self,
@@ -755,11 +762,11 @@ class ResidueDefinition:
     def vary_protonation(
         self,
         *,
-        acidic: Iterable[str],
+        acidic: Iterable[str] = (),
         # Each element specifies an atom name to remove, decrementing the formal
         # charge on the neighbouring heavy atom. Multiply bonded or non-hydrogen
         # atoms raise an error.
-        basic: Iterable[tuple[str, str]],
+        basic: Iterable[tuple[str, str]] = (),
         # Each tuple specifies an atom name to protonate (increment the formal
         # charge and form a bond) and the name of the added proton
         ignore_synonym_clashes: bool = False,
