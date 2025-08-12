@@ -1066,6 +1066,11 @@ class PdbData:
 
             resdef = match.residue_definition
 
+            if len(resdef.virtual_sites) != 0:
+                # No CONECT-based matches for resdefs with virtual sites
+                # TODO: Implement this?
+                continue
+
             logging.debug(
                 f"Attempting to rescue with CONECT records {resdef.description} {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
             )
