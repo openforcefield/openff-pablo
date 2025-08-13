@@ -521,13 +521,31 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         )
 
     def with_vsite_water(self) -> Self:
-        return self.with_patch(
-            "HOH",
-            lambda resdef: [
-                resdef,
-                resdef.replace(virtual_sites=["EPW"]),
-                resdef.replace(virtual_sites=["EPW1", "EPW2"]),
-            ],
+        def add_vsites_to_water(resdef: ResidueDefinition) -> list[ResidueDefinition]:
+            if resdef.n_expected_atoms == 3 and {
+                atom.name for atom in resdef.atoms
+            } == {"O", "H1", "H2"}:
+                return [
+                    resdef,
+                    resdef.replace(virtual_sites=["EPW"]),
+                    resdef.replace(virtual_sites=["EP1", "EP2"]),
+                ]
+            else:
+                return [resdef]
+
+        return (
+            self.with_patch(
+                "HOH",
+                add_vsites_to_water,
+            )
+            .with_patch(
+                "WAT",
+                add_vsites_to_water,
+            )
+            .with_patch(
+                "SOL",
+                add_vsites_to_water,
+            )
         )
 
 
