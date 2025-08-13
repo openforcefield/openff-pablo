@@ -630,7 +630,7 @@ class PdbData:
                         other_match.expects_crosslink
                         and other_crosslink_def is not None
                         and other_crosslink_def.flipped() == this_crosslink_def
-                        and other_crosslink_def.atom2
+                        and other_crosslink_def.atom1
                         == other_crosslink_atom_canonical_name
                     ):
                         logging.debug(
@@ -872,7 +872,7 @@ class PdbData:
     def _match_unknown_molecules_to_indices(
         self,
         indices: Sequence[int],
-        unknown_molecules: Iterable[Molecule],
+        unknown_molecules: Sequence[Molecule],
     ) -> Molecule | None:
         conects: set[tuple[int, int]] = set()
         pdb_idx_to_mol_idx: dict[int, int] = {}
@@ -940,11 +940,11 @@ class PdbData:
         prev_matches: Sequence[PossibleResidueMatch],
         next_matches: Sequence[PossibleResidueMatch],
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
-        unknown_molecules: Iterable[Molecule],
+        unknown_molecules: Sequence[Molecule],
     ) -> Iterator[PossibleResidueMatch]:
         yield from this_matches
 
-        if any(this_matches):
+        if any(this_matches) or len(unknown_molecules) == 0:
             return
 
         logging.debug(
@@ -1001,7 +1001,7 @@ class PdbData:
             self.choose_polymer_bonds,
             functools.partial(
                 self.match_unknown_molecules,
-                unknown_molecules=unknown_molecules,
+                unknown_molecules=list(unknown_molecules),
             ),
         ]
         for match_filter in match_filters:
