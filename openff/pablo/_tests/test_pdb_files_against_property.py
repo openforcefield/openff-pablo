@@ -638,3 +638,112 @@ def test_5ap1_prepared_fails_with_broken_resdefs(
                 ),
             ],
         )
+
+
+def test_microviridin_crosslinks():
+    from openff.pablo import CCD_RESIDUE_DEFINITION_CACHE, topology_from_pdb
+    from openff.pablo.residue import BondDefinition
+
+    custom_residue_database = CCD_RESIDUE_DEFINITION_CACHE.with_(
+        {
+            "TH4": [
+                resdef.replace(
+                    residue_name="TH4",
+                    crosslink=BondDefinition.with_defaults(atom1="OG1", atom2="CG"),
+                    atoms=[
+                        atom.replace(leaving=True) if atom.name == "HG1" else atom
+                        for atom in resdef.atoms
+                    ],
+                    description=resdef.description + " w/ crosslink",
+                )
+                for resdef in CCD_RESIDUE_DEFINITION_CACHE["THR"]
+                if resdef.description == "THREONINE"
+            ],
+            "A10": [
+                resdef.replace(
+                    residue_name="A10",
+                    crosslink=BondDefinition.with_defaults(atom1="CG", atom2="OG1"),
+                    atoms=[
+                        (
+                            atom.replace(leaving=True)
+                            if atom.name in {"OD2", "HD2"}
+                            else atom
+                        )
+                        for atom in resdef.atoms
+                    ],
+                    description=resdef.description + " w/ crosslink",
+                )
+                for resdef in CCD_RESIDUE_DEFINITION_CACHE["ASP"]
+                if resdef.description == "ASPARTIC ACID"
+            ],
+            "LY6": [
+                resdef.replace(
+                    residue_name="LY6",
+                    crosslink=BondDefinition.with_defaults(atom1="NZ", atom2="CD"),
+                    atoms=[
+                        (
+                            atom.replace(leaving=True)
+                            if atom.name in {"HZ2", "HZ3"}
+                            else (
+                                atom.replace(synonyms=(*atom.synonyms, "HZ"))
+                                if atom.name == "HZ1"
+                                else atom
+                            )
+                        )
+                        for atom in resdef.atoms
+                    ],
+                    description=resdef.description + " w/ crosslink",
+                )
+                for resdef in CCD_RESIDUE_DEFINITION_CACHE["LYS"]
+                if resdef.description == "LYSINE"
+            ],
+            "G13": [
+                resdef.replace(
+                    residue_name="G13",
+                    crosslink=BondDefinition.with_defaults(atom1="CD", atom2="NZ"),
+                    atoms=[
+                        atom.replace(leaving=True)
+                        if atom.name in ("OE2", "HE2")
+                        else atom
+                        for atom in resdef.atoms
+                    ],
+                    description=resdef.description + " w/ crosslink",
+                )
+                for resdef in CCD_RESIDUE_DEFINITION_CACHE["GLU"]
+                if resdef.description == "GLUTAMIC ACID"
+            ],
+            "SE9": [
+                resdef.replace(
+                    residue_name="SE9",
+                    crosslink=BondDefinition.with_defaults(atom1="OG", atom2="CD"),
+                    atoms=[
+                        atom.replace(leaving=True) if atom.name == "HG" else atom
+                        for atom in resdef.atoms
+                    ],
+                    description=resdef.description + " w/ crosslink",
+                )
+                for resdef in CCD_RESIDUE_DEFINITION_CACHE["SER"]
+                if resdef.description == "SERINE"
+            ],
+            "G12": [
+                resdef.replace(
+                    residue_name="G12",
+                    crosslink=BondDefinition.with_defaults(atom1="CD", atom2="OG"),
+                    atoms=[
+                        atom.replace(leaving=True)
+                        if atom.name in ("OE2", "HE2")
+                        else atom
+                        for atom in resdef.atoms
+                    ],
+                    description=resdef.description + " w/ crosslink",
+                )
+                for resdef in CCD_RESIDUE_DEFINITION_CACHE["GLU"]
+                if resdef.description == "GLUTAMIC ACID"
+            ],
+        },
+    )
+
+    topology_from_pdb(
+        get_test_data_path("microviridin_edited.pdb").absolute(),
+        residue_database=custom_residue_database,
+    )
