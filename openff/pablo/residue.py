@@ -13,7 +13,7 @@ from typing import Literal, Self
 from openff.toolkit import Molecule
 from openff.units import elements, unit
 
-from openff.pablo._utils import __UNSET__, unwrap
+from openff.pablo._utils import __UNSET__, flatten, unwrap
 
 __all__ = [
     "AtomDefinition",
@@ -305,36 +305,43 @@ class ResidueDefinition:
         self._validate()
 
     def _validate(self):
-        try:
-            if (
-                self.linking_bond is None
-                and self.crosslink is None
-                and True in {atom.leaving for atom in self.atoms}
-            ):
-                raise ValueError(
-                    f"{self.residue_name}: Leaving atoms were specified, but there is no linking bond or crosslink",
-                    self,
-                )
-            if len({atom.name for atom in self.atoms}) != len(self.atoms):
-                raise ValueError(
-                    f"{self.residue_name}: All atoms must have unique canonical names",
-                )
+        if (
+            self.linking_bond is None
+            and self.crosslink is None
+            and True in {atom.leaving for atom in self.atoms}
+        ):
+            raise ValueError(
+                f"{self.residue_name}: Leaving atoms were specified, but there is no linking bond or crosslink",
+                self,
+            )
+        if len({atom.name for atom in self.atoms}) != len(self.atoms):
+            raise ValueError(
+                f"{self.residue_name}: All atoms must have unique canonical names",
+            )
 
-            all_leaving_atoms = {atom.name for atom in self.atoms if atom.leaving}
-            assigned_leaving_atoms = (
-                self.prior_bond_leaving_atoms
-                | self.posterior_bond_leaving_atoms
-                | self.crosslink_leaving_atoms
+        all_leaving_atoms = {atom.name for atom in self.atoms if atom.leaving}
+        assigned_leaving_atoms = (
+            self.prior_bond_leaving_atoms
+            | self.posterior_bond_leaving_atoms
+            | self.crosslink_leaving_atoms
+        )
+        unassigned_leaving_atoms = all_leaving_atoms.difference(
+            assigned_leaving_atoms,
+        )
+        if len(unassigned_leaving_atoms) != 0:
+            raise ValueError(
+                f"{self.residue_name}: Leaving atoms could not be assigned to a"
+                + f" bond: {unassigned_leaving_atoms}",
             )
-            unassigned_leaving_atoms = all_leaving_atoms.difference(
-                assigned_leaving_atoms,
+
+        all_canonical_names = {atom.name for atom in self.atoms}
+        all_synonyms = set(flatten(atom.synonyms for atom in self.atoms))
+        all_atom_names = all_canonical_names.union(all_synonyms)
+        if not set(self.virtual_sites).isdisjoint(all_atom_names):
+            raise ValueError(
+                f"{self.residue_name}: Virtual sites may not clash with any atom name"
+                + f" or synonym: {all_atom_names.intersection(self.virtual_sites)}",
             )
-            if len(unassigned_leaving_atoms) != 0:
-                raise ValueError(
-                    f"{self.residue_name}: Leaving atoms could not be assigned to a bond: {unassigned_leaving_atoms}",
-                )
-        except KeyError as e:
-            raise e
 
     @classmethod
     def from_molecule(

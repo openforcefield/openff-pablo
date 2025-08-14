@@ -473,3 +473,22 @@ class TestResidueDefinition:
             from_zwitterionic,
         ):
             assert resdef_from_zwitterionic._is_isomorphic_to(resdef_from_neutral)
+
+    def test_virtual_sites_clash_with_names(self):
+        with pytest.raises(ValueError, match="Virtual sites may not clash"):
+            ResidueDefinition.from_smiles(
+                "[H+:1]",
+                atom_names={1: "H"},
+                virtual_sites=["H"],
+                residue_name="HPS",
+            )
+
+    def test_virtual_sites_clash_with_synonyms(self):
+        resdef = ResidueDefinition.from_smiles(
+            "[H+:1]",
+            atom_names={1: "H"},
+            virtual_sites=["EP"],
+            residue_name="HPS",
+        )
+        with pytest.raises(ValueError, match="Virtual sites may not clash"):
+            resdef.with_synonyms({"H": ["EP"]})
