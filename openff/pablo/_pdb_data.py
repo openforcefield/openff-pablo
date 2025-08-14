@@ -226,11 +226,11 @@ class PdbData:
         Process CONECT records from the lines of a PDB file.
 
         This method processes CONECT records while supporting multiple models in
-        the PDB file. Each atom serial number used in CONECT records should be
-        used exactly once per model, so that the CONECT records are unambiguous;
-        PDB files that violate this invariant raise
-        ``UnknownOrAmbiguousSerialInConectError``. Multiple models sharing
-        CONECT records is supported.
+        the PDB file. Each atom serial number used in CONECT records should
+        appear no more than once per model, ensuring unambiguous connectivity.
+        PDB files that violate this invariant (e.g., having the same serial used
+        for multiple atoms within a single model) raise
+        ``UnknownOrAmbiguousSerialInConectError``.
 
         Parameters
         ----------
@@ -257,8 +257,8 @@ class PdbData:
                 a_idcs = serial_to_index.get(a, [])
 
                 # Conects are usually provided once for multi-model files
-                # Raise an error if there are multiple indices for the serial
-                # within a single model, as the bond is ambiguous
+                # Each serial in CONECT records should appear exactly once per
+                # model
                 a_models = [model[i] for i in a_idcs]
                 if len(set(a_models)) != len(a_models):
                     raise UnknownOrAmbiguousSerialInConectError(a, a_idcs)
