@@ -159,7 +159,8 @@ def topology_from_pdb(
         The occupancy for the atom.
     ``"alt_loc"``
         The alternate location code for the atom.
-
+    ``"pdb_line_no"``
+        The line number in the PDB file that contained this atom record.
     """
     if hasattr(file, "readlines"):
         data = PdbData.from_file_object(file)  # type: ignore
