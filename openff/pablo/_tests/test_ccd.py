@@ -2,6 +2,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from openff.pablo._utils import unwrap
 from openff.pablo.ccd import CCD_RESIDUE_DEFINITION_CACHE
 from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.residue import ResidueDefinition
@@ -190,3 +191,41 @@ def test_with_patch():
         assert cache0["ACE"] == cache1["ACE"]
         assert cache1["ACE"] == cache2["ACE"]
         assert cache2["ACE"] == cache3["ACE"]
+
+
+def test_water():
+    hoh = unwrap(CCD_RESIDUE_DEFINITION_CACHE["HOH"])
+    wat = unwrap(CCD_RESIDUE_DEFINITION_CACHE["WAT"])
+    assert hoh.to_openff_molecule().is_isomorphic_with(wat.to_openff_molecule())
+    assert hoh.virtual_sites == ()
+    assert wat.virtual_sites == ()
+    assert [atom.name for atom in hoh.atoms] == ["O", "H1", "H2"]
+    assert [atom.name for atom in wat.atoms] == ["O", "H1", "H2"]
+
+    ccd_with_sol = CCD_RESIDUE_DEFINITION_CACHE.with_([hoh.replace(residue_name="SOL")])
+
+    sol = unwrap(
+        resdef for resdef in ccd_with_sol["SOL"] if resdef.n_expected_atoms == 3
+    )
+    assert sol.virtual_sites == ()
+    assert [atom.name for atom in sol.atoms] == ["O", "H1", "H2"]
+
+    ccd_with_vsites = ccd_with_sol.with_vsite_water()
+
+    hoh_vsites = ccd_with_vsites["HOH"]
+    assert len(hoh_vsites) == 3
+    assert hoh_vsites[0] == hoh
+    assert hoh_vsites[1] == hoh.replace(virtual_sites=["EPW"])
+    assert hoh_vsites[2] == hoh.replace(virtual_sites=["EP1", "EP2"])
+
+    wat_vsites = ccd_with_vsites["WAT"]
+    assert len(wat_vsites) == 3
+    assert wat_vsites[0] == wat
+    assert wat_vsites[1] == wat.replace(virtual_sites=["EPW"])
+    assert wat_vsites[2] == wat.replace(virtual_sites=["EP1", "EP2"])
+
+    sol_vsites = [resdef for resdef in ccd_with_vsites["SOL"] if len(resdef.atoms) == 3]
+    assert len(sol_vsites) == 3
+    assert sol_vsites[0] == sol
+    assert sol_vsites[1] == sol.replace(virtual_sites=["EPW"])
+    assert sol_vsites[2] == sol.replace(virtual_sites=["EP1", "EP2"])

@@ -355,6 +355,7 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
                     crosslink=None,
                     atoms=tuple(atoms),
                     bonds=tuple(bonds),
+                    virtual_sites=(),
                 )
 
             return residue_definition
@@ -507,6 +508,45 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
                 flatten(patch(resdef) for resdef in self._definitions[residue_name]),
             )
         return self
+
+    def with_virtual_sites(
+        self,
+        residue_name: str,
+        virtual_sites: Iterable[str],
+    ) -> Self:
+        virtual_sites = tuple(virtual_sites)
+        return self.with_patch(
+            residue_name,
+            lambda resdef: [resdef, resdef.replace(virtual_sites=virtual_sites)],
+        )
+
+    def with_vsite_water(self) -> Self:
+        def add_vsites_to_water(resdef: ResidueDefinition) -> list[ResidueDefinition]:
+            if resdef.n_expected_atoms == 3 and {
+                atom.name for atom in resdef.atoms
+            } == {"O", "H1", "H2"}:
+                return [
+                    resdef,
+                    resdef.replace(virtual_sites=["EPW"]),
+                    resdef.replace(virtual_sites=["EP1", "EP2"]),
+                ]
+            else:
+                return [resdef]
+
+        return (
+            self.with_patch(
+                "HOH",
+                add_vsites_to_water,
+            )
+            .with_patch(
+                "WAT",
+                add_vsites_to_water,
+            )
+            .with_patch(
+                "SOL",
+                add_vsites_to_water,
+            )
+        )
 
 
 # TODO: Fill in this data

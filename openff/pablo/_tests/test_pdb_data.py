@@ -81,7 +81,7 @@ def test_append_coord_line():
     )
 
     assert data == PdbData(
-        line_no=[None],
+        line_no=[data._cursor],
         model=[None],
         serial=["16"],
         name=["HD2"],
@@ -297,6 +297,7 @@ def test_subset_matches_residue_fails_on_multiply_matched_atom():
         crosslink=None,
         description="",
         residue_name="UNK",
+        virtual_sites=(),
     )
     charges: list[int | None] = [None, None]
     elements = ["", ""]
@@ -379,6 +380,7 @@ def test_subset_matches_residue_tolerates_none_charge_and_empty_element():
         linking_bond=None,
         description="",
         residue_name="HPL",
+        virtual_sites=(),
     )
     data = PdbData(name=["H"], element=[""], charge=[None])
     assert data.subset_matches_residue([0], resdef)
@@ -392,9 +394,66 @@ def test_subset_matches_residue_tolerates_wrong_case_element():
         linking_bond=None,
         description="",
         residue_name="HPL",
+        virtual_sites=(),
     )
     data = PdbData(name=["H"], element=["h"], charge=[1])
     assert data.subset_matches_residue([0], resdef)
+
+
+def test_subset_matches_residue_requires_specified_vsites():
+    resdef = ResidueDefinition(
+        atoms=(AtomDefinition.with_defaults("H", "H", charge=1),),
+        bonds=(),
+        crosslink=None,
+        linking_bond=None,
+        description="",
+        residue_name="HPL",
+        virtual_sites=("VH",),
+    )
+    data = PdbData(name=["H"], element=["h"], charge=[1])
+    assert not data.subset_matches_residue([0], resdef)
+
+
+def test_subset_matches_residue_requires_exactly_specified_vsites():
+    resdef = ResidueDefinition(
+        atoms=(AtomDefinition.with_defaults("H", "H", charge=1),),
+        bonds=(),
+        crosslink=None,
+        linking_bond=None,
+        description="",
+        residue_name="HPL",
+        virtual_sites=("VH",),
+    )
+    data = PdbData(
+        name=["VH", "H", "VH"],
+        element=["H", "H", "H"],
+        charge=[0, 1, 0],
+        line_no=[1, 2, 3],
+    )
+    assert not data.subset_matches_residue([0, 1, 2], resdef)
+
+
+def test_subset_matches_residue_loads_specified_vsites():
+    resdef = ResidueDefinition(
+        atoms=(AtomDefinition.with_defaults("H", "H", charge=1),),
+        bonds=(),
+        crosslink=None,
+        linking_bond=None,
+        description="",
+        residue_name="HPL",
+        virtual_sites=("VH",),
+    )
+    data = PdbData(
+        name=["VH", "H"],
+        element=["X", "H"],
+        charge=[None, 1],
+        line_no=[1, 2],
+    )
+    match = data.subset_matches_residue([0, 1], resdef)
+    assert match
+    assert len(match.index_to_atomdef) == 1
+    assert match.index_to_atomdef[1] is not None
+    assert match.index_to_atomdef[1].name == "H"
 
 
 def test_match_residues_loads_vicinal_disulfide(

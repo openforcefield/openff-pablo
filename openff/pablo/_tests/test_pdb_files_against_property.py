@@ -813,6 +813,7 @@ def wrong_gly_def() -> ResidueDefinition:
         linking_bond=PEPTIDE_BOND,
         description="GLYCINE carbonyl single bond",
         residue_name="GLY",
+        virtual_sites=(),
     )
 
 

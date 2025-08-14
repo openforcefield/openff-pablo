@@ -51,7 +51,7 @@ __all__ = [
 @dataclass
 class PdbData:
     src_filename: str | None = None
-    line_no: list[int | None] = field(default_factory=list)
+    line_no: list[int] = field(default_factory=list)
     model: list[int | None] = field(default_factory=list)
     serial: list[str] = field(default_factory=list)
     name: list[str] = field(default_factory=list)
@@ -89,6 +89,15 @@ class PdbData:
     - missing charge column indicates unknown charge, not 0
     - residue name may extend into column 21 iff the reside name has 4
     non-whitespace characters"""
+    _cursor: int = 0
+    """Line number currently being read"""
+
+    def __repr__(self) -> str:
+        return (
+            f"PdbData.from_file({self.src_filename})"
+            if self.src_filename is not None
+            else f"<PdbData with {len(self.name)} records>"
+        )
 
     @classmethod
     def from_file(cls, path: str | PathLike[str]) -> Self:
@@ -108,7 +117,7 @@ class PdbData:
                 value.append(__UNSET__)
                 assert value[-1] is __UNSET__
 
-        self.line_no[-1] = None
+        self.line_no[-1] = self._cursor
         self.model[-1] = None
         self.serial[-1] = line[6:11].strip()
         self.serial_to_index[self.serial[-1]].append(len(self.serial) - 1)
@@ -143,13 +152,13 @@ class PdbData:
         model_n = None
         data = cls(strict=strict)
         for i, line in enumerate(lines):
+            data._cursor = i + 1
             if line.startswith("MODEL "):
                 model_n = int(line[10:14])
             if line.startswith("ENDMDL "):
                 model_n = None
             if line.startswith(("ATOM  ", "HETATM")):
                 data._append_coord_line(line)
-                data.line_no[-1] = i + 1
                 data.model[-1] = model_n
             if line.startswith("TER   "):
                 data.terminated[-1] = True
@@ -160,6 +169,8 @@ class PdbData:
                 data.cryst1_alpha = float(line[33:40])
                 data.cryst1_beta = float(line[40:47])
                 data.cryst1_gamma = float(line[47:54])
+
+        data._cursor = 0
 
         # Read all CONECT records
         data.conects = cls._process_conects(
@@ -276,6 +287,44 @@ class PdbData:
             raise ValueError("cannot match empty res_atom_idcs")
 
         logging.debug(f"  Attempting match against {residue_definition.description}")
+
+        # Drop virtual sites
+        unmatched_vsites = list(residue_definition.virtual_sites)
+        matched_vsite_indices: list[int] = []
+        res_atom_idcs_without_vsites: list[int] = []
+        for i in tuple(res_atom_idcs):
+            name = self.name[i]
+            if name in residue_definition.virtual_sites:
+                try:
+                    unmatched_vsites.pop(unmatched_vsites.index(name))
+                except (ValueError, IndexError):
+                    reason = f"Required virtual site {name} appeared too many times"
+                    logging.debug("    Match failed: " + reason)
+                    return ResidueMismatch(
+                        residue_definition=residue_definition,
+                        index_to_atomdef={j: None for j in res_atom_idcs},
+                        reason=reason,
+                    )
+                else:
+                    matched_vsite_indices.append(i)
+            else:
+                res_atom_idcs_without_vsites.append(i)
+        if len(unmatched_vsites) != 0:
+            reason = f"Required virtual sites not found in PDB file: {', '.join(unmatched_vsites)}"
+            logging.debug("    Match failed: " + reason)
+            return ResidueMismatch(
+                residue_definition=residue_definition,
+                index_to_atomdef={i: None for i in res_atom_idcs},
+                reason=reason,
+            )
+        if len(matched_vsite_indices) != 0:
+            logging.info(
+                f"    Match to {residue_definition.description} dropped virtual sites on",
+            )
+            logging.info(
+                f"    lines {', '.join(str(self.line_no[j]) for j in matched_vsite_indices)}",
+            )
+        res_atom_idcs = res_atom_idcs_without_vsites
 
         # Skip definitions with too few atoms
         if len(residue_definition.atoms) < len(res_atom_idcs):
@@ -1030,6 +1079,11 @@ class PdbData:
                 continue
 
             resdef = match.residue_definition
+
+            if len(resdef.virtual_sites) != 0:
+                # No CONECT-based matches for resdefs with virtual sites
+                # TODO: Implement this?
+                continue
 
             logging.debug(
                 f"Attempting to rescue with CONECT records {resdef.description} {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",

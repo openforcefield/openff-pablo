@@ -13,7 +13,7 @@ from typing import Literal, Self
 from openff.toolkit import Molecule
 from openff.units import elements, unit
 
-from openff.pablo._utils import __UNSET__, unwrap
+from openff.pablo._utils import __UNSET__, flatten, unwrap
 
 __all__ = [
     "AtomDefinition",
@@ -246,6 +246,19 @@ class ResidueDefinition:
     All atoms must have unique canonical names."""
     bonds: tuple[BondDefinition, ...]
     """The bond definitions that make up this residue"""
+    virtual_sites: tuple[str, ...]
+    """Atom names that represent virtual sites.
+
+    All these names must be present for the residue definition to match."""
+
+    @property
+    def n_expected_atoms(self) -> int:
+        """The number of atoms that a matching residue without any linkages has.
+
+        In practice, the number of atoms including leaving atoms, plus the
+        number of virtual sites.
+        """
+        return len(self.atoms) + len(self.virtual_sites)
 
     def __repr__(self) -> str:
         return f"ResidueDefinition(description={self.description!r}, ...)"
@@ -259,6 +272,7 @@ class ResidueDefinition:
         crosslink: BondDefinition | None | __UNSET__ = __UNSET__(),
         atoms: Iterable[AtomDefinition] | __UNSET__ = __UNSET__(),
         bonds: Iterable[BondDefinition] | __UNSET__ = __UNSET__(),
+        virtual_sites: Iterable[str] | __UNSET__ = __UNSET__(),
     ) -> Self:
         return self.__class__(
             residue_name=(
@@ -277,6 +291,11 @@ class ResidueDefinition:
             crosslink=self.crosslink if isinstance(crosslink, __UNSET__) else crosslink,
             atoms=self.atoms if isinstance(atoms, __UNSET__) else tuple(atoms),
             bonds=self.bonds if isinstance(bonds, __UNSET__) else tuple(bonds),
+            virtual_sites=(
+                self.virtual_sites
+                if isinstance(virtual_sites, __UNSET__)
+                else tuple(virtual_sites)
+            ),
         )
 
     def __post_init__(self):
@@ -286,45 +305,53 @@ class ResidueDefinition:
         self._validate()
 
     def _validate(self):
-        try:
-            if (
-                self.linking_bond is None
-                and self.crosslink is None
-                and True in {atom.leaving for atom in self.atoms}
-            ):
-                raise ValueError(
-                    f"{self.residue_name}: Leaving atoms were specified, but there is no linking bond or crosslink",
-                    self,
-                )
-            if len({atom.name for atom in self.atoms}) != len(self.atoms):
-                raise ValueError(
-                    f"{self.residue_name}: All atoms must have unique canonical names",
-                )
+        if (
+            self.linking_bond is None
+            and self.crosslink is None
+            and True in {atom.leaving for atom in self.atoms}
+        ):
+            raise ValueError(
+                f"{self.residue_name}: Leaving atoms were specified, but there is no linking bond or crosslink",
+                self,
+            )
+        if len({atom.name for atom in self.atoms}) != len(self.atoms):
+            raise ValueError(
+                f"{self.residue_name}: All atoms must have unique canonical names",
+            )
 
-            all_leaving_atoms = {atom.name for atom in self.atoms if atom.leaving}
-            assigned_leaving_atoms = (
-                self.prior_bond_leaving_atoms
-                | self.posterior_bond_leaving_atoms
-                | self.crosslink_leaving_atoms
+        all_leaving_atoms = {atom.name for atom in self.atoms if atom.leaving}
+        assigned_leaving_atoms = (
+            self.prior_bond_leaving_atoms
+            | self.posterior_bond_leaving_atoms
+            | self.crosslink_leaving_atoms
+        )
+        unassigned_leaving_atoms = all_leaving_atoms.difference(
+            assigned_leaving_atoms,
+        )
+        if len(unassigned_leaving_atoms) != 0:
+            raise ValueError(
+                f"{self.residue_name}: Leaving atoms could not be assigned to a"
+                + f" bond: {unassigned_leaving_atoms}",
             )
-            unassigned_leaving_atoms = all_leaving_atoms.difference(
-                assigned_leaving_atoms,
+
+        all_canonical_names = {atom.name for atom in self.atoms}
+        all_synonyms = set(flatten(atom.synonyms for atom in self.atoms))
+        all_atom_names = all_canonical_names.union(all_synonyms)
+        if not set(self.virtual_sites).isdisjoint(all_atom_names):
+            raise ValueError(
+                f"{self.residue_name}: Virtual sites may not clash with any atom name"
+                + f" or synonym: {all_atom_names.intersection(self.virtual_sites)}",
             )
-            if len(unassigned_leaving_atoms) != 0:
-                raise ValueError(
-                    f"{self.residue_name}: Leaving atoms could not be assigned to a bond: {unassigned_leaving_atoms}",
-                )
-        except KeyError as e:
-            raise e
 
     @classmethod
     def from_molecule(
         cls,
         molecule: Molecule,
         residue_name: str | None = None,
+        description: str | None = None,
         linking_bond: BondDefinition | None = None,
         crosslink: BondDefinition | None = None,
-        description: str | None = None,
+        virtual_sites: Collection[str] = (),
     ) -> Self:
         """
         Create a ``ResidueDefinition`` from an :py:class:`openff.toolkit.Molecule`
@@ -350,6 +377,9 @@ class ResidueDefinition:
             Residue crosslink. May be taken from ``molecule`` ``"crosslink"``
             property if ``None``. See
             :py:data:`openff.pablo.ResidueDefinition.crosslink`
+        virtual_sites
+            Virtual sites expected by the residue. See
+            :py:data:`openff.pablo.ResidueDefinition.virtual_sites`
         description
             An optional string describing the residue. Taken from ``molecule``
             ``"description"`` property if ``None``. See
@@ -422,6 +452,7 @@ class ResidueDefinition:
             crosslink=crosslink,
             atoms=tuple(atoms),
             bonds=tuple(bonds),
+            virtual_sites=tuple(virtual_sites),
         )
 
     @classmethod
@@ -432,6 +463,7 @@ class ResidueDefinition:
         leaving_atom_indices: Collection[int],
         linking_bond: BondDefinition,
         crosslink: BondDefinition | None = None,
+        virtual_sites: Collection[str] = (),
         description: str | None = None,
     ) -> Self:
         """
@@ -456,6 +488,9 @@ class ResidueDefinition:
         description
             An optional string describing the residue. See
             :py:data:`openff.pablo.ResidueDefinition.description`
+        virtual_sites
+            Virtual sites expected by the residue. See
+            :py:data:`openff.pablo.ResidueDefinition.virtual_sites`
         """
         molecule = deepcopy(molecule)
         for i in leaving_atom_indices:
@@ -466,6 +501,7 @@ class ResidueDefinition:
             linking_bond=linking_bond,
             crosslink=crosslink,
             description=description,
+            virtual_sites=virtual_sites,
         )
 
     @classmethod
@@ -477,6 +513,7 @@ class ResidueDefinition:
         leaving_atoms: Collection[int] = (),
         linking_bond: BondDefinition | None = None,
         crosslink: BondDefinition | None = None,
+        virtual_sites: Collection[str] = (),
         description: str | None = None,
     ) -> Self:
         """
@@ -506,6 +543,9 @@ class ResidueDefinition:
         description
             An optional string describing the residue. See
             :py:data:`openff.pablo.ResidueDefinition.description`
+        virtual_sites
+            Virtual sites expected by the residue. See
+            :py:data:`openff.pablo.ResidueDefinition.virtual_sites`
         """
         molecule = Molecule.from_mapped_smiles(
             mapped_smiles,
@@ -532,6 +572,7 @@ class ResidueDefinition:
             linking_bond=linking_bond,
             description=mapped_smiles if description is None else description,
             crosslink=crosslink,
+            virtual_sites=virtual_sites,
         )
 
     def to_openff_molecule(self) -> Molecule:

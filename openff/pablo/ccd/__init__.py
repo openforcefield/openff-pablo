@@ -73,6 +73,15 @@ CCD_RESIDUE_DEFINITION_CACHE: CcdCache = CcdCache(
             "ARG": delete_doubly_deprotonated_arginine,
         },
     ],
-    extra_definitions={"I": [ResidueDefinition.from_smiles("[I-:1]", {1: "I"}, "I")]},
+    extra_definitions={
+        "I": [ResidueDefinition.from_smiles("[I-:1]", {1: "I"}, "I")],
+        "WAT": [
+            ResidueDefinition.from_smiles(
+                "[H:2][O:1][H:3]",
+                {1: "O", 2: "H1", 3: "H2"},
+                "WAT",
+            ).with_synonyms({"H1": ["1H"], "H2": ["2H"]}),
+        ],
+    },
 )
 """The CCD, with commonly-required patches"""

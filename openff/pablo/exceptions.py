@@ -31,14 +31,9 @@ if TYPE_CHECKING:
 def _format_linenos(data: "PdbData", res_atom_idcs: Sequence[int]) -> str:
     line_nos = sorted(
         [data.line_no[j] for j in res_atom_idcs],
-        key=lambda x: 0 if x is None else x,
     )
     first, last = line_nos[0], line_nos[-1]
-    if (
-        first is not None
-        and last is not None
-        and line_nos == list(range(first, last + 1))
-    ):
+    if line_nos == list(range(first, last + 1)):
         return f"l{first}-{last}"
     else:
         return f"l{first}"
