@@ -341,9 +341,10 @@ class ResidueDefinition:
         cls,
         molecule: Molecule,
         residue_name: str | None = None,
+        description: str | None = None,
         linking_bond: BondDefinition | None = None,
         crosslink: BondDefinition | None = None,
-        description: str | None = None,
+        virtual_sites: Collection[str] = (),
     ) -> Self:
         """
         Create a ``ResidueDefinition`` from an :py:class:`openff.toolkit.Molecule`
@@ -369,6 +370,9 @@ class ResidueDefinition:
             Residue crosslink. May be taken from ``molecule`` ``"crosslink"``
             property if ``None``. See
             :py:data:`openff.pablo.ResidueDefinition.crosslink`
+        virtual_sites
+            Virtual sites expected by the residue. See
+            :py:data:`openff.pablo.ResidueDefinition.virtual_sites`
         description
             An optional string describing the residue. Taken from ``molecule``
             ``"description"`` property if ``None``. See
@@ -441,7 +445,7 @@ class ResidueDefinition:
             crosslink=crosslink,
             atoms=tuple(atoms),
             bonds=tuple(bonds),
-            virtual_sites=(),
+            virtual_sites=tuple(virtual_sites),
         )
 
     @classmethod
@@ -452,6 +456,7 @@ class ResidueDefinition:
         leaving_atom_indices: Collection[int],
         linking_bond: BondDefinition,
         crosslink: BondDefinition | None = None,
+        virtual_sites: Collection[str] = (),
         description: str | None = None,
     ) -> Self:
         """
@@ -476,6 +481,9 @@ class ResidueDefinition:
         description
             An optional string describing the residue. See
             :py:data:`openff.pablo.ResidueDefinition.description`
+        virtual_sites
+            Virtual sites expected by the residue. See
+            :py:data:`openff.pablo.ResidueDefinition.virtual_sites`
         """
         molecule = deepcopy(molecule)
         for i in leaving_atom_indices:
@@ -486,6 +494,7 @@ class ResidueDefinition:
             linking_bond=linking_bond,
             crosslink=crosslink,
             description=description,
+            virtual_sites=virtual_sites,
         )
 
     @classmethod
@@ -497,6 +506,7 @@ class ResidueDefinition:
         leaving_atoms: Collection[int] = (),
         linking_bond: BondDefinition | None = None,
         crosslink: BondDefinition | None = None,
+        virtual_sites: Collection[str] = (),
         description: str | None = None,
     ) -> Self:
         """
@@ -526,6 +536,9 @@ class ResidueDefinition:
         description
             An optional string describing the residue. See
             :py:data:`openff.pablo.ResidueDefinition.description`
+        virtual_sites
+            Virtual sites expected by the residue. See
+            :py:data:`openff.pablo.ResidueDefinition.virtual_sites`
         """
         molecule = Molecule.from_mapped_smiles(
             mapped_smiles,
@@ -552,6 +565,7 @@ class ResidueDefinition:
             linking_bond=linking_bond,
             description=mapped_smiles if description is None else description,
             crosslink=crosslink,
+            virtual_sites=virtual_sites,
         )
 
     def to_openff_molecule(self) -> Molecule:
