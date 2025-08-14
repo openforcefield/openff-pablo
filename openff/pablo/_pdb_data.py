@@ -225,6 +225,13 @@ class PdbData:
         """
         Process CONECT records from the lines of a PDB file.
 
+        This method processes CONECT records while supporting multiple models in
+        the PDB file. Each atom serial number used in CONECT records should be
+        used exactly once per model, so that the CONECT records are unambiguous;
+        PDB files that violate this invariant raise
+        ``UnknownOrAmbiguousSerialInConectError``. Multiple models sharing
+        CONECT records is supported.
+
         Parameters
         ----------
         lines
@@ -252,8 +259,8 @@ class PdbData:
                 # Conects are usually provided once for multi-model files
                 # Raise an error if there are multiple indices for the serial
                 # within a single model, as the bond is ambiguous
-                a_models = {model[i] for i in a_idcs}
-                if len(a_models) != len(a_idcs):
+                a_models = [model[i] for i in a_idcs]
+                if len(set(a_models)) != len(a_models):
                     raise UnknownOrAmbiguousSerialInConectError(a, a_idcs)
 
                 for a_idx, a_model in zip(a_idcs, a_models):
@@ -346,7 +353,9 @@ class PdbData:
         Check if a set of atom indices matches a given residue definition.
 
         This performs a name-based match; connectivity-based matches occur
-        later.
+        later. Virtual sites are strictly enforced to match the residue
+        definition exactly - missing or extra virtual sites will cause a
+        mismatch.
 
         Parameters
         ----------
@@ -773,6 +782,12 @@ class PdbData:
         """
         Identify linkages between neighbouring residues of a polymer chain.
 
+        This method determines whether adjacent residues in a chain can be
+        linked by examining the connectivity, implied by which leaving atoms are
+        missing from the match, of the this and the neighbouring residues'
+        matches. ``TER`` records are treated as strict boundaries - no polymer
+        linkage (prior or posterior bond) can form across them.
+
         Parameters
         ----------
         this_res_idx
@@ -1141,10 +1156,14 @@ class PdbData:
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
     ) -> Iterator[PossibleResidueMatch]:
         """
-        Choose appropriate polymer bonds between residues.
+        Choose whether to form bonds between residues where it is still ambiguous.
 
-        If adjacent residues within a chain can be linked, reject matches that
-        don't link them; if they are not adjacent, reject those that do.
+        If residues are "adjacent" and capable of forming links, matches that
+        don't link them are rejected; if they're not "adjacent", those that do
+        attempt to form links are rejected. Residues ``a`` and ``b`` are
+        considered adjacent if ``b``'s ``ATOM``/``HETATM`` records immediately
+        follow ``a``'s, there is no ``TER`` record between ``a`` and ``b``, and
+        ``a`` and ``b`` have the same chain identifier.
 
         Parameters
         ----------
@@ -1427,6 +1446,28 @@ class PdbData:
         that were attempted against that residue, but each element in any inner
         list matches the same ``ATOM``/``HETATM`` records.
 
+        This method performs a multi-stage process to match residues:
+
+        1. Identify residues in the PDB file by grouping atoms based on their
+           residue name, residue sequence number, chain ID, and insertion code.
+           TER records (which terminate both residues and chains) act as strict boundaries.
+        2. Perform initial atom name-based matching against the residue database.
+           Virtual sites are strictly enforced to match exactly - missing or extra
+           virtual sites will cause a mismatch.
+        3. Use CONECT records for connectivity, element, and formal charge-based matching
+           for residues that found no name-based matches; ambiguous cases raise errors.
+        4. Identify and filter by polymer linkages (for peptides, nucleic acids, etc.).
+           TER records prevent polymer linkages from forming across them.
+        5. Perform crosslink identification and filtering for residues like cysteine
+           that can form disulfide bonds.
+        6. Match against ``additional_substructures`` for any residues with no matches
+           in the residue database.
+        7. Filter by CONECT records to ensure internal connectivity matches expectations;
+           missing CONECT records are accepted where possible.
+        8. Choose appropriate polymer bonds between adjacent residues when it is still ambiguous;
+           TER records prevent linkages from forming across them.
+        9. Attempt to match unknown molecules against unmatched residues.
+
         Parameters
         ----------
         residue_database
@@ -1437,6 +1478,13 @@ class PdbData:
         unknown_molecules
             Additional OpenFF ``Molecule`` objects to match against residues
             that found no matches in the residue database.
+
+        Returns
+        -------
+        list[list[PossibleResidueMatch]]
+            A nested list structure containing the matching results. The outer list has one
+            element for each residue in the PDB file, while each inner list contains all
+            possible matches (both successful and unsuccessful) for that residue.
         """
         matches = list(self.get_name_based_matches(residue_database))
 
