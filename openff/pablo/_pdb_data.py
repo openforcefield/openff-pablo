@@ -477,10 +477,10 @@ class PdbData:
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
     ) -> tuple[Sequence[PossibleResidueMatch], Sequence[PossibleResidueMatch]]:
         prev_matches: Sequence[PossibleResidueMatch] = (
-            [] if i == 0 else all_matches[i - 1]
+            () if i == 0 else all_matches[i - 1]
         )
         next_matches: Sequence[PossibleResidueMatch] = (
-            [] if len(all_matches) <= i + 1 else all_matches[i + 1]
+            () if len(all_matches) <= i + 1 else all_matches[i + 1]
         )
         return prev_matches, next_matches
 

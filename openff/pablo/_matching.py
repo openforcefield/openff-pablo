@@ -5,6 +5,8 @@ from typing import ClassVar, Protocol, Self, TypeAlias
 
 from openff.toolkit import Molecule
 
+from openff.pablo._utils import sort_tuple
+
 from .residue import AtomDefinition, ResidueDefinition
 
 
@@ -220,53 +222,74 @@ class ResidueMatch(MatchProtocol):
         )
 
     def agrees_with(self, other: MatchProtocol) -> bool:
-        """True if both matches would assign the same chemistry, False otherwise"""
+        """``True`` if both matches would assign the same chemistry, ``False`` otherwise.
+
+        Matches are considered to assign the same chemistry if their
+        connectivity graphs (ignoring bond order) and net formal charges are
+        identical."""
         if set(self.index_to_atomdef.keys()) != set(other.index_to_atomdef.keys()):
             return False
 
         if not isinstance(other, ResidueMatch):
             return super().agrees_with(other)
 
-        name_map: dict[str, str] = {}
+        # All atoms should have the same element
         for i, self_atom in self.index_to_atomdef.items():
             other_atom = other.index_to_atomdef[i]
-            if not (
-                self_atom.aromatic == other_atom.aromatic
-                and self_atom.charge == other_atom.charge
-                and self_atom.symbol == other_atom.symbol
-                and self_atom.stereo == other_atom.stereo
-            ):
+            if self_atom.symbol != other_atom.symbol:
                 return False
-            name_map[self_atom.name] = other_atom.name
 
-        self_bonds = {
-            (
-                *sorted([name_map[bond.atom1], name_map[bond.atom2]]),
-                bond.aromatic,
-                bond.order,
-                bond.stereo,
+        # Net charge should be identical
+        self_net_charge: int = sum(
+            atom.charge
+            for atom in self.residue_definition.atoms
+            if atom.name in self.canonical_atom_name_to_index
+        )
+        other_net_charge: int = sum(
+            atom.charge
+            for atom in other.residue_definition.atoms
+            if atom.name in other.canonical_atom_name_to_index
+        )
+        if self_net_charge != other_net_charge:
+            return False
+
+        # Internal connectivity graph should be identical
+        self_bonds: set[tuple[int, int]] = {
+            sort_tuple(
+                (
+                    self.canonical_atom_name_to_index[bond.atom1],
+                    self.canonical_atom_name_to_index[bond.atom2],
+                ),
             )
             for bond in self.residue_definition.bonds
             if bond.atom1 in self.canonical_atom_name_to_index
             and bond.atom2 in self.canonical_atom_name_to_index
         }
-        other_bonds = {
-            (
-                *sorted([bond.atom1, bond.atom2]),
-                bond.aromatic,
-                bond.order,
-                bond.stereo,
+        other_bonds: set[tuple[int, int]] = {
+            sort_tuple(
+                (
+                    other.canonical_atom_name_to_index[bond.atom1],
+                    other.canonical_atom_name_to_index[bond.atom2],
+                ),
             )
             for bond in other.residue_definition.bonds
-            if bond.atom1 in self.canonical_atom_name_to_index
-            and bond.atom2 in self.canonical_atom_name_to_index
+            if bond.atom1 in other.canonical_atom_name_to_index
+            and bond.atom2 in other.canonical_atom_name_to_index
         }
         if self_bonds != other_bonds:
             return False
 
-        if self.expects_crosslink and (
-            self.crosslink_idcs != other.crosslink_idcs
-            or self.residue_definition.crosslink != other.residue_definition.crosslink
+        # External connectivity graph should be identical
+        if (
+            self.residue_definition.crosslink is not None
+            and self.expects_crosslink
+            and (
+                self.crosslink_idcs != other.crosslink_idcs
+                or (
+                    self.residue_definition.crosslink.flipped()
+                    != other.residue_definition.crosslink
+                )
+            )
         ):
             return False
 

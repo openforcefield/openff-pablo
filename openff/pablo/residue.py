@@ -394,13 +394,9 @@ class ResidueDefinition:
                 if isinstance(atom_residue_name, str):
                     residue_name = atom_residue_name
                 else:
-                    raise ValueError(
-                        "residue_name None but atoms' residue names are not strings",
-                    )
+                    raise ValueError("could not infer residue name from atom metadata")
             else:
-                raise ValueError(
-                    "residue_name None and atoms do not agree on residue name",
-                )
+                raise ValueError("could not infer residue name from atom metadata")
 
         if crosslink is None:
             molecule_crosslink = molecule.properties.get("crosslink")
