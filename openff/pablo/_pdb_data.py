@@ -100,6 +100,14 @@ class PdbData:
 
     @classmethod
     def from_file(cls, path: str | PathLike[str]) -> Self:
+        """
+        Create a ``PdbData`` object by reading from a file.
+
+        Parameters
+        ----------
+        path
+            The path to the PDB file
+        """
         with open(path) as f:
             ret = cls.from_file_object(f)
         ret.src_filename = str(path)
@@ -107,9 +115,25 @@ class PdbData:
 
     @classmethod
     def from_file_object(cls, file: IO[str] | TextIOBase) -> Self:
+        """
+        Create a ``PdbData`` object by reading from a file-like object.
+
+        Parameters
+        ----------
+        file
+            A file-like object containing PDB data
+        """
         return cls.parse_pdb(file.readlines())
 
     def _append_coord_line(self, line: str):
+        """
+        Append data from an ATOM or HETATM line to the internal data structures.
+
+        Parameters
+        ----------
+        line
+            An ATOM or HETATM line from a PDB file
+        """
         for field_ in dataclasses.fields(self):
             value = getattr(self, field_.name)
             if hasattr(value, "append"):
@@ -148,6 +172,16 @@ class PdbData:
 
     @classmethod
     def parse_pdb(cls, lines: Iterable[str], strict: bool = False) -> Self:
+        """
+        Parse PDB file lines into a new ``PdbData`` object.
+
+        Parameters
+        ----------
+        lines
+            An iterable of strings containing the lines from a PDB file
+        strict
+            Whether to enforce strict PDB format compliance
+        """
         model_n = None
         data = cls(strict=strict)
         for i, line in enumerate(lines):
@@ -188,6 +222,34 @@ class PdbData:
         conects: list[set[int]],
         model: Sequence[int | None],
     ) -> list[set[int]]:
+        """
+        Process CONECT records from the lines of a PDB file.
+
+        This method processes CONECT records while supporting multiple models in
+        the PDB file. Each atom serial number used in CONECT records should
+        appear no more than once per model, ensuring unambiguous connectivity.
+        PDB files that violate this invariant (e.g., having the same serial used
+        for multiple atoms within a single model) raise
+        ``UnknownOrAmbiguousSerialInConectError``.
+
+        Parameters
+        ----------
+        lines
+            An iterable of strings containing the lines from a PDB file
+        serial_to_index
+            Mapping from atom serial numbers to their indices in the data
+            structure
+        conects
+            List of sets representing connectivity for each atom. The ith set
+            contains the atom indices connected to atom ``i``.
+        model
+            Sequence indicating which model each atom belongs to
+
+        Returns
+        -------
+        list[set[int]]
+            Updated connectivity information as a list of sets
+        """
         for line in lines:
             if line.startswith("CONECT "):
                 # a is the serial of the first atom in the conect, we need its indices
@@ -195,10 +257,10 @@ class PdbData:
                 a_idcs = serial_to_index.get(a, [])
 
                 # Conects are usually provided once for multi-model files
-                # Raise an error if there are multiple indices for the serial
-                # within a single model, as the bond is ambiguous
-                a_models = {model[i] for i in a_idcs}
-                if len(a_models) != len(a_idcs):
+                # Each serial in CONECT records should appear exactly once per
+                # model
+                a_models = [model[i] for i in a_idcs]
+                if len(set(a_models)) != len(a_models):
                     raise UnknownOrAmbiguousSerialInConectError(a, a_idcs)
 
                 for a_idx, a_model in zip(a_idcs, a_models):
@@ -221,6 +283,13 @@ class PdbData:
 
     @property
     def residue_indices(self) -> Iterator[tuple[int, ...]]:
+        """
+        Get an iterator over the indices of atoms belonging to each residue.
+
+        Yields
+        ------
+        A tuple of atom indices representing a single residue
+        """
         if len(self.model) == 0:
             return
         first_model: int | None = self.model[0]
@@ -280,6 +349,21 @@ class PdbData:
         res_atom_idcs: Collection[int],
         residue_definition: ResidueDefinition,
     ) -> PossibleResidueMatch:
+        """
+        Check if a set of atom indices matches a given residue definition.
+
+        This performs a name-based match; connectivity-based matches occur
+        later. Virtual sites are strictly enforced to match the residue
+        definition exactly - missing or extra virtual sites will cause a
+        mismatch.
+
+        Parameters
+        ----------
+        res_atom_idcs
+            Indices of atoms in the PDB file to check for matching
+        residue_definition
+            The residue definition to match against
+        """
         # Raise an error if the match would be empty - this way the
         # return value's truthiness always reflects whether there was a match
         if len(res_atom_idcs) == 0:
@@ -435,6 +519,9 @@ class PdbData:
 
     @cached_property
     def atom_idx_to_res_idx(self) -> dict[int, int]:
+        """
+        A mapping from atom indices to their corresponding residue index.
+        """
         value: dict[int, int] = {}
         for res_idx, atom_indices in enumerate(self.residue_indices):
             for atom_idx in atom_indices:
@@ -445,6 +532,17 @@ class PdbData:
         self,
         residue_database: Mapping[str, Iterable[ResidueDefinition]],
     ) -> Iterator[list[PossibleResidueMatch]]:
+        """
+        Get possible matches for residues based on their names.
+
+        A list of possible residue matches is yielded for each residue in the
+        PDB file.
+
+        Parameters
+        ----------
+        residue_database
+            A mapping from residue names to their possible definitions
+        """
         for res_atom_idcs in self.residue_indices:
             prototype_index = res_atom_idcs[0]
             res_name = self.res_name[prototype_index]
@@ -476,6 +574,21 @@ class PdbData:
         i: int,
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
     ) -> tuple[Sequence[PossibleResidueMatch], Sequence[PossibleResidueMatch]]:
+        """
+        Get the previous and next matches for a given residue index.
+
+        Parameters
+        ----------
+        i
+            The current residue index
+        all_matches
+            All possible matches for each residue
+
+        Returns
+        -------
+        (this_matches, next_matches)
+            A tuple containing the previous and next matches
+        """
         prev_matches: Sequence[PossibleResidueMatch] = (
             () if i == 0 else all_matches[i - 1]
         )
@@ -489,6 +602,16 @@ class PdbData:
         this_res_idx: int,
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
     ) -> Iterator[PossibleResidueMatch]:
+        """
+        Attempt to rescue partial matches using CONECT records.
+
+        Parameters
+        ----------
+        this_res_idx
+            The index of the current residue
+        all_matches
+            All possible matches for each residue
+        """
         this_matches = all_matches[this_res_idx]
         prev_matches, next_matches = self._get_prev_next(this_res_idx, all_matches)
 
@@ -656,6 +779,22 @@ class PdbData:
         this_res_idx: int,
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
     ) -> Iterator[PossibleResidueMatch]:
+        """
+        Identify linkages between neighbouring residues of a polymer chain.
+
+        This method determines whether adjacent residues in a chain can be
+        linked by examining the connectivity, implied by which leaving atoms are
+        missing from the match, of the this and the neighbouring residues'
+        matches. ``TER`` records are treated as strict boundaries - no polymer
+        linkage (prior or posterior bond) can form across them.
+
+        Parameters
+        ----------
+        this_res_idx
+            The index of the current residue
+        all_matches
+            All possible matches for each residue
+        """
         this_matches = all_matches[this_res_idx]
         prev_matches, next_matches = self._get_prev_next(this_res_idx, all_matches)
 
@@ -810,6 +949,16 @@ class PdbData:
         this_res_idx: int,
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
     ) -> Iterator[PossibleResidueMatch]:
+        """
+        Identify crosslinks between residues and filter out broken crosslinks.
+
+        Parameters
+        ----------
+        this_res_idx : int
+            The index of the current residue
+        all_matches : Sequence[Sequence[PossibleResidueMatch]]
+            All possible matches for each residue
+        """
         this_matches = all_matches[this_res_idx]
 
         # Check for crosslinks
@@ -908,6 +1057,18 @@ class PdbData:
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
         additional_substructures: Iterable[ResidueDefinition],
     ) -> Iterator[PossibleResidueMatch]:
+        """
+        Attempt to match additional substructures against unmatched residues.
+
+        Parameters
+        ----------
+        this_res_idx
+            The index of the current residue
+        all_matches
+            All possible matches for each residue
+        additional_substructures
+            Additional substructure definitions to match against
+        """
         this_matches = all_matches[this_res_idx]
 
         yield from this_matches
@@ -930,6 +1091,16 @@ class PdbData:
         this_res_idx: int,
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
     ) -> Iterator[PossibleResidueMatch]:
+        """
+        Filter out matches that are inconsistent with existing CONECT records.
+
+        Parameters
+        ----------
+        this_res_idx
+            The index of the current residue
+        all_matches
+            All possible matches for each residue
+        """
         this_matches = all_matches[this_res_idx]
 
         logging.debug(
@@ -985,8 +1156,21 @@ class PdbData:
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
     ) -> Iterator[PossibleResidueMatch]:
         """
-        If adjacent residues within a chain can be linked, reject matches that
-        don't link them; if they are not adjacent, reject those that do.
+        Choose whether to form bonds between residues where it is still ambiguous.
+
+        If residues are "adjacent" and capable of forming links, matches that
+        don't link them are rejected; if they're not "adjacent", those that do
+        attempt to form links are rejected. Residues ``a`` and ``b`` are
+        considered adjacent if ``b``'s ``ATOM``/``HETATM`` records immediately
+        follow ``a``'s, there is no ``TER`` record between ``a`` and ``b``, and
+        ``a`` and ``b`` have the same chain identifier.
+
+        Parameters
+        ----------
+        this_res_idx
+            The index of the current residue
+        all_matches
+            All possible matches for each residue
         """
         this_matches = all_matches[this_res_idx]
         prev_matches, next_matches = self._get_prev_next(this_res_idx, all_matches)
@@ -1121,6 +1305,21 @@ class PdbData:
         indices: Sequence[int],
         unknown_molecules: Sequence[Molecule],
     ) -> Molecule | None:
+        """
+        Attempt to match unknown molecules to a set of atom indices.
+
+        Parameters
+        ----------
+        indices
+            Indices of atoms in the PDB file
+        unknown_molecules
+            Molecules that could not be identified
+
+        Returns
+        -------
+        Molecule | None
+            The matched molecule if found, otherwise None
+        """
         conects: set[tuple[int, int]] = set()
         pdb_idx_to_mol_idx: dict[int, int] = {}
         pdbmol = Molecule()
@@ -1187,6 +1386,18 @@ class PdbData:
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
         unknown_molecules: Sequence[Molecule],
     ) -> Iterator[PossibleResidueMatch]:
+        """
+        Attempt to match unknown molecules against unmatched residues.
+
+        Parameters
+        ----------
+        this_res_idx
+            The index of the current residue
+        all_matches
+            All possible matches for each residue
+        unknown_molecules
+            Molecules that could not be identified
+        """
         this_matches = all_matches[this_res_idx]
 
         yield from this_matches
@@ -1226,6 +1437,55 @@ class PdbData:
         additional_substructures: Iterable[ResidueDefinition],
         unknown_molecules: Iterable[Molecule],
     ) -> list[list[PossibleResidueMatch]]:
+        """
+        Match residues in the PDB file against a database of known residues.
+
+        Returns all residue matches, failed or successful, for each residue. The
+        outer returned list has one element for each residue in the PDB file.
+        The inner lists may have variable lengths based on the number of matches
+        that were attempted against that residue, but each element in any inner
+        list matches the same ``ATOM``/``HETATM`` records.
+
+        This method performs a multi-stage process to match residues:
+
+        1. Identify residues in the PDB file by grouping atoms based on their
+           residue name, residue sequence number, chain ID, and insertion code.
+           TER records (which terminate both residues and chains) act as strict boundaries.
+        2. Perform initial atom name-based matching against the residue database.
+           Virtual sites are strictly enforced to match exactly - missing or extra
+           virtual sites will cause a mismatch.
+        3. Use CONECT records for connectivity, element, and formal charge-based matching
+           for residues that found no name-based matches; ambiguous cases raise errors.
+        4. Identify and filter by polymer linkages (for peptides, nucleic acids, etc.).
+           TER records prevent polymer linkages from forming across them.
+        5. Perform crosslink identification and filtering for residues like cysteine
+           that can form disulfide bonds.
+        6. Match against ``additional_substructures`` for any residues with no matches
+           in the residue database.
+        7. Filter by CONECT records to ensure internal connectivity matches expectations;
+           missing CONECT records are accepted where possible.
+        8. Choose appropriate polymer bonds between adjacent residues when it is still ambiguous;
+           TER records prevent linkages from forming across them.
+        9. Attempt to match unknown molecules against unmatched residues.
+
+        Parameters
+        ----------
+        residue_database
+            A mapping from residue names to their possible definitions
+        additional_substructures
+            Additional substructure definitions to match against residues that
+            found no matches in the residue database.
+        unknown_molecules
+            Additional OpenFF ``Molecule`` objects to match against residues
+            that found no matches in the residue database.
+
+        Returns
+        -------
+        list[list[PossibleResidueMatch]]
+            A nested list structure containing the matching results. The outer list has one
+            element for each residue in the PDB file, while each inner list contains all
+            possible matches (both successful and unsuccessful) for that residue.
+        """
         matches = list(self.get_name_based_matches(residue_database))
 
         class Filter(Protocol):
@@ -1269,6 +1529,20 @@ class PdbData:
         additional_substructures: Iterable[ResidueDefinition],
         unknown_molecules: Iterable[Molecule],
     ) -> list[SuccessfulMatch]:
+        """
+        Get one successful match for each residue in the PDB file, or raise an error.
+
+        Parameters
+        ----------
+        residue_database
+            A mapping from residue names to their possible definitions
+        additional_substructures
+            Additional substructure definitions to match against residues that
+            found no matches in the residue database.
+        unknown_molecules
+            Additional OpenFF ``Molecule`` objects to match against residues
+            that found no matches in the residue database.
+        """
         logging.debug(
             "Getting all residue matches",
         )
@@ -1331,6 +1605,14 @@ class PdbData:
             raise PdbResidueMatchError(self, errors)
 
     def __getitem__(self, index: int) -> dict[str, Any]:
+        """
+        Get a dictionary of all data fields for a specific atom index.
+
+        Parameters
+        ----------
+        index
+            The index of the atom to get data for
+        """
         return {
             field.name: getattr(self, field.name)[index]
             for field in dataclasses.fields(self)
@@ -1340,6 +1622,17 @@ class PdbData:
         self,
         pdb_index: int,
     ) -> dict[str, str | int]:
+        """
+        Generate a metadata dict for an atom at the specified PDB index.
+
+        The returned dictionary is used to set the atom's ``metadata``
+        attribute.
+
+        Parameters
+        ----------
+        pdb_index
+            The PDB index of the atom
+        """
         if self.res_idx is None:
             list(self.residue_indices)
             assert self.res_idx is not None, (
@@ -1363,4 +1656,5 @@ class PdbData:
             "b_factor": str(self.temp_factor[pdb_index]),
             "occupancy": str(self.occupancy[pdb_index]),
             "alt_loc": str(self.alt_loc[pdb_index]),
+            "pdb_line_no": self.line_no[pdb_index],
         }
