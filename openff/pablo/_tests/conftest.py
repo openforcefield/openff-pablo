@@ -100,7 +100,7 @@ def e2_data() -> PdbData:
 @pytest.fixture
 def he_data() -> PdbData:
     return PdbData(
-        line_no=[None],
+        line_no=[1],
         model=[None],
         serial=["1"],
         name=["HE"],

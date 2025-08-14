@@ -81,7 +81,7 @@ def test_append_coord_line():
     )
 
     assert data == PdbData(
-        line_no=[None],
+        line_no=[data._cursor],
         model=[None],
         serial=["16"],
         name=["HD2"],
@@ -424,7 +424,12 @@ def test_subset_matches_residue_requires_exactly_specified_vsites():
         residue_name="HPL",
         virtual_sites=("VH",),
     )
-    data = PdbData(name=["VH", "H", "VH"], element=["H", "H", "H"], charge=[0, 1, 0])
+    data = PdbData(
+        name=["VH", "H", "VH"],
+        element=["H", "H", "H"],
+        charge=[0, 1, 0],
+        line_no=[1, 2, 3],
+    )
     assert not data.subset_matches_residue([0, 1, 2], resdef)
 
 
@@ -438,7 +443,12 @@ def test_subset_matches_residue_loads_specified_vsites():
         residue_name="HPL",
         virtual_sites=("VH",),
     )
-    data = PdbData(name=["VH", "H"], element=["X", "H"], charge=[1])
+    data = PdbData(
+        name=["VH", "H"],
+        element=["X", "H"],
+        charge=[None, 1],
+        line_no=[1, 2],
+    )
     match = data.subset_matches_residue([0, 1], resdef)
     assert match
     assert len(match.index_to_atomdef) == 1
