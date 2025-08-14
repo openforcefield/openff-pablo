@@ -527,7 +527,7 @@ def test_filter_on_polymer_linkages_yields_all_matches_simple(cys_data: PdbData)
         ),
     )
     results = list(
-        cys_data.filter_on_polymer_linkages(residue_matches, (), (), [residue_matches]),
+        cys_data.filter_on_polymer_linkages(0, [residue_matches]),
     )
 
     for before, after in zip(residue_matches, results):
@@ -591,7 +591,7 @@ def test_filter_on_polymer_linkages_yields_all_matches():
 
     for residue_matches in matches:
         results = list(
-            data.filter_on_polymer_linkages(residue_matches, (), (), [residue_matches]),
+            data.filter_on_polymer_linkages(0, [residue_matches]),
         )
 
         for before, after in zip(residue_matches, results):
@@ -627,9 +627,7 @@ def test_filter_on_polymer_linkages_rejects_unsupported_prior_bond(
 
     filtered_matches = list(
         data.filter_on_polymer_linkages(
-            this_matches=[this_match],
-            prev_matches=[neighbour_match],
-            next_matches=[],
+            1,
             all_matches=[[neighbour_match], [this_match]],
         ),
     )
@@ -672,9 +670,7 @@ def test_filter_on_polymer_linkages_rejects_prior_bond_across_ter(
 
     filtered_matches = list(
         data.filter_on_polymer_linkages(
-            this_matches=[this_match],
-            prev_matches=[neighbour_match],
-            next_matches=[],
+            1,
             all_matches=[[neighbour_match], [this_match]],
         ),
     )
@@ -719,9 +715,7 @@ def test_filter_on_polymer_linkages_sets_prior_bond(
 
     filtered_matches = list(
         data.filter_on_polymer_linkages(
-            this_matches=[this_match],
-            prev_matches=[neighbour_match],
-            next_matches=[],
+            1,
             all_matches=[[neighbour_match], [this_match]],
         ),
     )
@@ -762,9 +756,7 @@ def test_filter_on_polymer_linkages_rejects_no_prior_bond_without_molecule_start
 
     filtered_matches = list(
         data.filter_on_polymer_linkages(
-            this_matches=[this_match],
-            prev_matches=[neighbour_match],
-            next_matches=[],
+            1,
             all_matches=[[neighbour_match], [this_match]],
         ),
     )
@@ -806,9 +798,7 @@ def test_filter_on_polymer_linkages_rejects_unsupported_posterior_bond(
 
     filtered_matches = list(
         data.filter_on_polymer_linkages(
-            this_matches=[this_match],
-            prev_matches=[],
-            next_matches=[neighbour_match],
+            0,
             all_matches=[[this_match], [neighbour_match]],
         ),
     )
@@ -851,9 +841,7 @@ def test_filter_on_polymer_linkages_rejects_posterior_bond_across_ter(
 
     filtered_matches = list(
         data.filter_on_polymer_linkages(
-            this_matches=[this_match],
-            prev_matches=[],
-            next_matches=[neighbour_match],
+            0,
             all_matches=[[this_match], [neighbour_match]],
         ),
     )
@@ -898,9 +886,7 @@ def test_filter_on_polymer_linkages_sets_posterior_bond(
 
     filtered_matches = list(
         data.filter_on_polymer_linkages(
-            this_matches=[this_match],
-            prev_matches=[],
-            next_matches=[neighbour_match],
+            0,
             all_matches=[[this_match], [neighbour_match]],
         ),
     )
@@ -938,9 +924,7 @@ def test_filter_on_polymer_linkages_rejects_no_posterior_bond_without_molecule_s
 
     filtered_matches = list(
         data.filter_on_polymer_linkages(
-            this_matches=[this_match],
-            prev_matches=[],
-            next_matches=[neighbour_match],
+            0,
             all_matches=[[this_match], [neighbour_match]],
         ),
     )
@@ -997,9 +981,7 @@ def test_filter_on_crosslinks_sets_crosslink_indices_with_partner_first(
 
     filtered_matches = list(
         vicinal_disulfide_data.filter_on_crosslinks(
-            this_matches=[this_match],
-            prev_matches=[],
-            next_matches=[neighbour_match],
+            0,
             all_matches=[[this_match], [neighbour_match]],
         ),
     )
@@ -1053,9 +1035,7 @@ def test_filter_on_crosslinks_sets_crosslink_indices_with_partner_second(
 
     filtered_matches = list(
         vicinal_disulfide_data.filter_on_crosslinks(
-            this_matches=[this_match],
-            prev_matches=[neighbour_match],
-            next_matches=[],
+            1,
             all_matches=[[neighbour_match], [this_match]],
         ),
     )
@@ -1110,9 +1090,7 @@ def test_filter_on_crosslinks_rejects_expected_crosslink_without_partner_first(
 
     filtered_matches = list(
         vicinal_disulfide_data.filter_on_crosslinks(
-            this_matches=[this_match],
-            prev_matches=[],
-            next_matches=[neighbour_match],
+            0,
             all_matches=[[this_match], [neighbour_match]],
         ),
     )
@@ -1170,9 +1148,7 @@ def test_filter_on_crosslinks_rejects_expected_crosslink_without_partner_second(
 
     filtered_matches = list(
         vicinal_disulfide_data.filter_on_crosslinks(
-            this_matches=[this_match],
-            prev_matches=[neighbour_match],
-            next_matches=[],
+            1,
             all_matches=[[neighbour_match], [this_match]],
         ),
     )

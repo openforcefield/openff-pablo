@@ -35,7 +35,6 @@ from ._utils import (
     no_none_in_values,
     sort_tuple,
     unwrap,
-    with_neighbours,
 )
 from .exceptions import (
     PdbResidueMatchError,
@@ -472,13 +471,194 @@ class PdbData:
                     ),
                 ]
 
-    def filter_on_polymer_linkages(
+    @staticmethod
+    def _get_prev_next(
+        i: int,
+        all_matches: Sequence[Sequence[PossibleResidueMatch]],
+    ) -> tuple[Sequence[PossibleResidueMatch], Sequence[PossibleResidueMatch]]:
+        prev_matches: Sequence[PossibleResidueMatch] = (
+            [] if i == 0 else all_matches[i - 1]
+        )
+        next_matches: Sequence[PossibleResidueMatch] = (
+            [] if len(all_matches) <= i + 1 else all_matches[i + 1]
+        )
+        return prev_matches, next_matches
+
+    def rescue_partial_matches_with_conect_records(
         self,
-        this_matches: Sequence[PossibleResidueMatch],
-        prev_matches: Sequence[PossibleResidueMatch],
-        next_matches: Sequence[PossibleResidueMatch],
+        this_res_idx: int,
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
     ) -> Iterator[PossibleResidueMatch]:
+        this_matches = all_matches[this_res_idx]
+        prev_matches, next_matches = self._get_prev_next(this_res_idx, all_matches)
+
+        # Don't try to rescue if there is a successful name-based match
+        if any(isinstance(match, SuccessfulMatch) for match in this_matches):
+            yield from this_matches
+            return
+
+        res_atom_idcs = this_matches[0].res_atom_idcs
+
+        # in conects, node data is the pdb index, edge data is the sorted
+        # pdb indices of the two atoms in the CONECT record
+        # bonds to other residues are ignored - we'll deal with them later
+        conects = Graph[int, tuple[int, int]]()
+        conects.add_nodes_from(res_atom_idcs)
+        external_conects: list[tuple[int, int]] = []
+        for pdb_idx in res_atom_idcs:
+            for j in self.conects[pdb_idx]:
+                if j not in res_atom_idcs:
+                    external_conects.append((pdb_idx, j))
+                    continue
+                conects.add_edge(
+                    pdb_idx,
+                    j,
+                    sort_tuple((pdb_idx, j)),
+                )
+
+        for match in this_matches:
+            # Always yield the original mismatch as a record that this rescue
+            # took place
+            yield match
+            if not isinstance(match, ResidueMismatch):
+                # Only attempt to rescue ResidueMismatch
+                continue
+
+            resdef = match.residue_definition
+
+            if len(resdef.virtual_sites) != 0:
+                # No CONECT-based matches for resdefs with virtual sites
+                # TODO: Implement this?
+                continue
+
+            logging.debug(
+                f"Attempting to rescue with CONECT records {resdef.description} {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
+            )
+
+            # Build up a graph of the internal bonds we expect from the residue definition
+            bonds = Graph[AtomDefinition, BondDefinition]()
+            bonds.add_nodes_from(resdef.atoms)
+            bonds.add_edges_from(
+                (resdef.name_to_atom[bond.atom1], resdef.name_to_atom[bond.atom2], bond)
+                for bond in resdef.bonds
+            )
+
+            logging.debug(
+                f"  {bonds.n_nodes=} {conects.n_nodes=}",
+            )
+
+            # Iterate over subgraphs of bonds that match all of conects
+            rescued: bool = False
+            for mapping in bonds.get_mappings(
+                conects,
+                node_matcher=lambda b, c: (
+                    self.element[c] == b.symbol
+                    and (
+                        (self.name[c] in (b.name, *b.synonyms))
+                        or ((self.charge[c] or 0) == b.charge)
+                    )
+                ),
+                subgraph=True,
+                induced=True,  # CONECT records must all be present to find a match
+            ):
+                mapping = {v: k for k, v in mapping.items()}
+                logging.debug(
+                    f"  mapping={ {i: atom.name for i, atom in mapping.items()}!r}",
+                )
+                assert set(mapping) == set(match.res_atom_idcs)
+                match = ResidueConectMatch(
+                    residue_definition=resdef,
+                    index_to_atomdef=mapping,
+                )
+                missing_atoms = {
+                    atom for atom in resdef.atoms if atom not in mapping.values()
+                }
+                logging.debug(f"    {missing_atoms=}")
+
+                # Check that the CONECTs between this residue and another are
+                # compatible with this mapping
+                prior_conects: list[tuple[int, int]] = []
+                posterior_conects: list[tuple[int, int]] = []
+                crosslink_conects: list[tuple[int, int]] = []
+                unknown_conects: list[tuple[int, int]] = []
+                for pdb_idx, j in external_conects:
+                    j_name = self.name[j]
+                    i_name = mapping[pdb_idx].name
+                    logging.debug(
+                        f"      {pdb_idx, j}: {(i_name, j_name)} {len(prev_matches)=} {len(next_matches)=}",
+                    )
+                    logging.debug(f"        {resdef.possible_prior_bond_names=}")
+                    logging.debug(f"        {resdef.possible_posterior_bond_names=}")
+                    logging.debug(f"        {resdef.possible_crosslink_bond_names=}")
+                    if (
+                        len(prev_matches) > 0
+                        and j in prev_matches[0].res_atom_idcs
+                        and (j_name, i_name) in resdef.possible_prior_bond_names
+                    ):
+                        logging.debug("        prior")
+                        prior_conects.append((j, pdb_idx))
+                    elif (
+                        len(next_matches) > 0
+                        and j in next_matches[0].res_atom_idcs
+                        and (i_name, j_name) in resdef.possible_posterior_bond_names
+                    ):
+                        logging.debug("        posterior")
+                        posterior_conects.append((pdb_idx, j))
+                    elif (i_name, j_name) in resdef.possible_crosslink_bond_names:
+                        logging.debug("        crosslink")
+                        crosslink_conects.append((pdb_idx, j))
+                    else:
+                        logging.debug("        unknown")
+                        unknown_conects.append((pdb_idx, j))
+                logging.debug(f"    {unknown_conects=}")
+                logging.debug(f"    {posterior_conects=}")
+                logging.debug(f"    {prior_conects=}")
+                logging.debug(f"    {crosslink_conects=}")
+
+                if (  # nofmt
+                    # All missing atoms must be leaving atoms
+                    any(not atom.leaving for atom in missing_atoms)
+                    # Missing atoms must exactly define linking bonds
+                    or not resdef._missing_atoms_are_valid_leaving_atoms(
+                        {atom.name for atom in missing_atoms},
+                    )
+                    # If there are conect records between this residue and another, match must agree
+                    or len(unknown_conects) > 0
+                    or len(posterior_conects) > 1
+                    or len(prior_conects) > 1
+                    or len(crosslink_conects) > 1
+                    or (bool(crosslink_conects) and not match.expects_crosslink)
+                    or (bool(posterior_conects) and not match.expects_posterior_bond)
+                    or (bool(prior_conects) and not match.expects_prior_bond)
+                ):
+                    logging.debug("      REJECTED")
+                    continue
+
+                if bool(crosslink_conects):
+                    match.set_crosslink(*unwrap(crosslink_conects))
+                if bool(posterior_conects):
+                    match.set_posterior_bond(*unwrap(posterior_conects))
+                if bool(prior_conects):
+                    match.set_prior_bond(*unwrap(prior_conects))
+                # Yield multiple residue matches for multiple mappings and let
+                # the remaining filters sort it out; if we end up with multiple
+                # matches at the end of filtering, then we couldn't
+                # unambiguously rescue this match
+                logging.debug("      ACCEPTED")
+                rescued = True
+                yield match
+
+            if not rescued:
+                logging.debug("no mappings matched")
+
+    def filter_on_polymer_linkages(
+        self,
+        this_res_idx: int,
+        all_matches: Sequence[Sequence[PossibleResidueMatch]],
+    ) -> Iterator[PossibleResidueMatch]:
+        this_matches = all_matches[this_res_idx]
+        prev_matches, next_matches = self._get_prev_next(this_res_idx, all_matches)
+
         if len(list(only_matched(this_matches))) != 0:
             logging.debug(
                 f"Beginning link-based match of {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
@@ -627,11 +807,11 @@ class PdbData:
 
     def filter_on_crosslinks(
         self,
-        this_matches: Sequence[PossibleResidueMatch],
-        prev_matches: Sequence[PossibleResidueMatch],
-        next_matches: Sequence[PossibleResidueMatch],
+        this_res_idx: int,
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
     ) -> Iterator[PossibleResidueMatch]:
+        this_matches = all_matches[this_res_idx]
+
         # Check for crosslinks
         # TODO: This could be simplified if we required crosslinking atoms not to have synonyms
         if len(list(only_matched(this_matches))) != 0:
@@ -724,12 +904,12 @@ class PdbData:
 
     def match_additional_substructures(
         self,
-        this_matches: Sequence[PossibleResidueMatch],
-        prev_matches: Sequence[PossibleResidueMatch],
-        next_matches: Sequence[PossibleResidueMatch],
+        this_res_idx: int,
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
         additional_substructures: Iterable[ResidueDefinition],
     ) -> Iterator[PossibleResidueMatch]:
+        this_matches = all_matches[this_res_idx]
+
         yield from this_matches
         if not any(this_matches):
             logging.debug(
@@ -747,11 +927,11 @@ class PdbData:
 
     def filter_on_conect_records(
         self,
-        this_matches: Sequence[PossibleResidueMatch],
-        prev_matches: Sequence[PossibleResidueMatch],
-        next_matches: Sequence[PossibleResidueMatch],
+        this_res_idx: int,
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
     ) -> Iterator[PossibleResidueMatch]:
+        this_matches = all_matches[this_res_idx]
+
         logging.debug(
             f"Filtering matches on CONECT records for {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
         )
@@ -801,15 +981,16 @@ class PdbData:
 
     def choose_polymer_bonds(
         self,
-        this_matches: Sequence[PossibleResidueMatch],
-        prev_matches: Sequence[PossibleResidueMatch],
-        next_matches: Sequence[PossibleResidueMatch],
+        this_res_idx: int,
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
     ) -> Iterator[PossibleResidueMatch]:
         """
         If adjacent residues within a chain can be linked, reject matches that
         don't link them; if they are not adjacent, reject those that do.
         """
+        this_matches = all_matches[this_res_idx]
+        prev_matches, next_matches = self._get_prev_next(this_res_idx, all_matches)
+
         # TODO: Nail down the definition of "Adjacent"
         logging.debug(
             f"Filtering matches for polymer linkages in {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
@@ -1002,12 +1183,12 @@ class PdbData:
 
     def match_unknown_molecules(
         self,
-        this_matches: Sequence[PossibleResidueMatch],
-        prev_matches: Sequence[PossibleResidueMatch],
-        next_matches: Sequence[PossibleResidueMatch],
+        this_res_idx: int,
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
         unknown_molecules: Sequence[Molecule],
     ) -> Iterator[PossibleResidueMatch]:
+        this_matches = all_matches[this_res_idx]
+
         yield from this_matches
 
         if any(this_matches) or len(unknown_molecules) == 0:
@@ -1039,172 +1220,6 @@ class PdbData:
                 ),
             )
 
-    def rescue_partial_matches_with_conect_records(
-        self,
-        this_matches: Sequence[PossibleResidueMatch],
-        prev_matches: Sequence[PossibleResidueMatch],
-        next_matches: Sequence[PossibleResidueMatch],
-        all_matches: Sequence[Sequence[PossibleResidueMatch]],
-    ) -> Iterator[PossibleResidueMatch]:
-        # Don't try to rescue if there is a successful name-based match
-        if any(isinstance(match, SuccessfulMatch) for match in this_matches):
-            yield from this_matches
-            return
-
-        res_atom_idcs = this_matches[0].res_atom_idcs
-
-        # in conects, node data is the pdb index, edge data is the sorted
-        # pdb indices of the two atoms in the CONECT record
-        # bonds to other residues are ignored - we'll deal with them later
-        conects = Graph[int, tuple[int, int]]()
-        conects.add_nodes_from(res_atom_idcs)
-        external_conects: list[tuple[int, int]] = []
-        for pdb_idx in res_atom_idcs:
-            for j in self.conects[pdb_idx]:
-                if j not in res_atom_idcs:
-                    external_conects.append((pdb_idx, j))
-                    continue
-                conects.add_edge(
-                    pdb_idx,
-                    j,
-                    sort_tuple((pdb_idx, j)),
-                )
-
-        for match in this_matches:
-            # Always yield the original mismatch as a record that this rescue
-            # took place
-            yield match
-            if not isinstance(match, ResidueMismatch):
-                # Only attempt to rescue ResidueMismatch
-                continue
-
-            resdef = match.residue_definition
-
-            if len(resdef.virtual_sites) != 0:
-                # No CONECT-based matches for resdefs with virtual sites
-                # TODO: Implement this?
-                continue
-
-            logging.debug(
-                f"Attempting to rescue with CONECT records {resdef.description} {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
-            )
-
-            # Build up a graph of the internal bonds we expect from the residue definition
-            bonds = Graph[AtomDefinition, BondDefinition]()
-            bonds.add_nodes_from(resdef.atoms)
-            bonds.add_edges_from(
-                (resdef.name_to_atom[bond.atom1], resdef.name_to_atom[bond.atom2], bond)
-                for bond in resdef.bonds
-            )
-
-            logging.debug(
-                f"  {bonds.n_nodes=} {conects.n_nodes=}",
-            )
-
-            # Iterate over subgraphs of bonds that match all of conects
-            rescued: bool = False
-            for mapping in bonds.get_mappings(
-                conects,
-                node_matcher=lambda b, c: (
-                    self.element[c] == b.symbol
-                    and (
-                        (self.name[c] in (b.name, *b.synonyms))
-                        or ((self.charge[c] or 0) == b.charge)
-                    )
-                ),
-                subgraph=True,
-                induced=True,  # CONECT records must all be present to find a match
-            ):
-                mapping = {v: k for k, v in mapping.items()}
-                logging.debug(
-                    f"  mapping={ {i: atom.name for i, atom in mapping.items()}!r}",
-                )
-                assert set(mapping) == set(match.res_atom_idcs)
-                match = ResidueConectMatch(
-                    residue_definition=resdef,
-                    index_to_atomdef=mapping,
-                )
-                missing_atoms = {
-                    atom for atom in resdef.atoms if atom not in mapping.values()
-                }
-                logging.debug(f"    {missing_atoms=}")
-
-                # Check that the CONECTs between this residue and another are
-                # compatible with this mapping
-                prior_conects: list[tuple[int, int]] = []
-                posterior_conects: list[tuple[int, int]] = []
-                crosslink_conects: list[tuple[int, int]] = []
-                unknown_conects: list[tuple[int, int]] = []
-                for pdb_idx, j in external_conects:
-                    j_name = self.name[j]
-                    i_name = mapping[pdb_idx].name
-                    logging.debug(
-                        f"      {pdb_idx, j}: {(i_name, j_name)} {len(prev_matches)=} {len(next_matches)=}",
-                    )
-                    logging.debug(f"        {resdef.possible_prior_bond_names=}")
-                    logging.debug(f"        {resdef.possible_posterior_bond_names=}")
-                    logging.debug(f"        {resdef.possible_crosslink_bond_names=}")
-                    if (
-                        len(prev_matches) > 0
-                        and j in prev_matches[0].res_atom_idcs
-                        and (j_name, i_name) in resdef.possible_prior_bond_names
-                    ):
-                        logging.debug("        prior")
-                        prior_conects.append((j, pdb_idx))
-                    elif (
-                        len(next_matches) > 0
-                        and j in next_matches[0].res_atom_idcs
-                        and (i_name, j_name) in resdef.possible_posterior_bond_names
-                    ):
-                        logging.debug("        posterior")
-                        posterior_conects.append((pdb_idx, j))
-                    elif (i_name, j_name) in resdef.possible_crosslink_bond_names:
-                        logging.debug("        crosslink")
-                        crosslink_conects.append((pdb_idx, j))
-                    else:
-                        logging.debug("        unknown")
-                        unknown_conects.append((pdb_idx, j))
-                logging.debug(f"    {unknown_conects=}")
-                logging.debug(f"    {posterior_conects=}")
-                logging.debug(f"    {prior_conects=}")
-                logging.debug(f"    {crosslink_conects=}")
-
-                if (  # nofmt
-                    # All missing atoms must be leaving atoms
-                    any(not atom.leaving for atom in missing_atoms)
-                    # Missing atoms must exactly define linking bonds
-                    or not resdef._missing_atoms_are_valid_leaving_atoms(
-                        {atom.name for atom in missing_atoms},
-                    )
-                    # If there are conect records between this residue and another, match must agree
-                    or len(unknown_conects) > 0
-                    or len(posterior_conects) > 1
-                    or len(prior_conects) > 1
-                    or len(crosslink_conects) > 1
-                    or (bool(crosslink_conects) and not match.expects_crosslink)
-                    or (bool(posterior_conects) and not match.expects_posterior_bond)
-                    or (bool(prior_conects) and not match.expects_prior_bond)
-                ):
-                    logging.debug("      REJECTED")
-                    continue
-
-                if bool(crosslink_conects):
-                    match.set_crosslink(*unwrap(crosslink_conects))
-                if bool(posterior_conects):
-                    match.set_posterior_bond(*unwrap(posterior_conects))
-                if bool(prior_conects):
-                    match.set_prior_bond(*unwrap(prior_conects))
-                # Yield multiple residue matches for multiple mappings and let
-                # the remaining filters sort it out; if we end up with multiple
-                # matches at the end of filtering, then we couldn't
-                # unambiguously rescue this match
-                logging.debug("      ACCEPTED")
-                rescued = True
-                yield match
-
-            if not rescued:
-                logging.debug("no mappings matched")
-
     def match_residues(
         self,
         residue_database: Mapping[str, Iterable[ResidueDefinition]],
@@ -1216,9 +1231,7 @@ class PdbData:
         class Filter(Protocol):
             def __call__(
                 self,
-                this_matches: Sequence[PossibleResidueMatch],
-                prev_matches: Sequence[PossibleResidueMatch],
-                next_matches: Sequence[PossibleResidueMatch],
+                this_res_idx: int,
                 all_matches: Sequence[Sequence[PossibleResidueMatch]],
             ) -> Iterator[PossibleResidueMatch]: ...
 
@@ -1241,16 +1254,11 @@ class PdbData:
             matches = [
                 list(
                     match_filter(
-                        this_matches=this_matches,
-                        prev_matches=prev_matches,
-                        next_matches=next_matches,
+                        this_res_idx=i,
                         all_matches=matches,
                     ),
                 )
-                for prev_matches, this_matches, next_matches in with_neighbours(
-                    matches,
-                    default=(),
-                )
+                for i, _ in enumerate(matches)
             ]
         logging.debug("------")
         return matches
