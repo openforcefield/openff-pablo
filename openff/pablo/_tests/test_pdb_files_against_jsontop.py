@@ -140,7 +140,6 @@ def topology_identical_to_jsontop(
         get_test_data_path(pdbfile),
         unknown_molecules=unknown_molecules,
         additional_substructures=additional_substructures,
-        verbose_errors=True,
     )
     jsontop_top = Topology.from_json(get_test_data_path(jsontopfile).read_text())
 

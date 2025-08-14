@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 
 import pytest
+from openff.toolkit import Molecule
 
 from openff.pablo._pdb_data import ResidueMatch
 from openff.pablo.residue import ResidueDefinition
@@ -121,16 +122,123 @@ class TestResidueMatch:
     def test_match_agrees_with_self(self, any_match: ResidueMatch):
         assert any_match.agrees_with(any_match)
 
-    def test_match_disagrees_with_changed_bond_order(self, any_match: ResidueMatch):
-        changed_bond_order = ResidueMatch(
-            residue_definition=any_match.residue_definition.replace(
-                bonds=[
-                    bond.replace(order=3) for bond in any_match.residue_definition.bonds
-                ],
-            ),
-            crosslink_idcs=any_match.crosslink_idcs,
-            index_to_atomdef=any_match.index_to_atomdef,
-            prior_bond_idcs=any_match.prior_bond_idcs,
-            posterior_bond_idcs=any_match.posterior_bond_idcs,
+    def test_match_agrees_with_carboxylate_resonance_form(self):
+        mol = Molecule.from_smiles("C(=O)[O-]")
+        mol.generate_unique_atom_names()
+        resdef = ResidueDefinition.from_molecule(mol, residue_name="CAR")
+
+        c, h, ox, o = sorted(
+            resdef.atoms,
+            key=lambda atom: (atom.symbol, atom.charge),
         )
-        assert not any_match.agrees_with(changed_bond_order)
+        assert c.symbol == "C"
+        assert h.symbol == "H"
+        assert o.symbol == "O"
+        assert o.charge == 0
+        assert ox.symbol == "O"
+        assert ox.charge == -1
+
+        match1 = ResidueMatch(
+            residue_definition=resdef,
+            index_to_atomdef={10: c, 11: h, 12: o, 13: ox},
+        )
+        match2 = ResidueMatch(
+            residue_definition=resdef,
+            index_to_atomdef={10: c, 11: h, 12: ox, 13: o},
+        )
+        assert match1.agrees_with(match2)
+
+    def test_match_agrees_with_benzene(self):
+        mol = Molecule.from_mapped_smiles(
+            "[C:1]1([H:2])=[C:3]([H:4])[C:5]([H:6])=[C:7]([H:8])[C:9]([H:10])=[C:11]([H:12])1",
+        )
+        mol.generate_unique_atom_names()
+        benzene = ResidueDefinition.from_molecule(mol, residue_name="BEN")
+
+        mol = Molecule.from_mapped_smiles(
+            "[C:1]1([H:2])[C:3]([H:4])=[C:5]([H:6])[C:7]([H:8])=[C:9]([H:10])[C:11]([H:12])=1",
+        )
+        mol.generate_unique_atom_names()
+        benzene_alt_kekulization = ResidueDefinition.from_molecule(
+            mol,
+            residue_name="BEN",
+        )
+
+        mol = Molecule.from_mapped_smiles(
+            "[C-:1]1([H:2])[C-:3]([H:4])[C:5]([H:6])=[C:7]([H:8])[C:9]([H:10])=[C:11]([H:12])1",
+        )
+        mol.generate_unique_atom_names()
+        contrived_dicarbanion = ResidueDefinition.from_molecule(
+            mol,
+            residue_name="BEN",
+        )
+
+        # Alternate kekulization
+        match1 = ResidueMatch(
+            residue_definition=benzene,
+            index_to_atomdef=dict(enumerate(benzene.atoms)),
+        )
+        match2 = ResidueMatch(
+            residue_definition=benzene_alt_kekulization,
+            index_to_atomdef=dict(enumerate(benzene_alt_kekulization.atoms)),
+        )
+        assert match1.agrees_with(match2), "alternate kekulization"
+
+        # Incorrect elements
+        match1 = ResidueMatch(
+            residue_definition=benzene,
+            index_to_atomdef=dict(enumerate(benzene.atoms)),
+        )
+        match2 = ResidueMatch(
+            residue_definition=benzene,
+            index_to_atomdef={
+                0: benzene.atoms[0],
+                1: benzene.atoms[2],
+                2: benzene.atoms[4],
+                3: benzene.atoms[6],
+                4: benzene.atoms[8],
+                5: benzene.atoms[10],
+                6: benzene.atoms[1],
+                7: benzene.atoms[3],
+                8: benzene.atoms[5],
+                9: benzene.atoms[7],
+                10: benzene.atoms[9],
+                11: benzene.atoms[11],
+            },
+        )
+        assert not match1.agrees_with(match2), "incorrect elements"
+
+        # incorrect connectivity (correct elements
+        match1 = ResidueMatch(
+            residue_definition=benzene,
+            index_to_atomdef=dict(enumerate(benzene.atoms)),
+        )
+        match2 = ResidueMatch(
+            residue_definition=benzene,
+            index_to_atomdef={
+                0: benzene.atoms[0],
+                1: benzene.atoms[1],
+                2: benzene.atoms[4],
+                3: benzene.atoms[5],
+                4: benzene.atoms[6],
+                5: benzene.atoms[7],
+                6: benzene.atoms[2],
+                7: benzene.atoms[3],
+                8: benzene.atoms[8],
+                9: benzene.atoms[9],
+                10: benzene.atoms[10],
+                11: benzene.atoms[11],
+            },
+        )
+        assert not match1.agrees_with(match2), "incorrect connectivity"
+
+        # Incorrect total charge (correct elements and connectivity)
+        match1 = ResidueMatch(
+            residue_definition=benzene,
+            index_to_atomdef=dict(enumerate(benzene.atoms)),
+        )
+        match2 = ResidueMatch(
+            residue_definition=contrived_dicarbanion,
+            index_to_atomdef=dict(enumerate(contrived_dicarbanion.atoms)),
+        )
+        assert not match1.agrees_with(match2), "incorrect total charge"

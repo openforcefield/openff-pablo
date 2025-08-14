@@ -25,6 +25,7 @@ dependencies:
   - mdanalysis
   - rdkit
   - pyxdg
+  - rustworkx
 
   #  Pip-only installs
   - pip:

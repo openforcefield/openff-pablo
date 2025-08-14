@@ -1,3 +1,4 @@
+from collections import defaultdict
 from collections.abc import Mapping, Sequence
 
 import pytest
@@ -5,11 +6,11 @@ from openff.toolkit import Molecule, Topology, unit
 
 from openff.pablo._pdb import topology_from_pdb
 from openff.pablo._tests.utils import get_test_data_path
-from openff.pablo._utils import sort_tuple
+from openff.pablo._utils import sort_tuple, unwrap
 from openff.pablo.ccd import CCD_RESIDUE_DEFINITION_CACHE
 from openff.pablo.chem import PEPTIDE_BOND
 from openff.pablo.exceptions import PdbResidueMatchError
-from openff.pablo.residue import ResidueDefinition
+from openff.pablo.residue import BondDefinition, ResidueDefinition
 
 
 @pytest.mark.slow
@@ -113,7 +114,6 @@ def test_1p3q_loads_chains_without_ter():
 def test_5eil_is_three_proteins_with_ncaa_plus_fe3_and_water():
     topology = topology_from_pdb(
         get_test_data_path("prepared_pdbs/5eil_fixed.pdb"),
-        verbose_errors=True,
     )
 
     protein_a = topology.molecule(0)
@@ -136,12 +136,11 @@ def test_5eil_is_three_proteins_with_ncaa_plus_fe3_and_water():
 
 
 @pytest.mark.slow
-def test_3ip9_loads_with_additional_residue():
+def test_3ip9_loads_with_augmented_resdb():
     smiles = "[c:1]1([H:41])[c:2]([H:42])[c:3]2[c:4]([c:5]([H:43])[c:6]1[N:7]1[C:8](=[O:9])[C:10]([H:44])([H:45])[C@@:11]([S:12][C:13]([C@:14]([N:15]([H:16])[H:50])([C:17](=[O:18])[O:19][H:59])[H:49])([H:47])[H:48])([H:46])[C:20]1=[O:21])[C:22](=[O:23])[O:24][C:25]21[c:26]2[c:27]([c:28]([H:51])[c:29]([O:32][H:54])[c:30]([H:52])[c:31]2[H:53])[O:33][c:34]2[c:35]1[c:36]([H:55])[c:37]([H:56])[c:38]([O:40][H:58])[c:39]2[H:57]"
     leavers = {16, 19, 59}
     pablo_top = topology_from_pdb(
         get_test_data_path("prepared_pdbs/3ip9_dye_solvated.pdb"),
-        verbose_errors=True,
         residue_database=CCD_RESIDUE_DEFINITION_CACHE.with_(
             {
                 "DYE": [
@@ -227,6 +226,207 @@ def test_3ip9_loads_with_additional_residue():
             atom.metadata["substructure_atom"] = True
     legacy_top: Topology = Topology.from_pdb(
         get_test_data_path("prepared_pdbs/3ip9_dye_solvated.pdb"),
+        # _additional_substructures is a PROTOTYPE.
+        # Its behavior and input type are likely to change.
+        _additional_substructures=[substructure_mol],
+    )
+
+    assert pablo_top.n_molecules == legacy_top.n_molecules
+    for pablo_mol, legacy_mol in zip(pablo_top.molecules, legacy_top.molecules):
+        assert pablo_mol.n_atoms == legacy_mol.n_atoms
+        for pablo_atom, legacy_atom in zip(pablo_mol.atoms, legacy_mol.atoms):
+            assert (
+                pablo_atom.name == legacy_atom.name
+                or pablo_atom.metadata["canonical_name"] == legacy_atom.name
+            )
+            assert pablo_atom.symbol == legacy_atom.symbol
+            for key in [
+                "residue_name",
+                "chain_id",
+                "residue_number",
+                "insertion_code",
+            ]:
+                assert str(pablo_atom.metadata[key]) == str(legacy_atom.metadata[key])
+
+        pablo_bonds = {
+            sort_tuple((bond.atom1_index, bond.atom2_index)) for bond in pablo_mol.bonds
+        }
+        legacy_bonds = {
+            sort_tuple((bond.atom1_index, bond.atom2_index))
+            for bond in legacy_mol.bonds
+        }
+        assert pablo_bonds == legacy_bonds
+
+    for pablo_res, legacy_res in zip(pablo_top.residues, legacy_top.residues):
+        pablo_res_charge, legacy_res_charge = 0, 0
+        for pablo_atom, legacy_atom in zip(pablo_res.atoms, legacy_res.atoms):
+            pablo_res_charge += pablo_atom.formal_charge  # type:ignore
+            legacy_res_charge += legacy_atom.formal_charge  # type:ignore
+        assert pablo_res_charge == legacy_res_charge
+
+
+@pytest.mark.slow
+def test_3ip9_loads_via_conects():
+    path = get_test_data_path("prepared_pdbs/3ip9_dye_solvated.pdb")
+    smiles = "[c:1]1([H:41])[c:2]([H:42])[c:3]2[c:4]([c:5]([H:43])[c:6]1[N:7]1[C:8](=[O:9])[C:10]([H:44])([H:45])[C@@:11]([S:12][C:13]([C@:14]([N:15]([H:16])[H:50])([C:17](=[O:18])[O:19][H:59])[H:49])([H:47])[H:48])([H:46])[C:20]1=[O:21])[C:22](=[O:23])[O:24][C:25]21[c:26]2[c:27]([c:28]([H:51])[c:29]([O:32][H:54])[c:30]([H:52])[c:31]2[H:53])[O:33][c:34]2[c:35]1[c:36]([H:55])[c:37]([H:56])[c:38]([O:40][H:58])[c:39]2[H:57]"
+
+    substructure_mol = Molecule.from_mapped_smiles(smiles, allow_undefined_stereo=True)
+    substructure_mol.generate_unique_atom_names()
+    linking_bond = PEPTIDE_BOND
+    for i, atom in enumerate(substructure_mol.atoms):
+        if i == 14:
+            atom.name = linking_bond.atom2
+            # linking_bond = linking_bond.replace(atom2=atom.name)
+        if i == 16:
+            atom.name = linking_bond.atom1
+            # linking_bond = linking_bond.replace(atom1=atom.name)
+        if i in {15, 18, 58}:
+            atom.metadata["substructure_atom"] = False
+            atom.metadata["leaving_atom"] = True
+        else:
+            atom.metadata["substructure_atom"] = True
+            atom.metadata["leaving_atom"] = False
+    assert "CA" not in {atom.name for atom in substructure_mol.atoms}
+    assert "H" not in {atom.name for atom in substructure_mol.atoms}
+
+    pablo_top = topology_from_pdb(
+        path,
+        residue_database=CCD_RESIDUE_DEFINITION_CACHE.with_(
+            [
+                ResidueDefinition.from_molecule(
+                    molecule=substructure_mol,
+                    residue_name="DYE",
+                    linking_bond=linking_bond,
+                    description="CYSTEINE-CONJUGATED FLUOROPHORE MALEIMIDE",
+                ),
+            ],
+        ),
+    )
+    assert "DYE" in [res.identifier[3] for res in pablo_top.molecule(0).residues]
+
+    legacy_top: Topology = Topology.from_pdb(
+        path,
+        # _additional_substructures is a PROTOTYPE.
+        # Its behavior and input type are likely to change.
+        _additional_substructures=[substructure_mol],
+    )
+
+    assert pablo_top.n_molecules == legacy_top.n_molecules
+    for pablo_mol, legacy_mol in zip(pablo_top.molecules, legacy_top.molecules):
+        assert pablo_mol.n_atoms == legacy_mol.n_atoms
+        for pablo_atom, legacy_atom in zip(pablo_mol.atoms, legacy_mol.atoms):
+            assert (
+                pablo_atom.name == legacy_atom.name
+                or pablo_atom.metadata["canonical_name"] == legacy_atom.name
+            )
+            assert pablo_atom.symbol == legacy_atom.symbol
+            for key in [
+                "residue_name",
+                "chain_id",
+                "residue_number",
+                "insertion_code",
+            ]:
+                assert str(pablo_atom.metadata[key]) == str(legacy_atom.metadata[key])
+
+        pablo_bonds = {
+            sort_tuple((bond.atom1_index, bond.atom2_index)) for bond in pablo_mol.bonds
+        }
+        legacy_bonds = {
+            sort_tuple((bond.atom1_index, bond.atom2_index))
+            for bond in legacy_mol.bonds
+        }
+        assert pablo_bonds == legacy_bonds
+
+    for pablo_res, legacy_res in zip(pablo_top.residues, legacy_top.residues):
+        pablo_res_charge, legacy_res_charge = 0, 0
+        for pablo_atom, legacy_atom in zip(pablo_res.atoms, legacy_res.atoms):
+            pablo_res_charge += pablo_atom.formal_charge  # type:ignore
+            legacy_res_charge += legacy_atom.formal_charge  # type:ignore
+        assert pablo_res_charge == legacy_res_charge
+
+
+def test_e2_loads_via_conects():
+    """Check that a file that consists of a single residue non-polymer molecule
+    with the wrong atom names and correct CONECT records matches"""
+    path = get_test_data_path("e2_7nel.pdb")
+    substructure_mol = unwrap(CCD_RESIDUE_DEFINITION_CACHE["EST"]).to_openff_molecule()
+    for atom in substructure_mol.atoms:
+        atom.name = ""
+        atom.metadata["synonyms"] = ""
+    old_names = [atom.name for atom in substructure_mol.atoms]
+    substructure_mol.generate_unique_atom_names()
+    assert all(
+        atom.name != old_name
+        for atom, old_name in zip(substructure_mol.atoms, old_names)
+    )
+
+    resdef = ResidueDefinition.from_molecule(substructure_mol)
+    assert all(len(atom.synonyms) == 0 for atom in resdef.atoms)
+
+    top = topology_from_pdb(
+        path,
+        residue_database={"EST": [resdef]},
+    )
+    assert top.n_molecules == 1
+    top_mol = top.molecule(0)
+    assert isinstance(top_mol, Molecule)
+    is_isomorphic, mapping = Molecule.are_isomorphic(
+        top_mol,
+        substructure_mol,
+        return_atom_map=True,
+        atom_stereochemistry_matching=False,
+        bond_stereochemistry_matching=False,
+    )
+    assert is_isomorphic
+    assert mapping is not None
+    for i, j in mapping.items():
+        i_atom = top_mol.atom(i)
+        j_atom = substructure_mol.atom(j)
+
+        assert i_atom.metadata["used_synonym"] != j_atom.name
+        assert i_atom.metadata["canonical_name"] == j_atom.name
+
+
+def test_3ip9_trimmed_loads_via_conects():
+    path = get_test_data_path("3ip9_dye_trimmed.pdb")
+    smiles = "[c:1]1([H:41])[c:2]([H:42])[c:3]2[c:4]([c:5]([H:43])[c:6]1[N:7]1[C:8](=[O:9])[C:10]([H:44])([H:45])[C@@:11]([S:12][C:13]([C@:14]([N:15]([H:16])[H:50])([C:17](=[O:18])[O:19][H:59])[H:49])([H:47])[H:48])([H:46])[C:20]1=[O:21])[C:22](=[O:23])[O:24][C:25]21[c:26]2[c:27]([c:28]([H:51])[c:29]([O:32][H:54])[c:30]([H:52])[c:31]2[H:53])[O:33][c:34]2[c:35]1[c:36]([H:55])[c:37]([H:56])[c:38]([O:40][H:58])[c:39]2[H:57]"
+
+    substructure_mol = Molecule.from_mapped_smiles(smiles, allow_undefined_stereo=True)
+    substructure_mol.generate_unique_atom_names()
+    linking_bond = PEPTIDE_BOND
+    for i, atom in enumerate(substructure_mol.atoms):
+        if i == 14:
+            atom.name = linking_bond.atom2
+            # linking_bond = linking_bond.replace(atom2=atom.name)
+        if i == 16:
+            atom.name = linking_bond.atom1
+            # linking_bond = linking_bond.replace(atom1=atom.name)
+        if i in {15, 18, 58}:
+            atom.metadata["substructure_atom"] = False
+            atom.metadata["leaving_atom"] = True
+        else:
+            atom.metadata["substructure_atom"] = True
+            atom.metadata["leaving_atom"] = False
+    assert "CA" not in {atom.name for atom in substructure_mol.atoms}
+    assert "H" not in {atom.name for atom in substructure_mol.atoms}
+
+    pablo_top = topology_from_pdb(
+        path,
+        residue_database=CCD_RESIDUE_DEFINITION_CACHE.with_(
+            [
+                ResidueDefinition.from_molecule(
+                    molecule=substructure_mol,
+                    residue_name="DYE",
+                    linking_bond=linking_bond,
+                    description="CYSTEINE-CONJUGATED FLUOROPHORE MALEIMIDE",
+                ),
+            ],
+        ),
+    )
+    assert "DYE" in [res.identifier[3] for res in pablo_top.molecule(0).residues]
+
+    legacy_top: Topology = Topology.from_pdb(
+        path,
         # _additional_substructures is a PROTOTYPE.
         # Its behavior and input type are likely to change.
         _additional_substructures=[substructure_mol],
@@ -435,6 +635,13 @@ def test_cannot_load_arg_alternate_resonance_form():
     )
 
 
+def test_can_load_arg_alternate_resonance_form_with_conects():
+    """Polymer residue with non-standard resonance form and CONECT records"""
+    topology_from_pdb(
+        get_test_data_path("capped_arg_altresonance_conect.pdb"),
+    )
+
+
 def test_misplaced_ter_with_custom_resdef_gives_clear_error():
     with pytest.raises(
         ValueError,
@@ -568,56 +775,15 @@ def test_polyglycines_loads_with_augmented_ccd():
         assert molecule.hill_formula == "H2O"
 
 
-def wrong_gly_def() -> ResidueDefinition:
-    from openff.pablo.chem import PEPTIDE_BOND
-    from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
-
-    atoms = (
-        AtomDefinition.with_defaults(name="N", symbol="N"),
-        AtomDefinition.with_defaults(name="CA", symbol="C", stereo="R"),
-        AtomDefinition.with_defaults(name="C", symbol="C"),
-        AtomDefinition.with_defaults(name="O", symbol="O"),
-        AtomDefinition.with_defaults(name="HA2", symbol="H"),
-        AtomDefinition.with_defaults(name="OXT", symbol="O", leaving=True),
-        AtomDefinition.with_defaults(name="H", symbol="H"),
-        AtomDefinition.with_defaults(name="H2", symbol="H", leaving=True),
-        AtomDefinition.with_defaults(name="HA3", symbol="H"),
-        AtomDefinition.with_defaults(name="HXT", symbol="H", leaving=True),
-    )
-
-    bonds = (
-        BondDefinition.with_defaults("N", "CA"),
-        BondDefinition.with_defaults("N", "H"),
-        BondDefinition.with_defaults("N", "H2"),
-        BondDefinition.with_defaults("CA", "C"),
-        BondDefinition.with_defaults("CA", "HA2"),
-        BondDefinition.with_defaults("CA", "HA3"),
-        BondDefinition.with_defaults("C", "O", order=1),  # WRONGNESS
-        BondDefinition.with_defaults("C", "OXT"),
-        BondDefinition.with_defaults("OXT", "HXT"),
-    )
-
-    return ResidueDefinition(
-        atoms=atoms,
-        bonds=bonds,
-        crosslink=None,
-        linking_bond=PEPTIDE_BOND,
-        description="GLYCINE carbonyl single bond",
-        residue_name="GLY",
-    )
-
-
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "resdb",
     [
-        CCD_RESIDUE_DEFINITION_CACHE.with_({"GLY": [wrong_gly_def()]}),
         {**CCD_RESIDUE_DEFINITION_CACHE.without({"PRO"})},
         {**CCD_RESIDUE_DEFINITION_CACHE.without({"GLY"})},
         {},
     ],
     ids=[
-        "wrong_gly_def",
         "no_pro",
         "no_gly",
         "empty",
@@ -642,7 +808,6 @@ def test_5ap1_prepared_fails_with_broken_resdefs(
 
 def test_microviridin_crosslinks():
     from openff.pablo import CCD_RESIDUE_DEFINITION_CACHE, topology_from_pdb
-    from openff.pablo.residue import BondDefinition
 
     custom_residue_database = CCD_RESIDUE_DEFINITION_CACHE.with_(
         {
@@ -747,3 +912,65 @@ def test_microviridin_crosslinks():
         get_test_data_path("microviridin_edited.pdb").absolute(),
         residue_database=custom_residue_database,
     )
+
+
+@pytest.mark.slow
+def test_complex_pdb_1flr():
+    ligand = Molecule.from_file(
+        get_test_data_path("prepared_pdbs/1FLR_Ligand.sdf"),
+        file_format="SDF",
+    )
+    assert isinstance(ligand, Molecule)
+
+    with pytest.warns(
+        match="Alt locs not supported; only empty or 'A' alt locs will be read",
+    ):
+        topology = topology_from_pdb(
+            get_test_data_path("prepared_pdbs/1FLR_prepared.pdb"),
+            unknown_molecules=[ligand],
+            residue_database=CCD_RESIDUE_DEFINITION_CACHE.with_(
+                {
+                    "NMA": [
+                        ResidueDefinition.from_smiles(
+                            "[N:1]([H:2])([H:7])[C:3]([H:4])([H:5])[H:6]",
+                            atom_names={
+                                1: "N",
+                                2: "H",
+                                7: "H2",
+                                3: "CA",
+                                4: "1HA",
+                                5: "2HA",
+                                6: "3HA",
+                            },
+                            residue_name="NMA",
+                            linking_bond=PEPTIDE_BOND,
+                            leaving_atoms=[7],
+                            description="Maestro NME",
+                        ),
+                    ],
+                },
+            ).with_patch("THR", lambda resdef: [resdef.with_synonyms({"OXT": ["O2"]})]),
+        )
+
+    uniques = {}
+    for mol in topology.molecules:
+        assert isinstance(mol, Molecule)
+        if mol.n_atoms > 3:
+            assert mol.hill_formula not in uniques.keys()
+            uniques[mol.hill_formula] = mol
+        else:
+            if mol.to_smiles in uniques.keys():
+                pass
+            else:
+                uniques[mol.to_smiles()] = mol
+
+    chains: defaultdict[int | str, list[int]] = defaultdict(list)
+    for i, atom in enumerate(topology.atoms):
+        chains[atom.metadata["chain_id"]].append(i)
+
+    # Hardcorded from match counts of regexes:
+    #   (ATOM  |HETATM).{10}(A| )
+    #   (ATOM  |HETATM).{10}(A| ).{4}H
+    #   (ATOM  |HETATM).{10}(A| ).{4}L
+    assert topology.n_atoms == 7539
+    assert {k: len(v) for k, v in chains.items()} == {"H": 3712, "L": 3827}

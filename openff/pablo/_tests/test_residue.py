@@ -243,6 +243,7 @@ class TestResidueDefinition:
                 linking_bond=None,
                 crosslink=None,
                 description="",
+                virtual_sites=(),
             )
 
     def test_to_openff_molecule(
@@ -374,6 +375,7 @@ class TestResidueDefinition:
             linking_bond=None,
             description="HYDROXIDE ION",
             residue_name="OH-",
+            virtual_sites=(),
         )
         water_from_hydroxide = hydroxide_ion.protonated_at("O", "H2")
         assert water_from_hydroxide.to_openff_molecule().is_isomorphic_with(
@@ -391,6 +393,7 @@ class TestResidueDefinition:
             linking_bond=None,
             description="HYDROXIDE ION",
             residue_name="OH-",
+            virtual_sites=(),
         )
         assert "H2" in oh_resdef.name_to_atom
         with pytest.raises(ValueError):
@@ -412,6 +415,7 @@ class TestResidueDefinition:
                 linking_bond=None,
                 description="HYDROXIDE ION",
                 residue_name="OH-",
+                virtual_sites=(),
             ).protonated_at("O", "H", ignore_synonym_clashes=ignore_synonym_clashes)
 
     def test_deprotonated_at_cys_sidechain(
@@ -469,3 +473,22 @@ class TestResidueDefinition:
             from_zwitterionic,
         ):
             assert resdef_from_zwitterionic._is_isomorphic_to(resdef_from_neutral)
+
+    def test_virtual_sites_clash_with_names(self):
+        with pytest.raises(ValueError, match="Virtual sites may not clash"):
+            ResidueDefinition.from_smiles(
+                "[H+:1]",
+                atom_names={1: "H"},
+                virtual_sites=["H"],
+                residue_name="HPS",
+            )
+
+    def test_virtual_sites_clash_with_synonyms(self):
+        resdef = ResidueDefinition.from_smiles(
+            "[H+:1]",
+            atom_names={1: "H"},
+            virtual_sites=["EP"],
+            residue_name="HPS",
+        )
+        with pytest.raises(ValueError, match="Virtual sites may not clash"):
+            resdef.with_synonyms({"H": ["EP"]})
