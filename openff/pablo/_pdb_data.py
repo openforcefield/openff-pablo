@@ -9,11 +9,20 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from io import TextIOBase
 from os import PathLike
-from typing import IO, Any, DefaultDict, Protocol, Self
+from pathlib import Path
+from typing import IO, Any, DefaultDict, Literal, Protocol, Self
 
 from openff.toolkit import Molecule
 from openff.units import elements
 
+from openff.pablo._cif import (
+    cif_floats,
+    cif_opt_floats,
+    cif_opt_ints,
+    cif_str,
+    cif_strs,
+    parse_cif,
+)
 from openff.pablo._graph import Graph
 
 from ._matching import (
@@ -35,6 +44,7 @@ from ._utils import (
     no_none_in_values,
     sort_tuple,
     unwrap,
+    unwrap_or_none,
 )
 from .exceptions import (
     PdbResidueMatchError,
@@ -99,7 +109,11 @@ class PdbData:
         )
 
     @classmethod
-    def from_file(cls, path: str | PathLike[str]) -> Self:
+    def from_file(
+        cls,
+        path: str | PathLike[str],
+        format: Literal["PDB", "CIF", None] = None,
+    ) -> Self:
         """
         Create a ``PdbData`` object by reading from a file.
 
@@ -107,14 +121,24 @@ class PdbData:
         ----------
         path
             The path to the PDB file
+        format
+            Which format to interpret the file as. (default: infer from file
+            name extension)
         """
+        path = Path(path)
+        if format is None:
+            format = "CIF" if path.suffix.lower() == ".cif" else "PDB"
         with open(path) as f:
-            ret = cls.from_file_object(f)
+            ret = cls.from_file_object(f, format=format)
         ret.src_filename = str(path)
         return ret
 
     @classmethod
-    def from_file_object(cls, file: IO[str] | TextIOBase) -> Self:
+    def from_file_object(
+        cls,
+        file: IO[str] | TextIOBase,
+        format: Literal["PDB", "CIF"] = "PDB",
+    ) -> Self:
         """
         Create a ``PdbData`` object by reading from a file-like object.
 
@@ -122,53 +146,64 @@ class PdbData:
         ----------
         file
             A file-like object containing PDB data
+        format
+            Which format to interpet the file as
         """
-        return cls.parse_pdb(file.readlines())
+        if format.upper() == "PDB":
+            return cls.parse_pdb(file.readlines())
+        elif format.upper() == "CIF":
+            return cls.parse_cif(file.readlines())
+        else:
+            raise ValueError(f"format must be one of 'PDB' or 'CIF', not {format!r}")
 
-    def _append_coord_line(self, line: str):
-        """
-        Append data from an ATOM or HETATM line to the internal data structures.
+    @classmethod
+    def parse_cif(cls, lines: Iterable[str]) -> Self:
+        if isinstance(lines, str):
+            lines = [lines]
+        block = unwrap(parse_cif("\n".join(lines)))
 
-        Parameters
-        ----------
-        line
-            An ATOM or HETATM line from a PDB file
-        """
-        for field_ in dataclasses.fields(self):
-            value = getattr(self, field_.name)
-            if hasattr(value, "append"):
-                value.append(__UNSET__)
-                assert value[-1] is __UNSET__
+        res_names: dict[str, str] = {}
+        chain_ids: dict[str, str] = {}
+        for res_seq, res_name, chain_id in zip(
+            block["_pdbx_poly_seq_scheme.seq_id"],
+            block["_pdbx_poly_seq_scheme.mon_id"],
+            block["_pdbx_poly_seq_scheme.asym_id"],
+        ):
+            res_names[res_seq] = cif_str(res_name)
+            chain_ids[res_seq] = cif_str(chain_id)
 
-        self.line_no[-1] = self._cursor
-        self.model[-1] = None
-        self.serial[-1] = line[6:11].strip()
-        self.serial_to_index[self.serial[-1]].append(len(self.serial) - 1)
-        self.name[-1] = line[12:16].strip()
-        self.alt_loc[-1] = line[16].strip() or ""
-        self.res_name[-1] = (
-            line[17:20].strip()
-            if self.strict or any(char.isspace() for char in line[17:21])
-            else line[17:21]
+        n_atom_sites = len(block["_atom_site.id"])
+
+        data = cls(
+            strict=True,
+            cryst1_a=unwrap_or_none(cif_opt_floats(block["_cell.length_a"])),
+            cryst1_b=unwrap_or_none(cif_opt_floats(block["_cell.length_b"])),
+            cryst1_c=unwrap_or_none(cif_opt_floats(block["_cell.length_c"])),
+            cryst1_alpha=unwrap_or_none(cif_opt_floats(block["_cell.angle_alpha"])),
+            cryst1_beta=unwrap_or_none(cif_opt_floats(block["_cell.angle_beta"])),
+            cryst1_gamma=unwrap_or_none(cif_opt_floats(block["_cell.angle_gamma"])),
+            line_no=[-1] * n_atom_sites,
+            model=cif_opt_ints(block["_atom_site.pdbx_PDB_model_num"]),
+            serial=cif_strs(block["_atom_site.id"]),
+            name=cif_strs(block["_atom_site.label_atom_id"]),
+            alt_loc=cif_strs(block["_atom_site.label_alt_id"]),
+            res_name=[res_names[i] for i in block["_atom_site.label_seq_id"]],
+            chain_id=[chain_ids[i] for i in block["_atom_site.label_seq_id"]],
+            res_seq=cif_strs(block["_atom_site.label_seq_id"]),
+            i_code=cif_strs(block["_atom_site.pdbx_PDB_ins_code"]),
+            x=cif_floats(block["_atom_site.Cartn_x"]),
+            y=cif_floats(block["_atom_site.Cartn_y"]),
+            z=cif_floats(block["_atom_site.Cartn_z"]),
+            occupancy=cif_floats(block["_atom_site.occupancy"]),
+            temp_factor=cif_floats(block["_atom_site.B_iso_or_equiv"]),
+            element=cif_strs(block["_atom_site.type_symbol"]),
+            charge=cif_opt_ints(block["_atom_site.pdbx_formal_charge"]),
+            terminated=[False] * n_atom_sites,
+            conects=[set()] * n_atom_sites,
         )
-        self.chain_id[-1] = line[21].strip()
-        self.res_seq[-1] = line[22:26].strip()
-        self.i_code[-1] = line[26].strip() or " "
-        self.x[-1] = float(line[30:38])
-        self.y[-1] = float(line[38:46])
-        self.z[-1] = float(line[46:54])
-        self.occupancy[-1] = float(line[54:60])
-        self.temp_factor[-1] = float(line[60:66])
-        self.element[-1] = line[76:78].strip()
-        self.charge[-1] = charge_int_or_none(line[78:80].strip(), strict=self.strict)
-        self.terminated[-1] = False
-        self.conects[-1] = set()
+        # TODO: CONECT record equivalent
 
-        # Ensure we've assigned a value to every field
-        for field_ in dataclasses.fields(self):
-            value = getattr(self, field_.name)
-            if hasattr(value, "append"):
-                assert value[-1] is not __UNSET__
+        return data
 
     @classmethod
     def parse_pdb(cls, lines: Iterable[str], strict: bool = False) -> Self:
@@ -214,6 +249,51 @@ class PdbData:
         )
 
         return data
+
+    def _append_coord_line(self, line: str):
+        """
+        Append data from an ATOM or HETATM line to the internal data structures.
+
+        Parameters
+        ----------
+        line
+            An ATOM or HETATM line from a PDB file
+        """
+        for field_ in dataclasses.fields(self):
+            value = getattr(self, field_.name)
+            if hasattr(value, "append"):
+                value.append(__UNSET__)
+                assert value[-1] is __UNSET__
+
+        self.line_no[-1] = self._cursor
+        self.model[-1] = None
+        self.serial[-1] = line[6:11].strip()
+        self.serial_to_index[self.serial[-1]].append(len(self.serial) - 1)
+        self.name[-1] = line[12:16].strip()
+        self.alt_loc[-1] = line[16].strip() or ""
+        self.res_name[-1] = (
+            line[17:20].strip()
+            if self.strict or any(char.isspace() for char in line[17:21])
+            else line[17:21]
+        )
+        self.chain_id[-1] = line[21].strip()
+        self.res_seq[-1] = line[22:26].strip()
+        self.i_code[-1] = line[26].strip() or " "
+        self.x[-1] = float(line[30:38])
+        self.y[-1] = float(line[38:46])
+        self.z[-1] = float(line[46:54])
+        self.occupancy[-1] = float(line[54:60])
+        self.temp_factor[-1] = float(line[60:66])
+        self.element[-1] = line[76:78].strip()
+        self.charge[-1] = charge_int_or_none(line[78:80].strip(), strict=self.strict)
+        self.terminated[-1] = False
+        self.conects[-1] = set()
+
+        # Ensure we've assigned a value to every field
+        for field_ in dataclasses.fields(self):
+            value = getattr(self, field_.name)
+            if hasattr(value, "append"):
+                assert value[-1] is not __UNSET__
 
     @staticmethod
     def _process_conects(
@@ -324,7 +404,6 @@ class PdbData:
                     "Multi-model files not supported; topology will reflect first model",
                 )
                 break
-
             if prev == residue_info or prev is None or len(indices) == 0:
                 indices.append(atom_idx)
             else:

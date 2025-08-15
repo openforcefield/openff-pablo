@@ -30,8 +30,10 @@ if TYPE_CHECKING:
 
 def _format_linenos(data: "PdbData", res_atom_idcs: Sequence[int]) -> str:
     line_nos = sorted(
-        [data.line_no[j] for j in res_atom_idcs],
+        [data.line_no[j] for j in res_atom_idcs if data.line_no[j] != -1],
     )
+    if len(line_nos) == 0:
+        return "l?"
     first, last = line_nos[0], line_nos[-1]
     if line_nos == list(range(first, last + 1)):
         return f"l{first}-{last}"

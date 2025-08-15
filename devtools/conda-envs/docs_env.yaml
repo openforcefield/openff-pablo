@@ -26,6 +26,7 @@ dependencies:
   - rdkit
   - pyxdg
   - rustworkx
+  - gemmi
 
   #  Pip-only installs
   - pip:

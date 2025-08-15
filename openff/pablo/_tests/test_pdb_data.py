@@ -1160,3 +1160,39 @@ def test_filter_on_crosslinks_rejects_expected_crosslink_without_partner_second(
         filtered_matches[0].reason
         == "crosslink expected but no matching crosslink partner could be found"
     )
+
+
+def test_can_parse_cif(pdbxfn: Path):
+    with open(pdbxfn) as f:
+        data = PdbData.parse_cif(f.readlines())
+    assert isinstance(data, PdbData)
+    assert data.cryst1_a == 1.0
+    assert data.cryst1_b == 1.0
+    assert data.cryst1_c == 1.0
+    assert data.cryst1_alpha == 90.0
+    assert data.cryst1_beta == 90.0
+    assert data.cryst1_gamma == 90.0
+
+    assert len(data.line_no) == 16720
+    assert len(data.model) == 16720
+    assert len(data.serial) == 16720
+    assert len(data.name) == 16720
+    assert len(data.alt_loc) == 16720
+    assert len(data.res_name) == 16720
+    assert len(data.chain_id) == 16720
+    assert len(data.res_seq) == 16720
+    assert len(data.i_code) == 16720
+    assert len(data.x) == 16720
+    assert len(data.y) == 16720
+    assert len(data.z) == 16720
+    assert len(data.occupancy) == 16720
+    assert len(data.temp_factor) == 16720
+    assert len(data.element) == 16720
+    assert len(data.charge) == 16720
+    assert len(data.terminated) == 16720
+    assert len(data.conects) == 16720
+
+    for res_atom_idcs in data.residue_indices:
+        print(res_atom_idcs)
+
+    assert sum(1 for _ in data.residue_indices) == 34

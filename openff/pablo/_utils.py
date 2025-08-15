@@ -2,10 +2,10 @@ import logging
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import (
+    Any,
     DefaultDict,
     Literal,
     ParamSpec,
-    TypeAlias,
     TypeGuard,
     TypeVar,
     TypeVarTuple,
@@ -46,8 +46,6 @@ U = TypeVar("U")
 V = TypeVar("V")
 Ts = TypeVarTuple("Ts")
 P = ParamSpec("P")
-
-CIFValue: TypeAlias = str | float | int
 
 
 class __UNSET__:
@@ -101,6 +99,16 @@ def unwrap(container: Iterable[T], msg: str = "") -> T:
     raise ValueError(msg + "container has multiple elements")
 
 
+def unwrap_or_none(container: Iterable[T]) -> T | None:
+    """
+    Unwrap an iterable only if it has a single element; return None otherwise
+    """
+    try:
+        return unwrap(container)
+    except ValueError:
+        return None
+
+
 def sort_tuple(tup: tuple[*Ts]) -> tuple[*Ts]:
     return tuple(sorted(tup))  # type: ignore
 
@@ -132,6 +140,13 @@ def try_or_none(
     **kwargs: P.kwargs,
 ) -> T | None:
     return try_or(None, func, catch, *args, **kwargs)
+
+
+def coerce_or_none(value: Any, func: Callable[[Any], T]) -> T | None:
+    try:
+        return func(value)
+    except Exception:
+        return None
 
 
 def with_neighbours(
@@ -230,7 +245,7 @@ def charge_int_or_none(s: str, strict: Literal[False]) -> int | None: ...
 
 
 def charge_int_or_none(s: str, strict: bool = False):
-    if s == "":
+    if s == "" or s == "?":
         return 0 if strict else None
     else:
         if s.endswith("+"):
