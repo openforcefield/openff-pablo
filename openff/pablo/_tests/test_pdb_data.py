@@ -1192,7 +1192,6 @@ def test_can_parse_cif(pdbxfn: Path):
     assert len(data.terminated) == 16720
     assert len(data.conects) == 16720
 
-    for res_atom_idcs in data.residue_indices:
-        print(res_atom_idcs)
+    assert data.line_no == list(range(2077, 18797))
 
     assert sum(1 for _ in data.residue_indices) == 34

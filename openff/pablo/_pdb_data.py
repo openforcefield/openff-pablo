@@ -17,6 +17,7 @@ from openff.units import elements
 
 from openff.pablo._cif import (
     cif_floats,
+    cif_ints,
     cif_opt_floats,
     cif_opt_ints,
     cif_str,
@@ -182,7 +183,6 @@ class PdbData:
             cryst1_alpha=unwrap_or_none(cif_opt_floats(block["_cell.angle_alpha"])),
             cryst1_beta=unwrap_or_none(cif_opt_floats(block["_cell.angle_beta"])),
             cryst1_gamma=unwrap_or_none(cif_opt_floats(block["_cell.angle_gamma"])),
-            line_no=[-1] * n_atom_sites,
             model=cif_opt_ints(block["_atom_site.pdbx_PDB_model_num"]),
             serial=cif_strs(block["_atom_site.id"]),
             name=cif_strs(block["_atom_site.label_atom_id"]),
@@ -198,6 +198,8 @@ class PdbData:
             temp_factor=cif_floats(block["_atom_site.B_iso_or_equiv"]),
             element=cif_strs(block["_atom_site.type_symbol"]),
             charge=cif_opt_ints(block["_atom_site.pdbx_formal_charge"]),
+            line_no=cif_ints(block["_atom_site.id.__pablo__line_no"]),
+            # TODO: See if we can improve the following
             terminated=[False] * n_atom_sites,
             conects=[set()] * n_atom_sites,
         )
