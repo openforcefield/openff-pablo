@@ -86,9 +86,9 @@ def parse_cif(string: str) -> list[dict[str, list[str]]]:
     The outer list has one element per block. Each block is represented as a
     dict mapping from tags to lists of values. Simple pairs are returned as
     lists with length 1. Loops are returned as one list for each tag. All
-    tags include the entire path to the leaf tag. Each item (loop or pair)
-    has a subtag ``.__pablo__line_no`` which stores the line number(s) for
-    that tag's values. Frames are not supported.
+    tags include the entire path to the leaf tag. Each tag has a subtag
+    ``.__pablo__line_no`` which stores the line number(s) for that tag's values.
+    Frames are not supported.
     """
     document = gemmi.cif.read_string(string)
     blocks: list[dict[str, list[str]]] = []
