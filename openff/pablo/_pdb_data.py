@@ -20,7 +20,6 @@ from openff.pablo._cif import (
     cif_ints,
     cif_opt_floats,
     cif_opt_ints,
-    cif_str,
     cif_strs,
     parse_cif,
 )
@@ -163,16 +162,6 @@ class PdbData:
             lines = [lines]
         block = unwrap(parse_cif("\n".join(lines)))
 
-        res_names: dict[str, str] = {}
-        chain_ids: dict[str, str] = {}
-        for res_seq, res_name, chain_id in zip(
-            block["_pdbx_poly_seq_scheme.seq_id"],
-            block["_pdbx_poly_seq_scheme.mon_id"],
-            block["_pdbx_poly_seq_scheme.asym_id"],
-        ):
-            res_names[res_seq] = cif_str(res_name)
-            chain_ids[res_seq] = cif_str(chain_id)
-
         n_atom_sites = len(block["_atom_site.id"])
 
         data = cls(
@@ -187,8 +176,7 @@ class PdbData:
             serial=cif_strs(block["_atom_site.id"]),
             name=cif_strs(block["_atom_site.label_atom_id"]),
             alt_loc=cif_strs(block["_atom_site.label_alt_id"]),
-            res_name=[res_names[i] for i in block["_atom_site.label_seq_id"]],
-            chain_id=[chain_ids[i] for i in block["_atom_site.label_seq_id"]],
+            chain_id=cif_strs(block["_atom_site.label_asym_id"]),
             res_seq=cif_strs(block["_atom_site.label_seq_id"]),
             i_code=cif_strs(block["_atom_site.pdbx_PDB_ins_code"]),
             x=cif_floats(block["_atom_site.Cartn_x"]),
@@ -204,6 +192,38 @@ class PdbData:
             conects=[set()] * n_atom_sites,
         )
         # TODO: CONECT record equivalent
+
+        residues = [
+            (res_seq, res_name, chain_id)
+            for res_seq, res_name, chain_id in zip(
+                block["_pdbx_poly_seq_scheme.seq_id"],
+                block["_pdbx_poly_seq_scheme.mon_id"],
+                block["_pdbx_poly_seq_scheme.asym_id"],
+            )
+        ]
+        model_residues = list(residues)
+        res_seq, res_name, chain_id = model_residues.pop(0)
+        prev_model: type[__UNSET__] | int | None = __UNSET__
+        for i, (this_res_seq, this_chain_id, this_model) in enumerate(
+            zip(data.res_seq, data.chain_id, data.model, strict=True),
+        ):
+            # Reset model_residues on new model
+            if prev_model is not __UNSET__ and prev_model != this_model:
+                model_residues = list(residues)
+                res_seq, res_name, chain_id = model_residues.pop(0)
+            # Pop the next residue off the stack when the residue changes
+            if this_res_seq != res_seq or this_chain_id != chain_id:
+                res_seq, res_name, chain_id = model_residues.pop(0)
+            # Raise an error if we skip a residue
+            if this_res_seq != res_seq or this_chain_id != chain_id:
+                this_serial = data.serial[i]
+                this_line_no = data.line_no[i]
+                raise ValueError(
+                    "Could not identify residue name"
+                    + f" for atom serial {this_serial} (l{this_line_no})",
+                )
+            data.res_name.append(res_name)
+            prev_model = this_model
 
         return data
 
