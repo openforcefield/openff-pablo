@@ -15,7 +15,7 @@ dependencies:
 
   # Imports
   - openff-units
-  - openff-toolkit>=0.16.8
+  - openff-toolkit>=0.17.0
   - polars
   - openmm
   - mdtraj

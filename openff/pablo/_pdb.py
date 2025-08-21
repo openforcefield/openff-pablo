@@ -3,7 +3,8 @@ import warnings
 from collections.abc import Iterable, Mapping, MutableSequence
 from io import TextIOBase
 from os import PathLike
-from typing import IO, assert_never
+from pathlib import Path
+from typing import IO, Literal, assert_never
 
 import numpy as np
 from openff.toolkit import Molecule, Topology
@@ -34,6 +35,7 @@ def topology_from_pdb(
         Iterable[ResidueDefinition],
     ] = CCD_RESIDUE_DEFINITION_CACHE,
     additional_substructures: Iterable[ResidueDefinition] = [],
+    format: Literal["PDB", "CIF", None] = None,
     use_canonical_names: bool = False,
     ignore_unknown_CONECT_records: bool = False,
     set_stereochemistry_from_3d: bool = True,
@@ -79,6 +81,11 @@ def topology_from_pdb(
         whether or not the residue name matches. To use this argument with
         OpenFF ``Molecule`` objects or SMILES strings, see the
         ``ResidueDefinition.from_*`` class methods.
+    format
+        The file format the file is encoded in. `"PDB"` expects a standard PDB
+        file. `"CIF"` expects a PDBx/mmCIF file. Omitting the argument or `None`
+        interprets files with a known filename according to their filename
+        extension, or an unknown filename extension as PDB.
     use_canonical_names
         If ``True``, atom names in the PDB file will be replaced by the
         canonical name for the same atom from the residue database.
@@ -163,9 +170,13 @@ def topology_from_pdb(
         The line number in the PDB file that contained this atom record.
     """
     if hasattr(file, "readlines"):
-        data = PdbData.from_file_object(file)  # type: ignore
+        if format is None and hasattr(file, "filename"):
+            format = Path(file.name).suffix[1:].upper()  # type: ignore
+        elif format is None or format == "":  # type: ignore
+            format = "PDB"
+        data = PdbData.from_file_object(file, format=format)  # type: ignore
     else:
-        data = PdbData.from_file(file)  # type: ignore
+        data = PdbData.from_file(file, format=format)  # type: ignore
 
     topology = _build_topology(
         matches=data.get_residue_matches(

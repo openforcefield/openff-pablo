@@ -162,6 +162,11 @@ class PdbData:
             lines = [lines]
         block = unwrap(parse_cif("\n".join(lines)))
 
+        logging.warning(
+            "PDBx/mmCIF files include chemical information that Pablo ignores."
+            + " For details, see 'How Pablo loads PDB files' in the docs.",
+        )
+
         n_atom_sites = len(block["_atom_site.id"])
 
         data = cls(
