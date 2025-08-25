@@ -12,6 +12,6 @@ Loading a PDB file with Pablo follows three steps:
 2. Match each residue against the residue definitions in the library for that residue using atom names, elements, and connectivity specified in the PDB file
 3. Construct a `Topology` from the matched residue definitions if they fully and unambiguously describe the PDB file, or raise an error
 
-### PDBx/mmCIF files
+## PDBx/mmCIF files
 
 Pablo has basic support for PDBx/mmCIF files. This works by reading a subset of data entries in the file that are equivalent to the columns of a PDB file's `ATOM/HETATM` records and passing that data through the same matching and topology construction pipeline used for PDB files. This ignores most of the chemical information in the PDBx/mmCIF file. If you have a use-case for the PDBx/mmCIF format that isn't covered by the existing functionality, please let us know!
