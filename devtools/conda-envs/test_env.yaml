@@ -5,11 +5,12 @@ dependencies:
   # Base depends (runtime and imports)
   - pip
   - python>=3.11
-  - openff-toolkit-base>=0.14.7
+  - openff-toolkit-base>=0.17.0
   - rdkit
   - openmm
   - pyxdg
   - rustworkx
+  - gemmi
 
   # Lints
   - basedpyright

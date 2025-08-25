@@ -23,6 +23,15 @@ def pdbfn(request: pytest.FixtureRequest) -> Path:
     return get_test_data_path(request.param)
 
 
+@pytest.fixture(
+    params=[
+        "1A4T.cif",
+    ],
+)
+def pdbxfn(request: pytest.FixtureRequest) -> Path:
+    return get_test_data_path(request.param)
+
+
 @pytest.fixture
 def all_aa_resnames() -> set[str]:
     resnames = {

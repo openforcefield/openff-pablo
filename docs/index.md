@@ -22,6 +22,7 @@ hidden: true
 
 Overview <self>
 tests.md
+loading.md
 :::
 
 <!--
