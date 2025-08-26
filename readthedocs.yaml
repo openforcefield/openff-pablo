@@ -5,7 +5,27 @@ version: 2
 build:
   os: ubuntu-22.04
   tools:
-    python: "mambaforge-4.10"
+    python: "3.12"
+  jobs:
+    create_environment:
+      - asdf plugin add pixi
+      - asdf install pixi latest
+      - asdf global pixi latest
+    pre_install:
+      # https://docs.readthedocs.com/platform/stable/build-customization.html#avoid-having-a-dirty-git-index
+      - git update-index --assume-unchanged environment.yml docs/conf.py
+    install:
+      - pixi install -e doc
+    post_install:
+      # Use pixi to run sphinx-build or mkdocs
+      - echo $PATH
+      - echo '#! /bin/bash\npixi run -e doc sphinx-build "$@"' > /bin/sphinx-build
+      - echo '#! /bin/bash\npixi run -e doc mkdocs "$@"' > /bin/mkdocs
+      - chmod +x /bin/sphinx-build /bin/mkdocs
+
+    # build:
+    #   html:
+    #     - pixi run -e doc sphinx-build -W -T -b html docs $READTHEDOCS_OUTPUT/html
 
 python:
   install:
