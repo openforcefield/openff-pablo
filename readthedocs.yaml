@@ -16,7 +16,6 @@ build:
       - git update-index --assume-unchanged pyproject.toml docs/conf.py
     install:
       - pixi install -e doc
-      - rm -r ${READTHEDOCS_VIRTUALENV_PATH}
       - ln -s .pixi/envs/doc ${READTHEDOCS_VIRTUALENV_PATH}
 
     # build:
