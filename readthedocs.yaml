@@ -13,7 +13,7 @@ build:
       - asdf global pixi latest
     pre_install:
       # https://docs.readthedocs.com/platform/stable/build-customization.html#avoid-having-a-dirty-git-index
-      - git update-index --assume-unchanged environment.yml docs/conf.py
+      - git update-index --assume-unchanged pyproject.toml docs/conf.py
     install:
       - pixi install -e doc
     post_install:
