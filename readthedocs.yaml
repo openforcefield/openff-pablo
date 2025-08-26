@@ -16,12 +16,8 @@ build:
       - git update-index --assume-unchanged pyproject.toml docs/conf.py
     install:
       - pixi install -e doc
-    post_install:
-      # Use pixi to run sphinx-build or mkdocs
-      - echo $PATH
-      - echo '#! /bin/bash\npixi run -e doc sphinx-build "$@"' > /bin/sphinx-build
-      - echo '#! /bin/bash\npixi run -e doc mkdocs "$@"' > /bin/mkdocs
-      - chmod +x /bin/sphinx-build /bin/mkdocs
+      - rm -r ${READTHEDOCS_VIRTUALENV_PATH}
+      - ln -s .pixi/envs/doc ${READTHEDOCS_VIRTUALENV_PATH}
 
     # build:
     #   html:
