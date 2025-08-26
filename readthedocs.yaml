@@ -23,14 +23,6 @@ build:
     #   html:
     #     - pixi run -e doc sphinx-build -W -T -b html docs $READTHEDOCS_OUTPUT/html
 
-python:
-  install:
-    - method: pip
-      path: .
-
 sphinx:
   configuration: docs/conf.py
   fail_on_warning: true
-
-conda:
-  environment: devtools/conda-envs/docs_env.yaml
