@@ -16,15 +16,6 @@ build:
       - git update-index --assume-unchanged pyproject.toml docs/conf.py
     install:
       - pixi install -e doc
-      - mkdir -p ${READTHEDOCS_VIRTUALENV_PATH}/.. && rmdir ${READTHEDOCS_VIRTUALENV_PATH}
-      - ln -s -T .pixi/envs/doc ${READTHEDOCS_VIRTUALENV_PATH}
-      - ls ${READTHEDOCS_VIRTUALENV_PATH}
-      - ls ${READTHEDOCS_VIRTUALENV_PATH}/bin
-
-    # build:
-    #   html:
-    #     - pixi run -e doc sphinx-build -W -T -b html docs $READTHEDOCS_OUTPUT/html
-
-sphinx:
-  configuration: docs/conf.py
-  fail_on_warning: true
+    build:
+      html:
+        - pixi run -e doc sphinx-build -W -T -b html docs $READTHEDOCS_OUTPUT/html

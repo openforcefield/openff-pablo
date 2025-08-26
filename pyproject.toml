@@ -82,8 +82,8 @@ ruff = "*"
 
 [tool.pixi.environments]
 test = { features = ["test", "test-tasks"], solve-group = "default" }
-doc = { features = ["doc"], solve-group = "default" }
-example = { features = ["example"], solve-group = "default" }
+doc = { features = ["doc", "doc-tasks"], solve-group = "default" }
+example = { features = ["example", "example-tasks"], solve-group = "default" }
 lint = { features = ["lint", "test", "doc", "example"], solve-group = "default" }
 
 [tool.pixi.feature.test-tasks.tasks.slowtest]
@@ -97,15 +97,15 @@ cwd = "."
 [tool.pixi.feature.test-tasks.tasks.doctest]
 cmd = "pytest -n auto --doctest-glob 'docs/*.md' --doctest-glob 'docs/*.rst' --doctest-modules --ignore openff/pablo/_tests/ --ignore-glob docs/*.py openff/ docs/"
 cwd = "."
-[tool.pixi.feature.doc.tasks.doc]
+[tool.pixi.feature.doc-tasks.tasks.doc]
 cmd = "sphinx-build -j auto docs docs/_build/html"
 cwd = "."
 
-[tool.pixi.feature.doc.tasks.watchdoc]
+[tool.pixi.feature.doc-tasks.tasks.watchdoc]
 cmd = "watchexec --on-busy-update restart -w openff -w docs --print-events 'sphinx-build -j auto docs docs/_build/html'"
 cwd = "."
 
-[tool.pixi.feature.example.tasks.lab]
+[tool.pixi.feature.example-tasks.tasks.lab]
 cmd = "jupyter lab"
 cwd = "examples"
 
