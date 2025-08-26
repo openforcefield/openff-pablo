@@ -47,11 +47,6 @@ jobs:
           pixi-version: v0.52.0
           environments: test
 
-      - name: Type check
-        if: runner.os == 'Linux'
-        run: |
-          pixi r typecheck
-
       - run: pixi r slowtest -v --color=yes --cov=openff/pablo --cov-append --cov-report=xml
 
       - run: pixi r doctest -v --color=yes

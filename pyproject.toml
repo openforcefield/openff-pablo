@@ -109,7 +109,7 @@ cwd = "."
 cmd = "jupyter lab"
 cwd = "examples"
 
-[tool.pixi.feature.test.tasks.typecheck]
+[tool.pixi.feature.lint.tasks.typecheck]
 cmd = "basedpyright openff"
 cwd = "."
 
