@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +39,9 @@ jobs:
 
       - uses: prefix-dev/setup-pixi@v0.8.0
         with:
-          pixi-version: v0.40.3
+          pixi-version: v0.50.0
           activate-environment: lint
 
       - run: ruff check openff
+
+      - run: pixi r typecheck

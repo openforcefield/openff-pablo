@@ -81,20 +81,20 @@ basedpyright = "*"
 ruff = "*"
 
 [tool.pixi.environments]
-test = { features = ["lint", "test"], solve-group = "default" }
+test = { features = ["test", "test-tasks"], solve-group = "default" }
 doc = { features = ["doc"], solve-group = "default" }
 example = { features = ["example"], solve-group = "default" }
 lint = { features = ["lint", "test", "doc", "example"], solve-group = "default" }
 
-[tool.pixi.feature.test.tasks.test]
+[tool.pixi.feature.test-tasks.tasks.slowtest]
 cmd = "pytest -n auto"
 cwd = "."
 
-[tool.pixi.feature.test.tasks.fasttest]
+[tool.pixi.feature.test-tasks.tasks.test]
 cmd = "pytest -n auto -m 'not slow'"
 cwd = "."
 
-[tool.pixi.feature.test.tasks.doctest]
+[tool.pixi.feature.test-tasks.tasks.doctest]
 cmd = "pytest -n auto --doctest-glob 'docs/*.md' --doctest-glob 'docs/*.rst' --doctest-modules --ignore openff/pablo/_tests/ --ignore-glob docs/*.py openff/ docs/"
 cwd = "."
 [tool.pixi.feature.doc.tasks.doc]

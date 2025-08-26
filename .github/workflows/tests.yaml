@@ -44,19 +44,17 @@ jobs:
 
       - uses: prefix-dev/setup-pixi@v0.8.0
         with:
-          pixi-version: v0.40.3
+          pixi-version: v0.52.0
           environments: test
 
       - name: Type check
         if: runner.os == 'Linux'
         run: |
-          pixi run typecheck
+          pixi r typecheck
 
-      - run: pixi run test -v --color=yes --cov=openff/pablo --cov-append --cov-report=xml
+      - run: pixi r slowtest -v --color=yes --cov=openff/pablo --cov-append --cov-report=xml
 
-      - run: pixi run doctest -v --color=yes
-
-      - run: pixi run -e test basedpyright
+      - run: pixi r doctest -v --color=yes
 
       - name: Codecov
         uses: codecov/codecov-action@v5
