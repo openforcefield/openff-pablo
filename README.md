@@ -6,69 +6,59 @@ OpenFF Pablo
 | :----------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Status**         | [![GH Actions Status](https://github.com/openforcefield/openff-pablo/actions/workflows/gh-ci.yaml/badge.svg)](https://github.com/openforcefield/openff-pablo/actions?query=branch%3Amain+workflow%3Agh-ci) [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/openforcefield/openff-pablo/main.svg)](https://results.pre-commit.ci/latest/github/openforcefield/openff-pablo/main) |
 
-New, independent implementation of `Topology.from_pdb`
+New, independent implementation of OpenFF's `Topology.from_pdb`
 
 OpenFF Pablo is bound by a [Code of Conduct](https://github.com/openforcefield/openff-pablo/blob/main/CODE_OF_CONDUCT.md).
 
 ### Installation
 
-To build OpenFF Pablo from source,
-we highly recommend using virtual environments.
-If possible, we strongly recommend that you use
-[Anaconda](https://docs.conda.io/en/latest/) as your package manager.
-Below we provide instructions both for `conda` and
-for `pip`.
+This is a pre-release of Pablo and is not yet published in any package manager.
+You can install it by managing your own Conda environment and installing it manually.
 
-#### With conda
+Here we describe dependency and environment management with Micromamba, but other Conda-compatible package managers such as Conda and Mamba work the same way - just change the name of the executable.
 
-Ensure that you have [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html) installed.
-
-Create a virtual environment and activate it:
+Download the user environment YAML file and create a virtual environment from it:
 
 ```
-conda create --name pablo
-conda activate pablo
+curl https://raw.githubusercontent.com/openforcefield/openff-pablo/refs/heads/main/devtools/conda-envs/user_env.yaml | micromamba env create --name pablo -f /dev/stdin
+```
+
+#### Development build
+
+Clone the repository:
+
+```
+git clone https://github.com/openforcefield/openff-pablo
+```
+
+Create a virtual environment:
+
+```
+micromamba create --name pablo-dev
 ```
 
 Install the development and documentation dependencies:
 
 ```
-conda env update --name pablo --file devtools/conda-envs/test_env.yaml
-conda env update --name pablo --file docs/requirements.yaml
+micromamba env update -n pablo-dev --file openff-pablo/devtools/conda-envs/test_env.yaml
+micromamba env update -n pablo-dev --file openff-pablo/docs/requirements.yaml
 ```
 
-Build this package from source:
+Install this package in editable mode:
 
 ```
-pip install -e .
+micromamba run -n pablo-dev pip install -e openff-pablo
 ```
 
-If you want to update your dependencies (which can be risky!), run:
+If you want to update your dependencies, rebuild the environment from scratch.
+
+Then activate the environment to run commands in it:
 
 ```
-conda update --all
+micromamba activate pablo-dev
 ```
 
-And when you are finished, you can exit the virtual environment with:
-
-```
-conda deactivate
-```
-
-#### With pip
-
-To build the package from source, run:
-
-```
-pip install -e .
-```
-
-If you want to create a development environment, install
-the dependencies required for tests and docs with:
-
-```
-pip install -e ".[test,doc]"
-```
+Or use `micromamba run -n pablo-dev`.
 
 ### Copyright
 

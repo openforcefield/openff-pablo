@@ -16,7 +16,6 @@ import rdkit.Chem
 import rdkit.Chem.Draw
 import rdkit.Chem.rdDepictor
 import rdkit.Geometry
-from IPython.display import SVG
 from openff.toolkit import Molecule
 from openff.toolkit.topology._mm_molecule import _SimpleMolecule
 from openff.toolkit.topology.molecule import MoleculeLike
@@ -342,8 +341,10 @@ def draw_molecule(
     emphasize_atoms: list[int] | None = None,
     explicit_hydrogens: bool | None = None,
     color_by_element: bool | None = None,
-) -> SVG:
+) -> str:
     """Draw a molecule
+
+    Returns a string encoding an XML with the requested drawing.
 
     Parameters
     ==========
@@ -385,6 +386,14 @@ def draw_molecule(
     KeyError
         When an atom or bond in highlight_atoms or highlight_bonds is missing
         from the image, including when it is present in the molecule but hidden.
+
+    Examples
+    ========
+
+    >>> from IPython.display import SVG
+    >>>
+    >>> SVG(draw_molecule(...))
+
     """
 
     # We're working in RDKit
@@ -537,4 +546,4 @@ def draw_molecule(
 
     # Return an SVG object that we can view in notebook
     svg_contents = drawer.GetDrawingText()
-    return SVG(svg_contents)
+    return svg_contents
