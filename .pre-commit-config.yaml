@@ -3,7 +3,7 @@
 # To update the pre-commit hooks run:
 #   pre-commit install-hooks
 ci:
-    autoupdate_schedule: weekly
+  autoupdate_schedule: monthly
 exclude: '^(\.tox|ci/templates|\.bumpversion\.cfg)(/|$)'
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -26,7 +26,7 @@ repos:
         files: "openff"
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.13.0
+    rev: v0.13.1
     hooks:
       # Run the linter.
       - id: ruff
