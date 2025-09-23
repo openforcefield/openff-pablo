@@ -5,16 +5,17 @@ version: 2
 build:
   os: ubuntu-22.04
   tools:
-    python: "mambaforge-4.10"
-
-python:
-  install:
-    - method: pip
-      path: .
-
-sphinx:
-  configuration: docs/conf.py
-  fail_on_warning: true
-
-conda:
-  environment: devtools/conda-envs/docs_env.yaml
+    python: "3.12"
+  jobs:
+    create_environment:
+      - asdf plugin add pixi
+      - asdf install pixi latest
+      - asdf global pixi latest
+    pre_install:
+      # https://docs.readthedocs.com/platform/stable/build-customization.html#avoid-having-a-dirty-git-index
+      - git update-index --assume-unchanged pyproject.toml docs/conf.py
+    install:
+      - pixi install -e doc
+    build:
+      html:
+        - pixi run -e doc sphinx-build -W -T -b html docs $READTHEDOCS_OUTPUT/html

@@ -116,4 +116,8 @@ poetry.lock
 # zed
 .zed/
 
+# pixi
+.pixi
+pixi.lock
+
 .ccd_cache
