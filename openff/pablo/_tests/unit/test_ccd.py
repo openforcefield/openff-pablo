@@ -12,6 +12,7 @@ from openff.pablo.residue import ResidueDefinition
     "resname",
     [
         "EST",
+        "GDP",
     ],
 )
 def test_ccdcache_can_load_residues_with_internet(resname: str):

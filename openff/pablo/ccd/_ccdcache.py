@@ -188,6 +188,8 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         self,
         residue_definition: ResidueDefinition,
     ) -> list[ResidueDefinition]:
+        assert residue_definition.residue_name is not None
+
         with _skip_residue_definition_validation():
             definitions: list[ResidueDefinition] = [residue_definition]
             for patch_dict in self._patches:
@@ -215,6 +217,10 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
     ) -> list[ResidueDefinition]:
         definition = self._res_def_from_ccd_str(s)
         if res_name is None:
+            if definition.residue_name is None:
+                raise ValueError(
+                    "Anonymous residue definitions cannot be added to a CcdCache",
+                )
             res_name = definition.residue_name.upper()
 
         return self._add_definitions((definition,), res_name, patch=patch)
@@ -225,15 +231,21 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         res_name: str,
         patch: bool = False,
     ) -> list[ResidueDefinition]:
-        definitions = list(definitions)
+        if patch:
+            definitions = list(flatten(map(self._apply_patches, definitions)))
+        else:
+            definitions = list(definitions)
+
         for definition in definitions:
+            if definition.residue_name is None:
+                raise ValueError(
+                    "Anonymous residue definitions cannot be added to a CcdCache",
+                )
             if res_name != definition.residue_name.upper():
                 raise ValueError(
                     f"ResidueDefinition {definition.residue_name}"
                     + f" ({definition.description}) must have residue name {res_name}",
                 )
-        if patch:
-            definitions = flatten(map(self._apply_patches, definitions))
 
         stored_definitions = self._definitions.setdefault(res_name, [])
         # Using a dict comprehension here rather than simple
@@ -442,6 +454,10 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         if not isinstance(definitions, Mapping):
             definitions_map: dict[str, list[ResidueDefinition]] = {}
             for resdef in definitions:
+                if resdef.residue_name is None:
+                    raise ValueError(
+                        "Anonymous residue definitions cannot be added to a CcdCache",
+                    )
                 definitions_map.setdefault(resdef.residue_name, []).append(resdef)
             definitions = definitions_map
 

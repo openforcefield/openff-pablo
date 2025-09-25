@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 from openff.pablo._matching import (
     MatchProtocol,
     MismatchProtocol,
-    MoleculeMatch,
     NoResidueDefinitions,
     ResidueMatch,
     ResidueMismatch,
@@ -115,7 +114,10 @@ class PdbResidueMatchError(ValueError):
             else:
                 msg.append(f"  {resid} ({src}): No matching residue definitions:")
 
-            for err in sorted(residue_errors, key=lambda x: (type(x), x.sort_key())):
+            for err in sorted(
+                residue_errors,
+                key=lambda x: (str(type(x)), x.sort_key()),
+            ):
                 if isinstance(err, NoResidueDefinitions):
                     continue
                 elif isinstance(err, ResidueMatch):
@@ -146,10 +148,6 @@ class PdbResidueMatchError(ValueError):
                         expects = "no other linkages"
                     msg.append(
                         f"    ├{'─' * padding} {desc}: expects {expects}",
-                    )
-                elif isinstance(err, MoleculeMatch):
-                    msg.append(
-                        f"    ├ Unknown molecule {err.description}",
                     )
                 elif isinstance(err, ResidueMismatch):
                     desc = err.residue_definition.description

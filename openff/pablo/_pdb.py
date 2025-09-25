@@ -10,7 +10,7 @@ import numpy as np
 from openff.toolkit import Molecule, Topology
 from openff.units import elements, unit
 
-from openff.pablo._matching import MoleculeMatch, SuccessfulMatch
+from openff.pablo._matching import SuccessfulMatch
 
 from ._pdb_data import PdbData, ResidueMatch
 from ._utils import (
@@ -29,12 +29,11 @@ __all__ = [
 def topology_from_pdb(
     file: PathLike[str] | str | IO[str] | TextIOBase,
     *,
-    unknown_molecules: Iterable[Molecule] = [],
     residue_database: Mapping[
         str,
         Iterable[ResidueDefinition],
     ] = CCD_RESIDUE_DEFINITION_CACHE,
-    additional_substructures: Iterable[ResidueDefinition] = [],
+    additional_definitions: Iterable[ResidueDefinition] = [],
     format: Literal["PDB", "CIF", None] = None,
     use_canonical_names: bool = False,
     ignore_unknown_CONECT_records: bool = False,
@@ -181,8 +180,7 @@ def topology_from_pdb(
     topology = _build_topology(
         matches=data.get_residue_matches(
             residue_database,
-            additional_substructures,
-            unknown_molecules,
+            additional_definitions,
         ),
         data=data,
         use_canonical_names=use_canonical_names,
@@ -212,13 +210,7 @@ def _build_topology(
 
     for chemical_data in matches:
         # Apply the chemical data we've collected
-        if isinstance(chemical_data, MoleculeMatch):
-            this_molecule = chemical_data.residue_definition
-            if molecules[-1].n_atoms == 0:
-                molecules[-1] = this_molecule
-            else:
-                molecules.append(this_molecule)
-        elif isinstance(chemical_data, ResidueMatch):
+        if isinstance(chemical_data, ResidueMatch):
             this_molecule = _add_to_molecule(
                 molecules,
                 this_molecule,
@@ -230,7 +222,7 @@ def _build_topology(
             assert_never(chemical_data)
 
         # Terminate the current molecule if this residue has no posterior bond
-        if isinstance(chemical_data, MoleculeMatch) or (
+        if (
             isinstance(chemical_data, ResidueMatch)
             and chemical_data.posterior_bond_idcs is None
         ):

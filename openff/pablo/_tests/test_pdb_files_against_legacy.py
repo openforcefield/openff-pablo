@@ -125,8 +125,10 @@ def connectivity_and_atom_order_and_net_residue_charge_and_metadata_matches_lega
 
     pablo_top = topology_from_pdb(
         filename,
-        unknown_molecules=unknown_molecules,
-        additional_substructures=additional_substructures,
+        additional_definitions=[
+            *(ResidueDefinition.anon_from_molecule(mol) for mol in unknown_molecules),
+            *additional_substructures,
+        ],
     )
 
     assert pablo_top.n_molecules == legacy_top.n_molecules

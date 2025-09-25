@@ -1,9 +1,7 @@
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from functools import cached_property
-from typing import ClassVar, Protocol, Self, TypeAlias
-
-from openff.toolkit import Molecule
+from typing import ClassVar, Protocol, TypeAlias
 
 from openff.pablo._utils import sort_tuple
 
@@ -12,7 +10,7 @@ from .residue import AtomDefinition, ResidueDefinition
 
 @dataclass(frozen=True)
 class PossibleMatchProtocol(Protocol):
-    residue_definition: ResidueDefinition | str | Molecule
+    residue_definition: ResidueDefinition | str
     index_to_atomdef: Mapping[int, AtomDefinition | None]
     is_match: ClassVar[bool]
 
@@ -27,8 +25,6 @@ class PossibleMatchProtocol(Protocol):
     def description(self) -> str:
         if isinstance(self.residue_definition, str):
             return self.residue_definition
-        elif isinstance(self.residue_definition, Molecule):
-            return self.residue_definition.name
         else:
             return self.residue_definition.description
 
@@ -306,23 +302,6 @@ class ResidueMatch(MatchProtocol):
         )
 
 
-@dataclass(frozen=True)
-class MoleculeMatch(MatchProtocol):
-    residue_definition: Molecule
-    index_to_atomdef: dict[int, None]
-    is_match = True
-
-    def agrees_with(self, other: MatchProtocol) -> bool:
-        return (  # no-fmt
-            other.residue_definition is self.residue_definition
-            and set(self.index_to_atomdef.keys()) == set(other.index_to_atomdef.keys())
-        )
-
-    @property
-    def match(self) -> Self:
-        return self
-
-
 class ResidueConectMismatch(ResidueMismatch):
     @property
     def description(self) -> str:
@@ -338,7 +317,7 @@ class ResidueConectMatch(ResidueMatch):
         )
 
 
-SuccessfulMatch: TypeAlias = ResidueMatch | MoleculeMatch
+SuccessfulMatch: TypeAlias = ResidueMatch
 PossibleResidueMatch: TypeAlias = SuccessfulMatch | MismatchProtocol
 
 

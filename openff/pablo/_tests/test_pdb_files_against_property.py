@@ -775,7 +775,6 @@ def test_polyglycines_loads_with_augmented_ccd():
         assert molecule.hill_formula == "H2O"
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize(
     "resdb",
     [
@@ -789,17 +788,25 @@ def test_polyglycines_loads_with_augmented_ccd():
         "empty",
     ],
 )
-def test_5ap1_prepared_fails_with_broken_resdefs(
+@pytest.mark.parametrize(
+    "filename",
+    [
+        pytest.param("5ap1_prepared.pdb", marks=pytest.mark.slow),
+        "5ap1_nosol.pdb",
+    ],
+)
+def test_5ap1_fails_with_broken_resdefs(
     resdb: Mapping[str, Sequence[ResidueDefinition]],
+    filename: str,
 ):
-    path = get_test_data_path("5ap1_prepared.pdb").absolute()
+    path = get_test_data_path(filename).absolute()
 
     with pytest.raises(PdbResidueMatchError):
         topology_from_pdb(
             path,
             residue_database=resdb,
-            unknown_molecules=[
-                Molecule.from_smiles(
+            additional_definitions=[
+                ResidueDefinition.anon_from_smiles(
                     "O=C([O-])Cn1cc(cn1)c2ccc(cc2OCC#N)Nc3ccc(c(n3)NC4CCCCC4)C#N",
                 ),
             ],
@@ -916,18 +923,16 @@ def test_microviridin_crosslinks():
 
 @pytest.mark.slow
 def test_complex_pdb_1flr():
-    ligand = Molecule.from_file(
+    ligand = ResidueDefinition.anon_from_sdf(
         get_test_data_path("prepared_pdbs/1FLR_Ligand.sdf"),
-        file_format="SDF",
     )
-    assert isinstance(ligand, Molecule)
 
     with pytest.warns(
         match="Alt locs not supported; only empty or 'A' alt locs will be read",
     ):
         topology = topology_from_pdb(
             get_test_data_path("prepared_pdbs/1FLR_prepared.pdb"),
-            unknown_molecules=[ligand],
+            additional_definitions=[ligand],
             residue_database=CCD_RESIDUE_DEFINITION_CACHE.with_(
                 {
                     "NMA": [
@@ -974,3 +979,14 @@ def test_complex_pdb_1flr():
     #   (ATOM  |HETATM).{10}(A| ).{4}L
     assert topology.n_atoms == 7539
     assert {k: len(v) for k, v in chains.items()} == {"H": 3712, "L": 3827}
+
+
+def test_sindhikara_using_sdf():
+    ligand = ResidueDefinition.anon_from_sdf(
+        get_test_data_path("sindhikara/7yv1_ligand.sdf"),
+    )
+
+    _topology = topology_from_pdb(
+        file=get_test_data_path("sindhikara/7yv1_prepped.pdb"),
+        additional_definitions=[ligand],
+    )

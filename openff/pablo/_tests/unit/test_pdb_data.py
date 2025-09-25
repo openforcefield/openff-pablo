@@ -1,9 +1,11 @@
 from pathlib import Path
 
 import pytest
-from openff.toolkit import Molecule
 
-from openff.pablo._matching import MoleculeMatch, NoResidueDefinitions, ResidueMismatch
+from openff.pablo._matching import (
+    NoResidueDefinitions,
+    ResidueMismatch,
+)
 from openff.pablo._pdb_data import PdbData, ResidueMatch
 from openff.pablo._utils import default_dict
 from openff.pablo.ccd import CCD_RESIDUE_DEFINITION_CACHE
@@ -465,8 +467,7 @@ def test_match_residues_loads_vicinal_disulfide(
         [p for p in residue_matches if isinstance(p, ResidueMatch)]
         for residue_matches in vicinal_disulfide_data.match_residues(
             residue_database={"CYS": [cys_def, cys_def_deprotonated_sidechain]},
-            additional_substructures=[],
-            unknown_molecules=[],
+            additional_definitions=[],
         )
     )
     assert len(excess_matches) == 0
@@ -520,12 +521,6 @@ def test_get_name_based_matches_subsequence_contains_noresiduedefs_when_unmatche
 def test_filter_on_polymer_linkages_yields_all_matches_simple(cys_data: PdbData):
     matches = list(cys_data.get_name_based_matches(CCD_RESIDUE_DEFINITION_CACHE))
     residue_matches = matches[0]
-    residue_matches.append(
-        MoleculeMatch(
-            index_to_atomdef={i: None for i in residue_matches[0].res_atom_idcs},
-            residue_definition=Molecule.from_smiles("N[C@@H](CS)C(=O)O"),
-        ),
-    )
     results = list(
         cys_data.filter_on_polymer_linkages(0, [residue_matches]),
     )

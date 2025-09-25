@@ -83,6 +83,35 @@ class Graph(Generic[NodeT, EdgeT]):
         else:
             return True
 
+    def is_subgraph_of(
+        self,
+        other: "Graph[OtherNodeT, OtherEdgeT]",
+        node_matcher: Callable[[NodeT, OtherNodeT], bool] | None = None,
+        edge_matcher: Callable[[EdgeT, OtherEdgeT], bool] | None = None,
+        id_order: bool = True,
+        call_limit: int | None = None,
+    ) -> bool:
+        iterator = _vf2_mapping(
+            first=other._graph,
+            second=self._graph,
+            node_matcher=(
+                None if node_matcher is None else lambda x, y: node_matcher(y, x)
+            ),
+            edge_matcher=(
+                None if edge_matcher is None else lambda x, y: edge_matcher(y, x)
+            ),
+            id_order=id_order,
+            call_limit=call_limit,
+            subgraph=True,
+            induced=True,
+        )
+        try:
+            next(iterator)
+        except StopIteration:
+            return False
+        else:
+            return True
+
     def get_mappings(
         self,
         other: "Graph[OtherNodeT, OtherEdgeT]",
