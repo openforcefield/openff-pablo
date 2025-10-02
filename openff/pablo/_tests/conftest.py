@@ -348,6 +348,7 @@ def cys_match(cys_def: ResidueDefinition) -> ResidueMatch:
         residue_definition=cys_def,
         crosslink_idcs=None,
         index_to_atomdef={i: atom for i, atom in enumerate(cys_def.atoms)},
+        vsite_idcs=(),
     )
 
 
@@ -360,6 +361,7 @@ def cys_match_no_leaving(cys_def: ResidueDefinition) -> ResidueMatch:
         index_to_atomdef={
             next(counter): atom for atom in cys_def.atoms if not atom.leaving
         },
+        vsite_idcs=(),
     )
 
 
@@ -376,6 +378,7 @@ def cys_match_no_leaving_deprotonated_sidechain(
             for atom in cys_def_deprotonated_sidechain.atoms
             if not atom.leaving
         },
+        vsite_idcs=(),
     )
 
 
@@ -385,6 +388,7 @@ def hoh_match(hoh_def: ResidueDefinition) -> ResidueMatch:
         residue_definition=hoh_def,
         crosslink_idcs=None,
         index_to_atomdef={i: atom for i, atom in enumerate(hoh_def.atoms)},
+        vsite_idcs=(),
     )
 
 

@@ -608,6 +608,7 @@ def test_filter_on_polymer_linkages_rejects_unsupported_prior_bond(
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
         index_to_atomdef={i: atom for i, atom in enumerate(gly_def_neutral.atoms)},
+        vsite_idcs=(),
     )
     assert not neighbour_match.expects_posterior_bond
     this_match = ResidueMatch(
@@ -617,6 +618,7 @@ def test_filter_on_polymer_linkages_rejects_unsupported_prior_bond(
             for i, atom in enumerate(gly_def_neutral.atoms)
             if atom.name != "H2"
         },
+        vsite_idcs=(),
     )
     assert this_match.expects_prior_bond
 
@@ -651,6 +653,7 @@ def test_filter_on_polymer_linkages_rejects_prior_bond_across_ter(
             for i, atom in enumerate(gly_def_neutral.atoms)
             if atom.name not in {"HXT", "OXT"}
         },
+        vsite_idcs=(),
     )
     assert neighbour_match.expects_posterior_bond
     this_match = ResidueMatch(
@@ -660,6 +663,7 @@ def test_filter_on_polymer_linkages_rejects_prior_bond_across_ter(
             for i, atom in enumerate(gly_def_neutral.atoms)
             if atom.name != "H2"
         },
+        vsite_idcs=(),
     )
     assert this_match.expects_prior_bond
 
@@ -695,6 +699,7 @@ def test_filter_on_polymer_linkages_sets_prior_bond(
             for i, atom in enumerate(gly_def_neutral.atoms)
             if atom.name not in {"HXT", "OXT"}
         },
+        vsite_idcs=(),
     )
     assert neighbour_match.expects_posterior_bond
     this_match = ResidueMatch(
@@ -704,6 +709,7 @@ def test_filter_on_polymer_linkages_sets_prior_bond(
             for i, atom in enumerate(gly_def_neutral.atoms)
             if atom.name != "H2"
         },
+        vsite_idcs=(),
     )
     assert this_match.expects_prior_bond
     assert this_match.prior_bond_idcs is None
@@ -738,6 +744,7 @@ def test_filter_on_polymer_linkages_rejects_no_prior_bond_without_molecule_start
             for i, atom in enumerate(gly_def_neutral.atoms)
             if atom.name not in {"HXT", "OXT"}
         },
+        vsite_idcs=(),
     )
     assert neighbour_match.expects_posterior_bond
     this_match = ResidueMatch(
@@ -746,6 +753,7 @@ def test_filter_on_polymer_linkages_rejects_no_prior_bond_without_molecule_start
             i + len(gly_def_neutral.atoms): atom
             for i, atom in enumerate(gly_def_neutral.atoms)
         },
+        vsite_idcs=(),
     )
     assert not this_match.expects_prior_bond
 
@@ -779,6 +787,7 @@ def test_filter_on_polymer_linkages_rejects_unsupported_posterior_bond(
             i + len(gly_def_neutral.atoms): atom
             for i, atom in enumerate(gly_def_neutral.atoms)
         },
+        vsite_idcs=(),
     )
     assert not neighbour_match.expects_prior_bond
     this_match = ResidueMatch(
@@ -788,6 +797,7 @@ def test_filter_on_polymer_linkages_rejects_unsupported_posterior_bond(
             for i, atom in enumerate(gly_def_neutral.atoms)
             if atom.name not in {"HXT", "OXT"}
         },
+        vsite_idcs=(),
     )
     assert this_match.expects_posterior_bond
 
@@ -822,6 +832,7 @@ def test_filter_on_polymer_linkages_rejects_posterior_bond_across_ter(
             for i, atom in enumerate(gly_def_neutral.atoms)
             if atom.name != "H2"
         },
+        vsite_idcs=(),
     )
     assert neighbour_match.expects_prior_bond
     this_match = ResidueMatch(
@@ -831,6 +842,7 @@ def test_filter_on_polymer_linkages_rejects_posterior_bond_across_ter(
             for i, atom in enumerate(gly_def_neutral.atoms)
             if atom.name not in {"HXT", "OXT"}
         },
+        vsite_idcs=(),
     )
     assert this_match.expects_posterior_bond
 
@@ -866,6 +878,7 @@ def test_filter_on_polymer_linkages_sets_posterior_bond(
             for i, atom in enumerate(gly_def_neutral.atoms)
             if atom.name != "H2"
         },
+        vsite_idcs=(),
     )
     assert neighbour_match.expects_prior_bond
     this_match = ResidueMatch(
@@ -875,6 +888,7 @@ def test_filter_on_polymer_linkages_sets_posterior_bond(
             for i, atom in enumerate(gly_def_neutral.atoms)
             if atom.name not in {"HXT", "OXT"}
         },
+        vsite_idcs=(),
     )
     assert this_match.expects_posterior_bond
     assert this_match.posterior_bond_idcs is None
@@ -909,11 +923,13 @@ def test_filter_on_polymer_linkages_rejects_no_posterior_bond_without_molecule_s
             for i, atom in enumerate(gly_def_neutral.atoms)
             if atom.name not in {"H2"}
         },
+        vsite_idcs=(),
     )
     assert neighbour_match.expects_prior_bond
     this_match = ResidueMatch(
         residue_definition=gly_def_neutral,
         index_to_atomdef={i: atom for i, atom in enumerate(gly_def_neutral.atoms)},
+        vsite_idcs=(),
     )
     assert not this_match.expects_posterior_bond
 
@@ -952,6 +968,7 @@ def test_filter_on_crosslinks_sets_crosslink_indices_with_partner_first(
             9: cys_def.name_to_atom["HB2"],
             10: cys_def.name_to_atom["HB3"],
         },
+        vsite_idcs=(),
     )
     assert this_match.expects_crosslink
     neighbour_match = ResidueMatch(
@@ -970,6 +987,7 @@ def test_filter_on_crosslinks_sets_crosslink_indices_with_partner_first(
             21: cys_def.name_to_atom["H"],
             22: cys_def.name_to_atom["OXT"],
         },
+        vsite_idcs=(),
     )
     assert neighbour_match.expects_crosslink
     assert neighbour_match.crosslink_idcs is None
@@ -1006,6 +1024,7 @@ def test_filter_on_crosslinks_sets_crosslink_indices_with_partner_second(
             9: cys_def.name_to_atom["HB2"],
             10: cys_def.name_to_atom["HB3"],
         },
+        vsite_idcs=(),
     )
     assert neighbour_match.expects_crosslink
     this_match = ResidueMatch(
@@ -1024,6 +1043,7 @@ def test_filter_on_crosslinks_sets_crosslink_indices_with_partner_second(
             21: cys_def.name_to_atom["H"],
             22: cys_def.name_to_atom["OXT"],
         },
+        vsite_idcs=(),
     )
     assert this_match.expects_crosslink
     assert this_match.crosslink_idcs is None
@@ -1061,6 +1081,7 @@ def test_filter_on_crosslinks_rejects_expected_crosslink_without_partner_first(
             9: cys_def.name_to_atom["HB2"],
             10: cys_def.name_to_atom["HB3"],
         },
+        vsite_idcs=(),
     )
     assert this_match.expects_crosslink
     neighbour_match = ResidueMatch(
@@ -1079,6 +1100,7 @@ def test_filter_on_crosslinks_rejects_expected_crosslink_without_partner_first(
             21: cys_def.name_to_atom["H"],
             22: cys_def.name_to_atom["OXT"],
         },
+        vsite_idcs=(),
     )
     assert not neighbour_match.expects_crosslink
     assert neighbour_match.crosslink_idcs is None
@@ -1119,6 +1141,7 @@ def test_filter_on_crosslinks_rejects_expected_crosslink_without_partner_second(
             9: cys_def.name_to_atom["HB2"],
             10: cys_def.name_to_atom["HB3"],
         },
+        vsite_idcs=(),
     )
     assert not neighbour_match.expects_crosslink
     this_match = ResidueMatch(
@@ -1137,6 +1160,7 @@ def test_filter_on_crosslinks_rejects_expected_crosslink_without_partner_second(
             21: cys_def.name_to_atom["H"],
             22: cys_def.name_to_atom["OXT"],
         },
+        vsite_idcs=(),
     )
     assert this_match.expects_crosslink
     assert this_match.crosslink_idcs is None
@@ -1190,3 +1214,55 @@ def test_can_parse_cif(pdbxfn: Path):
     assert data.line_no == list(range(2077, 18797))
 
     assert sum(1 for _ in data.residue_indices) == 34
+
+
+def test_get_residue_map_creates_complete_single_residue_graph(
+    cys_match: ResidueMatch,
+    cys_data: PdbData,
+):
+    graph, atoms, bonds = cys_data.get_residue_graph([[cys_match]])
+    assert len(atoms) == graph.n_nodes
+    assert len(bonds) == graph.n_edges
+    assert not any(atom is None for atom in atoms.values())
+    assert not any(bond is None for bond in bonds.values())
+    assert set(atoms.values()) == set(cys_match.residue_definition.atoms)
+    assert set(bonds.values()) == set(cys_match.residue_definition.bonds)
+
+
+def test_get_residue_map_mixed():
+    data = PdbData(conects=[{1}, {0}])
+    resdef = ResidueDefinition(
+        residue_name="AAA",
+        description="demo",
+        atoms=(AtomDefinition.with_defaults("A", "A"),),
+        bonds=(),
+        virtual_sites=(),
+        crosslink=None,
+        linking_bond=BondDefinition.with_defaults("A", "B"),
+    )
+    match = ResidueMatch(
+        residue_definition=resdef,
+        index_to_atomdef={0: resdef.atoms[0]},
+        vsite_idcs=(),
+        prior_bond_idcs=None,
+        posterior_bond_idcs=(0, 1),
+        crosslink_idcs=None,
+    )
+    mismatch = NoResidueDefinitions("BBB", {1: None})
+
+    graph, atoms, bonds = data.get_residue_graph([[match], [mismatch]])
+
+    assert graph.n_nodes == 2
+    assert graph.n_edges == 1
+    assert atoms == {0: resdef.atoms[0], 1: None}
+    assert bonds == {(0, 1): resdef.linking_bond}
+
+
+def test_get_residue_map_vicinal_disulfide(vicinal_disulfide_data: PdbData):
+    matches = vicinal_disulfide_data.match_residues(CCD_RESIDUE_DEFINITION_CACHE, ())
+    graph, atoms, bonds = vicinal_disulfide_data.get_residue_graph(matches)
+    assert len(atoms) == graph.n_nodes
+    assert len(bonds) == graph.n_edges
+    assert not any(atom is None for atom in atoms.values())
+    assert not any(bond is None for bond in bonds.values())
+    assert graph.is_connected()

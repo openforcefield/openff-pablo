@@ -5,7 +5,7 @@ from typing import ClassVar, Protocol, TypeAlias
 
 from openff.pablo._utils import sort_tuple
 
-from .residue import AtomDefinition, ResidueDefinition
+from .residue import AtomDefinition, BondDefinition, ResidueDefinition
 
 
 @dataclass(frozen=True)
@@ -93,6 +93,7 @@ class ResidueMismatch(MismatchProtocol):
 class ResidueMatch(MatchProtocol):
     residue_definition: ResidueDefinition
     index_to_atomdef: dict[int, AtomDefinition]
+    vsite_idcs: tuple[int, ...]
     prior_bond_idcs: tuple[int, int] | None = None
     posterior_bond_idcs: tuple[int, int] | None = None
     crosslink_idcs: tuple[int, int] | None = None
@@ -217,6 +218,40 @@ class ResidueMatch(MatchProtocol):
             and expected_leaving_atoms.issubset(self.missing_leaving_atoms)
         )
 
+    def get_sorted_bond_map(self) -> dict[tuple[int, int], BondDefinition]:
+        d: dict[tuple[int, int], BondDefinition] = {
+            sort_tuple(
+                (
+                    self.canonical_atom_name_to_index[bond.atom1],
+                    self.canonical_atom_name_to_index[bond.atom2],
+                ),
+            ): bond
+            for bond in self.residue_definition.bonds
+            if (
+                bond.atom1 in self.canonical_atom_name_to_index
+                and bond.atom2 in self.canonical_atom_name_to_index
+            )
+        }
+
+        if self.crosslink_idcs is not None:
+            assert self.residue_definition.crosslink is not None
+            if self.crosslink_idcs[0] < self.crosslink_idcs[1]:
+                d[self.crosslink_idcs] = self.residue_definition.crosslink
+            else:
+                d[sort_tuple(self.crosslink_idcs)] = (
+                    self.residue_definition.crosslink.flipped()
+                )
+
+        if self.prior_bond_idcs is not None:
+            assert self.residue_definition.linking_bond is not None
+            d[self.prior_bond_idcs] = self.residue_definition.linking_bond
+
+        if self.posterior_bond_idcs is not None:
+            assert self.residue_definition.linking_bond is not None
+            d[self.posterior_bond_idcs] = self.residue_definition.linking_bond
+
+        return d
+
     def agrees_with(self, other: MatchProtocol) -> bool:
         """``True`` if both matches would assign the same chemistry, ``False`` otherwise.
 
@@ -323,5 +358,5 @@ PossibleResidueMatch: TypeAlias = SuccessfulMatch | MismatchProtocol
 
 def only_matched(
     iterable: Iterable[PossibleResidueMatch],
-) -> Iterable[MatchProtocol]:
-    return (p for p in iterable if isinstance(p, MatchProtocol))
+) -> Iterable[SuccessfulMatch]:
+    return (p for p in iterable if isinstance(p, SuccessfulMatch))

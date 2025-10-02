@@ -136,6 +136,9 @@ class Graph(Generic[NodeT, EdgeT]):
         ):
             yield {nodes[i]: other_nodes[j] for i, j in mapping.items()}
 
+    def is_connected(self) -> bool:
+        return rx.is_connected(self._graph)
+
 
 def _vf2_mapping(
     first: rx.PyGraph[NodeT, EdgeT],
