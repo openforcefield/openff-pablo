@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-  "setuptools >= 40.9.0",
+  "setuptools >= 77.0.3",
   "versioningit",
   "wheel",
 ]
@@ -9,7 +9,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "openff-pablo"
 description = "New, independent implementation of `Topology.from_pdb`"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
   { name = "Josh Mitchell", email = "josh.mitchell@openforcefield.org" },
 ]
