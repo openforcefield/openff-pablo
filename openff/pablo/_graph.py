@@ -40,6 +40,20 @@ class Graph(Generic[NodeT, EdgeT]):
     def n_edges(self) -> int:
         return self._graph.num_edges()
 
+    @property
+    def nodes(self) -> Iterator[NodeT]:
+        yield from self._node_idcs.keys()
+
+    @property
+    def edges(self) -> Iterator[EdgeT]:
+        yield from self._edge_idcs.keys()
+
+    def neighbours(self, node: NodeT) -> Iterator[NodeT]:
+        node_idx = self._node_idcs[node]
+        neighbour_idcs = self._graph.neighbors(node_idx)
+        for neighbour_idx in neighbour_idcs:
+            yield self._graph.get_node_data(neighbour_idx)
+
     def add_edge(self, node_a: NodeT, node_b: NodeT, edge: EdgeT):
         node_a_idx = self._node_idcs.get(node_a, self._out_of_bounds_node)
         node_b_idx = self._node_idcs.get(node_b, self._out_of_bounds_node)

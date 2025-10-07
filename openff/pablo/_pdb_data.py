@@ -43,7 +43,6 @@ from ._utils import (
     unwrap_or_none,
 )
 from .exceptions import (
-    AmbiguousResidueMatch,
     PdbResidueMatchError,
     UnknownOrAmbiguousSerialInConectError,
 )
@@ -1537,52 +1536,6 @@ class PdbData:
             ]
         logging.info("------")
         return matches
-
-    def get_residue_graph(
-        self,
-        matches: Iterable[Sequence[PossibleResidueMatch]],
-    ) -> tuple[
-        Graph[int, tuple[int, int]],
-        dict[int, AtomDefinition | None],
-        dict[tuple[int, int], BondDefinition | None],
-    ]:
-        """
-        Compute a graph of assigned and expected chemical information
-        """
-        graph: Graph[int, tuple[int, int]] = Graph(
-            node_count_hint=len(self.name),
-        )
-        atoms: dict[int, AtomDefinition | None] = {}
-        bonds: dict[tuple[int, int], BondDefinition | None] = {
-            (i, j): None for i, js in enumerate(self.conects) for j in js if i < j
-        }
-
-        for possible_matches in matches:
-            successful_matches = list(only_matched(possible_matches))
-            match successful_matches:
-                case []:
-                    res_atom_idcs = possible_matches[0].res_atom_idcs
-                    graph.add_nodes_from(res_atom_idcs)
-                    atoms.update({i: None for i in res_atom_idcs})
-                case [match, *redundant_matches] if all(
-                    other_match.agrees_with(match) for other_match in redundant_matches
-                ):
-                    graph.add_nodes_from(match.res_atom_idcs)
-                    atoms.update(match.index_to_atomdef.items())
-                    new_bonds = match.get_sorted_bond_map()
-                    for (i, j), bond in new_bonds.items():
-                        assert i < j, f"{i} >= {j}"
-                        if (i, j) in bonds and bonds[(i, j)] is not None:
-                            assert bonds[i, j] == bond, (
-                                f"incompatible matches: {(i, j)=}: {bonds[i, j]=} != {bond}"
-                            )
-                        bonds[i, j] = bond
-                case _:
-                    raise AmbiguousResidueMatch(self, successful_matches)
-
-        graph.add_edges_from((i, j, (i, j)) for (i, j) in bonds)
-
-        return (graph, atoms, bonds)
 
     def get_residue_matches(
         self,
