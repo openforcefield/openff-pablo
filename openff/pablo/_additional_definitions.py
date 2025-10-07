@@ -1,14 +1,14 @@
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
+from typing import Self
 
 from openff.pablo._graph import Graph
 from openff.pablo._pdb_data import PdbData
 
 from ._matching import (
     PossibleResidueMatch,
+    ResidueMatch,
     only_matched,
-)
-from ._utils import (
-    no_none_in_values,
 )
 from .exceptions import (
     AmbiguousResidueMatch,
@@ -20,29 +20,40 @@ def apply_additional_definitions(
     data: PdbData,
     matches: Iterable[Sequence[PossibleResidueMatch]],
     additional_definitions: Iterable[ResidueDefinition],
-) -> tuple[Mapping[int, AtomDefinition], Mapping[tuple[int, int], BondDefinition]]:
+) -> "list[AdditionalDefMatch]":
+    """
+    Get a list of additional matches that can straddle different residues
+
+    Raises
+    ======
+    AmbiguousResidueMatch
+        If any residue has more than one successful match in ``matches``. This
+        function can only fill in missing information, not adjudicate
+        ambiguities. It is OK for a residue to have zero matches - that's what
+        this function is for!
+    ValueError
+        If an additional definition can be mapped to an otherwise unknown atom
+        in multiple chemically distinct ways.
+    AssertionError
+        Asserts are used only to verify certain local invariants. Any assert
+        error in user code is a bug - please report it!
+    """
     pdb_graph, atoms, bonds = _get_residue_graph(data, matches)
 
+    new_matches: list[AdditionalDefMatch] = []
     for resdef in additional_definitions:
-        new_atoms: dict[int, AtomDefinition]
-        new_bonds: dict[tuple[int, int], BondDefinition]
-        # TODO: `try` block
-        new_atoms, new_bonds = _apply_resdef_to_graph(
-            data,
-            resdef,
-            pdb_graph,
-            atoms,
-            bonds,
-        )
-        atoms.update(new_atoms)
-        bonds.update(new_bonds)
-
-    if not (no_none_in_values(atoms) and no_none_in_values(bonds)):
-        raise ValueError(
-            "additional_definitions did not cover all unknown chemistries",
+        # TODO: `try` block for better ambiguity handling
+        new_matches.append(
+            _apply_resdef_to_graph(
+                data,
+                resdef,
+                pdb_graph,
+                atoms,
+                bonds,
+            ),
         )
 
-    return (atoms, bonds)
+    return new_matches
 
 
 def _get_residue_graph(
@@ -98,7 +109,16 @@ def _apply_resdef_to_graph(
     pdb_graph: Graph[int, tuple[int, int]],
     atoms: dict[int, AtomDefinition | None],
     bonds: dict[tuple[int, int], BondDefinition | None],
-) -> tuple[dict[int, AtomDefinition], dict[tuple[int, int], BondDefinition]]:
+) -> "AdditionalDefMatch":
+    """Find a way to match this additional residue definition to the graph
+
+    Raises
+    ======
+    ValueError
+        If the residue definition can be mapped to an otherwise unknown atom
+        in multiple chemically distinct ways.
+    """
+
     def node_matcher(pdb_idx: int, new_atomdef: AtomDefinition) -> bool:
         old_atomdef = atoms[pdb_idx]
         if old_atomdef is None:
@@ -117,12 +137,10 @@ def _apply_resdef_to_graph(
             return True
         return old_bonddef.order == new_bonddef.order
 
-    mappings: list[
-        tuple[dict[int, AtomDefinition], dict[tuple[int, int], BondDefinition]]
-    ] = []
+    mappings: list[AdditionalDefMatch] = []
     for resdef_graph in resdef._to_graphs():
         mappings.extend(
-            (mapping, _get_bond_mapping(mapping, resdef_graph))
+            AdditionalDefMatch.from_mapping(mapping, resdef)
             for mapping in pdb_graph.get_mappings(
                 resdef_graph,
                 node_matcher=node_matcher,
@@ -130,37 +148,25 @@ def _apply_resdef_to_graph(
                 subgraph=True,
                 induced=True,
             )
-            if _has_valid_connectivity(
-                data,
-                resdef_graph,
-                pdb_graph,
-                mapping,
+            if (
+                _has_valid_connectivity(
+                    data,
+                    resdef_graph,
+                    pdb_graph,
+                    mapping,
+                )
+                # Also require that this mapping would cover an unknown atom
+                # TODO: Allow covering an unknown bond as well
+                and any(atoms[i] is None for i in mapping)
             )
         )
 
     mapping = mappings.pop()
     for other_mapping in mappings:
-        if not _are_chemically_equivalent(
-            mapping,
-            other_mapping,
-        ):
+        if not mapping.agrees_with(other_mapping):
             raise ValueError("resdef does not unambiguously map")
 
     return mapping
-
-
-def _get_bond_mapping(
-    atom_mapping: dict[int, AtomDefinition],
-    resdef_graph: Graph[AtomDefinition, BondDefinition],
-) -> dict[tuple[int, int], BondDefinition]:
-    """Compute the bond mapping for a particular atom mapping"""
-    name_to_idx = {v.name: k for k, v in atom_mapping.items()}
-    bond_mapping: dict[tuple[int, int], BondDefinition] = {}
-    for bond in resdef_graph.edges:
-        atom1_idx = name_to_idx[bond.atom1]
-        atom2_idx = name_to_idx[bond.atom2]
-        bond_mapping[atom1_idx, atom2_idx] = bond
-    return bond_mapping
 
 
 def _has_valid_connectivity(
@@ -194,33 +200,58 @@ def _has_valid_connectivity(
     return True
 
 
-def _are_chemically_equivalent(
-    mapping_a: tuple[
-        dict[int, AtomDefinition],
-        dict[tuple[int, int], BondDefinition],
-    ],
-    mapping_b: tuple[
-        dict[int, AtomDefinition],
-        dict[tuple[int, int], BondDefinition],
-    ],
-) -> bool:
-    atoms_a, bonds_a = mapping_a
-    atoms_b, bonds_b = mapping_b
+@dataclass(frozen=True)
+class AdditionalDefMatch(ResidueMatch):
+    @classmethod
+    def from_mapping(
+        cls,
+        atom_mapping: dict[int, AtomDefinition],
+        resdef: ResidueDefinition,
+    ) -> Self:
+        """Compute the bond mapping for a particular atom mapping"""
+        matched_atoms = {
+            atom.name: i for i, atom in atom_mapping.items() if atom.symbol != ""
+        }
+        neighbouring_atoms = {
+            atom.name: i for i, atom in atom_mapping.items() if atom.symbol == ""
+        }
 
-    if len(atoms_a.keys()) != len(atoms_b.keys()):
-        return False
-    if len(bonds_a.keys()) != len(bonds_b.keys()):
-        return False
+        if resdef.prior_bond_leaving_atoms.isdisjoint(matched_atoms):
+            prior_bond = (
+                neighbouring_atoms[resdef.prior_bond_linking_atom],
+                matched_atoms[resdef.posterior_bond_linking_atom],
+            )
+        elif resdef.prior_bond_leaving_atoms.issubset(matched_atoms):
+            prior_bond = None
+        else:
+            assert False
 
-    charge_a, charge_b = 0, 0
-    for i, atom_a in atoms_a.items():
-        atom_b = atoms_b[i]
-        if atom_a.symbol != atom_b.symbol:
-            return False
-        charge_a += atom_a.charge
-        charge_b += atom_b.charge
+        if resdef.posterior_bond_leaving_atoms.isdisjoint(matched_atoms):
+            posterior_bond = (
+                matched_atoms[resdef.prior_bond_linking_atom],
+                neighbouring_atoms[resdef.posterior_bond_linking_atom],
+            )
+        elif resdef.posterior_bond_leaving_atoms.issubset(matched_atoms):
+            posterior_bond = None
+        else:
+            assert False
 
-    if charge_a != charge_b:
-        return False
+        if resdef.crosslink_leaving_atoms.isdisjoint(matched_atoms):
+            assert resdef.crosslink is not None
+            crosslink = (
+                matched_atoms[resdef.crosslink.atom1],
+                neighbouring_atoms[resdef.crosslink.atom2],
+            )
+        elif resdef.crosslink_leaving_atoms.issubset(matched_atoms):
+            crosslink = None
+        else:
+            assert False
 
-    return True
+        return cls(
+            residue_definition=resdef,
+            index_to_atomdef=atom_mapping,
+            vsite_idcs=(),
+            prior_bond_idcs=prior_bond,
+            posterior_bond_idcs=posterior_bond,
+            crosslink_idcs=crosslink,
+        )
