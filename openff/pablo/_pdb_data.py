@@ -12,6 +12,7 @@ from os import PathLike
 from pathlib import Path
 from typing import IO, Any, DefaultDict, Literal, Protocol, Self
 
+from openff.pablo._additional_definitions import apply_additional_definitions
 from openff.pablo._cif import (
     cif_floats,
     cif_ints,
@@ -1556,16 +1557,20 @@ class PdbData:
         logging.info(
             "Getting all residue matches",
         )
+
+        all_matches = self.match_residues(
+            residue_database,
+            additional_definitions,
+        )
+
         # List of residue matches, one per residue. This list has one residue
         # match for each residue in the PDB file iff every residue could be
         # identified
         residues: list[SuccessfulMatch] = []
         errors: list[list[MismatchProtocol] | list[SuccessfulMatch]] = []
         all_residues_successful = True
-        for possible_residue_matches in self.match_residues(
-            residue_database,
-            additional_definitions,
-        ):
+        check_additional_definitions: None | bool = None
+        for possible_residue_matches in all_matches:
             logging.debug(
                 f"  Checking errors for {self.res_name[possible_residue_matches[0].prototype_index]} {possible_residue_matches[0].res_atom_idcs}",
             )
@@ -1580,10 +1585,12 @@ class PdbData:
 
             if len(matches) == 0:
                 logging.debug(
-                    "    FAILURE: no successful matches; PDB loading has failed",
+                    "    POSSIBLE FAILURE: no successful matches",
                 )
                 # No matches, PDB loading has failed
                 all_residues_successful = False
+                if check_additional_definitions is None:
+                    check_additional_definitions = True
                 errors.append(mismatches)
             elif len(matches) == 1:
                 logging.debug(
@@ -1603,6 +1610,7 @@ class PdbData:
                 )
                 # Multiple matches that specify different chemistry, PDB loading has failed
                 all_residues_successful = False
+                check_additional_definitions = False
                 errors.append(matches)
 
         if all_residues_successful:
@@ -1610,8 +1618,18 @@ class PdbData:
                 "All residues successfully matched",
             )
             return residues
-        else:
-            raise PdbResidueMatchError(self, errors)
+
+        if check_additional_definitions:
+            additional_matches = apply_additional_definitions(
+                self,
+                all_matches,
+                additional_definitions,
+            )
+            if len(additional_matches) != 0:
+                # TODO: Error handling and success returning
+                raise NotImplementedError()
+
+        raise PdbResidueMatchError(self, errors)
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         """

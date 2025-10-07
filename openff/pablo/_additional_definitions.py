@@ -1,9 +1,9 @@
+import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 from openff.pablo._graph import Graph
-from openff.pablo._pdb_data import PdbData
 
 from ._matching import (
     PossibleResidueMatch,
@@ -15,9 +15,12 @@ from .exceptions import (
 )
 from .residue import AtomDefinition, BondDefinition, ResidueDefinition
 
+if TYPE_CHECKING:
+    from openff.pablo._pdb_data import PdbData
+
 
 def apply_additional_definitions(
-    data: PdbData,
+    data: "PdbData",
     matches: Iterable[Sequence[PossibleResidueMatch]],
     additional_definitions: Iterable[ResidueDefinition],
 ) -> "list[AdditionalDefMatch]":
@@ -35,29 +38,32 @@ def apply_additional_definitions(
         If an additional definition can be mapped to an otherwise unknown atom
         in multiple chemically distinct ways.
     AssertionError
-        Asserts are used only to verify certain local invariants. Any assert
-        error in user code is a bug - please report it!
+        Asserts are used only to verify certain local invariants that cannot be
+        verified statically by the type checker. Any assert error in user code
+        is a bug and may indicate that results are incorrect - please report it!
     """
     pdb_graph, atoms, bonds = _get_residue_graph(data, matches)
 
     new_matches: list[AdditionalDefMatch] = []
     for resdef in additional_definitions:
-        # TODO: `try` block for better ambiguity handling
+        match = _apply_resdef_to_graph(
+            data,
+            resdef,
+            pdb_graph,
+            atoms,
+            bonds,
+        )
+        if match is None:
+            continue
         new_matches.append(
-            _apply_resdef_to_graph(
-                data,
-                resdef,
-                pdb_graph,
-                atoms,
-                bonds,
-            ),
+            match,
         )
 
     return new_matches
 
 
 def _get_residue_graph(
-    data: PdbData,
+    data: "PdbData",
     matches: Iterable[Sequence[PossibleResidueMatch]],
 ) -> tuple[
     Graph[int, tuple[int, int]],
@@ -104,12 +110,12 @@ def _get_residue_graph(
 
 
 def _apply_resdef_to_graph(
-    data: PdbData,
+    data: "PdbData",
     resdef: ResidueDefinition,
     pdb_graph: Graph[int, tuple[int, int]],
     atoms: dict[int, AtomDefinition | None],
     bonds: dict[tuple[int, int], BondDefinition | None],
-) -> "AdditionalDefMatch":
+) -> "AdditionalDefMatch | None":
     """Find a way to match this additional residue definition to the graph
 
     Raises
@@ -123,10 +129,18 @@ def _apply_resdef_to_graph(
         old_atomdef = atoms[pdb_idx]
         if old_atomdef is None:
             return True
-        return new_atomdef.symbol == "" or (
+        ret = new_atomdef.symbol == "" or (
             (old_atomdef.symbol == new_atomdef.symbol)
             and (old_atomdef.charge == new_atomdef.charge)
         )
+
+        # logging.debug(
+        #     f"matching {pdb_idx} to {new_atomdef}: {old_atomdef=} {ret=}"
+        #     + f"\n{new_atomdef.symbol=} {old_atomdef.symbol=}"
+        #     + f"\n{old_atomdef.charge=} {new_atomdef.charge=}",
+        # )
+
+        return ret
 
     def edge_matcher(
         pdb_idcs: tuple[int, int],
@@ -135,7 +149,14 @@ def _apply_resdef_to_graph(
         old_bonddef = bonds[pdb_idcs]
         if old_bonddef is None:
             return True
-        return old_bonddef.order == new_bonddef.order
+        ret = old_bonddef.order == new_bonddef.order
+
+        # logging.debug(
+        #     f"matching {pdb_idcs} to {new_bonddef}: {old_bonddef=} {ret=}"
+        #     + f"\n{new_bonddef.order=} {old_bonddef.order=}",
+        # )
+
+        return ret
 
     mappings: list[AdditionalDefMatch] = []
     for resdef_graph in resdef._to_graphs():
@@ -160,6 +181,10 @@ def _apply_resdef_to_graph(
                 and any(atoms[i] is None for i in mapping)
             )
         )
+    logging.debug(f"Found {len(mappings)} mappings to {resdef.description}")
+
+    if len(mappings) == 0:
+        return None
 
     mapping = mappings.pop()
     for other_mapping in mappings:
@@ -170,7 +195,7 @@ def _apply_resdef_to_graph(
 
 
 def _has_valid_connectivity(
-    data: PdbData,
+    data: "PdbData",
     resdef_graph: Graph[AtomDefinition, BondDefinition],
     pdb_graph: Graph[int, tuple[int, int]],
     mapping: dict[int, AtomDefinition],
@@ -186,6 +211,7 @@ def _has_valid_connectivity(
     string has a name in the PDB file that is either the canonical name
     of the atom definition or one of its synonyms.
     """
+    logging.debug("found possible mapping")
     for pdb_idx, resdef_atom in mapping.items():
         if resdef_atom.symbol == "":
             if data.name[pdb_idx] not in resdef_atom.names:
