@@ -57,23 +57,23 @@ __all__ = [
 @dataclass
 class PdbData:
     src_filename: str | None = None
-    line_no: list[int] = field(default_factory=list)
-    model: list[int | None] = field(default_factory=list)
-    serial: list[str] = field(default_factory=list)
-    name: list[str] = field(default_factory=list)
-    alt_loc: list[str] = field(default_factory=list)
-    res_name: list[str] = field(default_factory=list)
-    chain_id: list[str] = field(default_factory=list)
-    res_seq: list[str] = field(default_factory=list)
-    i_code: list[str] = field(default_factory=list)
-    x: list[float] = field(default_factory=list)
-    y: list[float] = field(default_factory=list)
-    z: list[float] = field(default_factory=list)
-    occupancy: list[float] = field(default_factory=list)
-    temp_factor: list[float] = field(default_factory=list)
-    element: list[str] = field(default_factory=list)
-    charge: list[int | None] = field(default_factory=list)
-    terminated: list[bool] = field(default_factory=list)
+    line_no: list[int] = field(default_factory=list[int])
+    model: list[int | None] = field(default_factory=list[int | None])
+    serial: list[str] = field(default_factory=list[str])
+    name: list[str] = field(default_factory=list[str])
+    alt_loc: list[str] = field(default_factory=list[str])
+    res_name: list[str] = field(default_factory=list[str])
+    chain_id: list[str] = field(default_factory=list[str])
+    res_seq: list[str] = field(default_factory=list[str])
+    i_code: list[str] = field(default_factory=list[str])
+    x: list[float] = field(default_factory=list[float])
+    y: list[float] = field(default_factory=list[float])
+    z: list[float] = field(default_factory=list[float])
+    occupancy: list[float] = field(default_factory=list[float])
+    temp_factor: list[float] = field(default_factory=list[float])
+    element: list[str] = field(default_factory=list[str])
+    charge: list[int | None] = field(default_factory=list[int | None])
+    terminated: list[bool] = field(default_factory=list[bool])
     res_idx: list[int] | None = None
     serial_to_index: DefaultDict[str, list[int]] = field(
         default_factory=lambda: defaultdict(list),
@@ -928,7 +928,7 @@ class PdbData:
             if not rescued:
                 logging.debug("    REJECTED: no mappings matched")
 
-    def filter_on_polymer_linkages(
+    def identify_polymer_linkages(
         self,
         this_res_idx: int,
         all_matches: Sequence[Sequence[PossibleResidueMatch]],
@@ -1020,7 +1020,37 @@ class PdbData:
                 f"  Attempting link-based match against {match.residue_definition.description}",
             )
             if match.expects_prior_bond:
-                if (
+                assert match.residue_definition.linking_bond is not None
+                prior_partner_name = match.residue_definition.linking_bond.atom1
+                prior_linking_name = match.residue_definition.linking_bond.atom2
+                prior_bond_linking_atom_idx = match.canonical_atom_name_to_index[
+                    prior_linking_name
+                ]
+                prior_conect_partners = [
+                    (self.name[i], i)
+                    for i in self.conects[prior_bond_linking_atom_idx]
+                    if self.name[i] == prior_partner_name
+                    and i not in match.res_atom_idcs
+                ]
+                if len(prior_conect_partners) > 1:
+                    i = match.prototype_index
+                    res = f"{self.chain_id[i]}:{self.res_name[i]}{self.res_seq[i]}"
+                    line = self.line_no[i]
+                    logging.info(
+                        "    Multiple possible prior linking bond partners"
+                        + f" found in CONECT records for residue {res} ({line});"
+                        + " ignoring all and proceeding with standard linkage"
+                        + "analysis",
+                    )
+
+                if len(prior_conect_partners) == 1:
+                    logging.debug("    Prior linking bond found in CONECT records")
+                    ((_, prior_bond_partner_atom_idx),) = prior_conect_partners
+                    match.set_prior_bond(
+                        prior_bond_partner_atom_idx,
+                        prior_bond_linking_atom_idx,
+                    )
+                elif (
                     match.residue_definition.linking_bond
                     not in neighbour_supported_prior_bonds
                 ):
@@ -1038,9 +1068,7 @@ class PdbData:
                         neighbour_supported_prior_bonds[
                             match.residue_definition.linking_bond
                         ],
-                        match.canonical_atom_name_to_index[
-                            match.residue_definition.prior_bond_linking_atom
-                        ],
+                        prior_bond_linking_atom_idx,
                     )
                     if (
                         match.prior_bond_idcs is not None
@@ -1058,7 +1086,39 @@ class PdbData:
                 continue
 
             if match.expects_posterior_bond:
-                if (
+                assert match.residue_definition.linking_bond is not None
+                posterior_linking_name = match.residue_definition.linking_bond.atom1
+                posterior_partner_name = match.residue_definition.linking_bond.atom2
+                posterior_bond_linking_atom_idx = match.canonical_atom_name_to_index[
+                    posterior_linking_name
+                ]
+                posterior_conect_partners = [
+                    (self.name[i], i)
+                    for i in self.conects[posterior_bond_linking_atom_idx]
+                    if self.name[i] == posterior_partner_name
+                    and i not in match.res_atom_idcs
+                ]
+                if len(posterior_conect_partners) > 1:
+                    i = match.prototype_index
+                    res = f"{self.chain_id[i]}:{self.res_name[i]}{self.res_seq[i]}"
+                    line = self.line_no[i]
+                    logging.info(
+                        "    Multiple possible posterior linking bond partners"
+                        + f" found in CONECT records for residue {res} ({line});"
+                        + " ignoring all and proceeding with standard linkage"
+                        + " analysis",
+                    )
+
+                if len(posterior_conect_partners) == 1:
+                    logging.debug(
+                        "    Unique posterior linking bond found in CONECT records",
+                    )
+                    ((_, posterior_bond_partner_atom_idx),) = posterior_conect_partners
+                    match.set_posterior_bond(
+                        posterior_bond_linking_atom_idx,
+                        posterior_bond_partner_atom_idx,
+                    )
+                elif (
                     match.residue_definition.linking_bond
                     not in neighbour_supported_posterior_bonds
                 ):
@@ -1520,7 +1580,7 @@ class PdbData:
                 additional_definitions=additional_definitions,
             ),
             self.rescue_partial_matches_with_conect_records,
-            self.filter_on_polymer_linkages,
+            self.identify_polymer_linkages,
             self.filter_on_crosslinks,
             self.filter_on_conect_records,
             self.choose_polymer_bonds,
@@ -1558,11 +1618,6 @@ class PdbData:
             "Getting all residue matches",
         )
 
-        all_matches = self.match_residues(
-            residue_database,
-            additional_definitions,
-        )
-
         # List of residue matches, one per residue. This list has one residue
         # match for each residue in the PDB file iff every residue could be
         # identified
@@ -1570,7 +1625,10 @@ class PdbData:
         errors: list[list[MismatchProtocol] | list[SuccessfulMatch]] = []
         all_residues_successful = True
         check_additional_definitions: None | bool = None
-        for possible_residue_matches in all_matches:
+        for possible_residue_matches in self.match_residues(
+            residue_database,
+            additional_definitions,
+        ):
             logging.debug(
                 f"  Checking errors for {self.res_name[possible_residue_matches[0].prototype_index]} {possible_residue_matches[0].res_atom_idcs}",
             )
@@ -1622,12 +1680,13 @@ class PdbData:
         if check_additional_definitions:
             additional_matches = apply_additional_definitions(
                 self,
-                all_matches,
+                residues,
                 additional_definitions,
             )
             if len(additional_matches) != 0:
-                # TODO: Error handling and success returning
+                # TODO: check that all atoms now have chemical information
                 raise NotImplementedError()
+                return residues + additional_matches
 
         raise PdbResidueMatchError(self, errors)
 

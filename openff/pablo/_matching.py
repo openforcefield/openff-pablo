@@ -131,7 +131,7 @@ class ResidueMatch(MatchProtocol):
         if self.residue_definition.linking_bond is None:
             raise ValueError("cannot set prior bond without linking_bond")
         if atom1_idx in self.res_atom_idcs:
-            raise ValueError("atom1 in prior bond should be in previous residue")
+            raise ValueError("atom1 in prior bond should be in another residue")
         if atom2_idx not in self.res_atom_idcs:
             raise ValueError("atom2 in prior bond should be in this residue")
 
@@ -147,7 +147,7 @@ class ResidueMatch(MatchProtocol):
         if atom1_idx not in self.res_atom_idcs:
             raise ValueError("atom1 in posterior bond should be in this residue")
         if atom2_idx in self.res_atom_idcs:
-            raise ValueError("atom2 in posterior bond should be in next residue")
+            raise ValueError("atom2 in posterior bond should be in another residue")
 
         object.__setattr__(
             self,
@@ -360,3 +360,18 @@ def only_matched(
     iterable: Iterable[PossibleResidueMatch],
 ) -> Iterable[SuccessfulMatch]:
     return (p for p in iterable if isinstance(p, SuccessfulMatch))
+
+
+def unwrap_successful(iterable: Iterable[PossibleResidueMatch]) -> SuccessfulMatch:
+    iterator = iter(only_matched(iterable))
+
+    try:
+        value = next(iterator)
+    except StopIteration:
+        raise ValueError("container has no successful elements")
+
+    for redundancy in iterator:
+        if not value.agrees_with(redundancy):
+            raise ValueError("container has multiple disagreeing successful elements")
+
+    return value

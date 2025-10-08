@@ -522,7 +522,7 @@ def test_filter_on_polymer_linkages_yields_all_matches_simple(cys_data: PdbData)
     matches = list(cys_data.get_name_based_matches(CCD_RESIDUE_DEFINITION_CACHE))
     residue_matches = matches[0]
     results = list(
-        cys_data.filter_on_polymer_linkages(0, [residue_matches]),
+        cys_data.identify_polymer_linkages(0, [residue_matches]),
     )
 
     for before, after in zip(residue_matches, results):
@@ -586,7 +586,7 @@ def test_filter_on_polymer_linkages_yields_all_matches():
 
     for residue_matches in matches:
         results = list(
-            data.filter_on_polymer_linkages(0, [residue_matches]),
+            data.identify_polymer_linkages(0, [residue_matches]),
         )
 
         for before, after in zip(residue_matches, results):
@@ -604,6 +604,7 @@ def test_filter_on_polymer_linkages_rejects_unsupported_prior_bond(
     data = PdbData(
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[False] * (len(gly_def_neutral.atoms) * 2),
+        conects=[set()] * (len(gly_def_neutral.atoms) * 2),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -623,7 +624,7 @@ def test_filter_on_polymer_linkages_rejects_unsupported_prior_bond(
     assert this_match.expects_prior_bond
 
     filtered_matches = list(
-        data.filter_on_polymer_linkages(
+        data.identify_polymer_linkages(
             1,
             all_matches=[[neighbour_match], [this_match]],
         ),
@@ -645,6 +646,7 @@ def test_filter_on_polymer_linkages_rejects_prior_bond_across_ter(
     data = PdbData(
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[True] * (len(gly_def_neutral.atoms) * 2),
+        conects=[set()] * (len(gly_def_neutral.atoms) * 2),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -668,7 +670,7 @@ def test_filter_on_polymer_linkages_rejects_prior_bond_across_ter(
     assert this_match.expects_prior_bond
 
     filtered_matches = list(
-        data.filter_on_polymer_linkages(
+        data.identify_polymer_linkages(
             1,
             all_matches=[[neighbour_match], [this_match]],
         ),
@@ -691,6 +693,7 @@ def test_filter_on_polymer_linkages_sets_prior_bond(
     data = PdbData(
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[False] * (len(gly_def_neutral.atoms) * 2),
+        conects=[set()] * (len(gly_def_neutral.atoms) * 2),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -715,7 +718,7 @@ def test_filter_on_polymer_linkages_sets_prior_bond(
     assert this_match.prior_bond_idcs is None
 
     filtered_matches = list(
-        data.filter_on_polymer_linkages(
+        data.identify_polymer_linkages(
             1,
             all_matches=[[neighbour_match], [this_match]],
         ),
@@ -736,6 +739,7 @@ def test_filter_on_polymer_linkages_rejects_no_prior_bond_without_molecule_start
     data = PdbData(
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[False] * (len(gly_def_neutral.atoms) * 2),
+        conects=[set()] * (len(gly_def_neutral.atoms) * 2),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -758,7 +762,7 @@ def test_filter_on_polymer_linkages_rejects_no_prior_bond_without_molecule_start
     assert not this_match.expects_prior_bond
 
     filtered_matches = list(
-        data.filter_on_polymer_linkages(
+        data.identify_polymer_linkages(
             1,
             all_matches=[[neighbour_match], [this_match]],
         ),
@@ -780,6 +784,7 @@ def test_filter_on_polymer_linkages_rejects_unsupported_posterior_bond(
     data = PdbData(
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[False] * (len(gly_def_neutral.atoms) * 2),
+        conects=[set()] * (len(gly_def_neutral.atoms) * 2),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -802,7 +807,7 @@ def test_filter_on_polymer_linkages_rejects_unsupported_posterior_bond(
     assert this_match.expects_posterior_bond
 
     filtered_matches = list(
-        data.filter_on_polymer_linkages(
+        data.identify_polymer_linkages(
             0,
             all_matches=[[this_match], [neighbour_match]],
         ),
@@ -824,6 +829,7 @@ def test_filter_on_polymer_linkages_rejects_posterior_bond_across_ter(
     data = PdbData(
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[True] * (len(gly_def_neutral.atoms) * 2),
+        conects=[set()] * (len(gly_def_neutral.atoms) * 2),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -847,7 +853,7 @@ def test_filter_on_polymer_linkages_rejects_posterior_bond_across_ter(
     assert this_match.expects_posterior_bond
 
     filtered_matches = list(
-        data.filter_on_polymer_linkages(
+        data.identify_polymer_linkages(
             0,
             all_matches=[[this_match], [neighbour_match]],
         ),
@@ -870,6 +876,7 @@ def test_filter_on_polymer_linkages_sets_posterior_bond(
     data = PdbData(
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[False] * (len(gly_def_neutral.atoms) * 2),
+        conects=[set()] * (len(gly_def_neutral.atoms) * 2),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -894,7 +901,7 @@ def test_filter_on_polymer_linkages_sets_posterior_bond(
     assert this_match.posterior_bond_idcs is None
 
     filtered_matches = list(
-        data.filter_on_polymer_linkages(
+        data.identify_polymer_linkages(
             0,
             all_matches=[[this_match], [neighbour_match]],
         ),
@@ -915,6 +922,7 @@ def test_filter_on_polymer_linkages_rejects_no_posterior_bond_without_molecule_s
     data = PdbData(
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[False] * (len(gly_def_neutral.atoms) * 2),
+        conects=[set()] * (len(gly_def_neutral.atoms) * 2),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -934,7 +942,7 @@ def test_filter_on_polymer_linkages_rejects_no_posterior_bond_without_molecule_s
     assert not this_match.expects_posterior_bond
 
     filtered_matches = list(
-        data.filter_on_polymer_linkages(
+        data.identify_polymer_linkages(
             0,
             all_matches=[[this_match], [neighbour_match]],
         ),

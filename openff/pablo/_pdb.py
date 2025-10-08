@@ -199,6 +199,7 @@ def topology_from_pdb(
     return topology
 
 
+# TODO: Make this work independently of match order (for additional_definitions)
 def _build_topology(
     matches: Iterable[SuccessfulMatch],
     data: PdbData,

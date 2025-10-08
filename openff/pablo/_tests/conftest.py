@@ -2,6 +2,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import pytest
+from openff.toolkit import Molecule, Topology
 
 from openff.pablo._pdb_data import PdbData, ResidueMatch
 from openff.pablo._tests.utils import get_test_data_path
@@ -72,6 +73,13 @@ def vicinal_disulfide_data() -> PdbData:
     return PdbData.from_file(
         get_test_data_path("3cu9_vicinal_disulfide.pdb"),
     )
+
+
+@pytest.fixture
+def vicinal_disulfide_molecule() -> Molecule:
+    return Topology.from_pdb(
+        get_test_data_path("3cu9_vicinal_disulfide.pdb"),
+    ).molecule(0)
 
 
 @pytest.fixture

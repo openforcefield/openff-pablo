@@ -1,6 +1,7 @@
 import pytest
 from openff.toolkit import Molecule
 
+from openff.pablo._tests.utils import get_test_data_path
 from openff.pablo.chem import DISULFIDE_BOND, PEPTIDE_BOND
 from openff.pablo.residue import (
     AtomDefinition,
@@ -492,3 +493,9 @@ class TestResidueDefinition:
         )
         with pytest.raises(ValueError, match="Virtual sites may not clash"):
             resdef.with_synonyms({"H": ["EP"]})
+
+    def test_anon_from_sdf(self):
+        sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
+        mol = Molecule.from_file(sdf_path, "SDF")
+        resdef = ResidueDefinition.anon_from_sdf(sdf_path)
+        assert resdef.to_openff_molecule() == mol

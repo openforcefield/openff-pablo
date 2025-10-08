@@ -64,15 +64,17 @@ class Graph(Generic[NodeT, EdgeT]):
         for params in obj_list:
             self.add_edge(*params)
 
-    def add_node(self, node: NodeT):
+    def add_node(self, node: NodeT, *, skip_existing: bool = False):
         if node in self._node_idcs:
+            if skip_existing:
+                return
             raise ValueError("Cannot add existing node")
         self._node_idcs[node] = self._graph.add_node(node)
         self._out_of_bounds_node += 1
 
-    def add_nodes_from(self, nodes: Iterable[NodeT]):
+    def add_nodes_from(self, nodes: Iterable[NodeT], *, skip_existing: bool = False):
         for node in nodes:
-            self.add_node(node)
+            self.add_node(node, skip_existing=skip_existing)
 
     def is_isomorphic_to(
         self,
