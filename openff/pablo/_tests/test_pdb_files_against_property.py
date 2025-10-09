@@ -466,7 +466,65 @@ def test_3ip9_trimmed_loads_via_conects_like_legacy():
         assert pablo_res_charge == legacy_res_charge
 
 
-def test_3ip9_trimmed_loads_via_whole_molecule_additional_definitions():
+def test_3ip9_trimmed_loads_via_conects():
+    resdef = ResidueDefinition.from_smiles(
+        mapped_smiles="[c:1]1([H:41])[c:2]([H:42])[c:3]2[c:4]([c:5]([H:43])[c:6]1[N:7]1[C:8](=[O:9])[C:10]([H:44])([H:45])[C@@:11]([S:12][C:13]([C@:14]([N:15]([H:16])[H:50])([C:17](=[O:18])[O:19][H:59])[H:49])([H:47])[H:48])([H:46])[C:20]1=[O:21])[C:22](=[O:23])[O:24][C:25]21[c:26]2[c:27]([c:28]([H:51])[c:29]([O:32][H:54])[c:30]([H:52])[c:31]2[H:53])[O:33][c:34]2[c:35]1[c:36]([H:55])[c:37]([H:56])[c:38]([O:40][H:58])[c:39]2[H:57]",
+        leaving_atoms=[16, 19, 59],
+        atom_names={**{i: str(i) for i in range(1, 60)}, 15: "N", 17: "C"},
+        residue_name="DYE",
+        linking_bond=PEPTIDE_BOND,
+        description="CYSTEINE-CONJUGATED FLUOROPHORE MALEIMIDE",
+    )
+
+    pdb_path = get_test_data_path("3ip9_dye_trimmed.pdb")
+
+    top = topology_from_pdb(
+        pdb_path,
+        residue_database=CCD_RESIDUE_DEFINITION_CACHE.with_([resdef]),
+    )
+
+    sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
+    assert top.molecule(0) == Molecule.from_file(sdf_path, "SDF")
+
+
+def test_3ip9_trimmed_loads_via_dye_additional_definitions():
+    resdef = ResidueDefinition.from_smiles(
+        mapped_smiles="[c:1]1([H:41])[c:2]([H:42])[c:3]2[c:4]([c:5]([H:43])[c:6]1[N:7]1[C:8](=[O:9])[C:10]([H:44])([H:45])[C@@:11]([S:12][C:13]([C@:14]([N:15]([H:16])[H:50])([C:17](=[O:18])[O:19][H:59])[H:49])([H:47])[H:48])([H:46])[C:20]1=[O:21])[C:22](=[O:23])[O:24][C:25]21[c:26]2[c:27]([c:28]([H:51])[c:29]([O:32][H:54])[c:30]([H:52])[c:31]2[H:53])[O:33][c:34]2[c:35]1[c:36]([H:55])[c:37]([H:56])[c:38]([O:40][H:58])[c:39]2[H:57]",
+        leaving_atoms=[16, 19, 59],
+        atom_names={**{i: str(i) for i in range(1, 60)}, 15: "N", 17: "C"},
+        residue_name="DYE",
+        linking_bond=PEPTIDE_BOND,
+        description="CYSTEINE-CONJUGATED FLUOROPHORE MALEIMIDE",
+    )
+
+    pdb_path = get_test_data_path("3ip9_dye_trimmed.pdb")
+
+    top = topology_from_pdb(pdb_path, additional_definitions=[resdef])
+
+    sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
+    assert top.molecule(0) == Molecule.from_file(sdf_path, "SDF")
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ["3ip9_dye_trimmed.pdb", "3ip9_dye_trimmed_dyecys.pdb"],
+)
+def test_3ip9_trimmed_loads_via_anon_dye_additional_definitions(filename: str):
+    resdef = ResidueDefinition.anon_from_smiles_marked_leaving(
+        smiles="[H:1]N[C@@H](CS[C@H]1CC(=O)N(c2ccc3c(c2)C(=O)OC32c3ccc(O)cc3Oc3cc(O)ccc32)C1=O)C(=O)[O:2][H:3]",
+        # smiles="[c]1([H])[c]([H])[c]2[c]([c]([H])[c]1[N]1[C](=[O])[C]([H])([H])[C@@]([S][C]([C@]([N]([H:16])[H])([C](=[O])[O:19][H:59])[H])([H])[H])([H])[C]1=[O])[C](=[O])[O][C]21[c]2[c]([c]([H])[c]([O][H])[c]([H])[c]2[H])[O][c]2[c]1[c]([H])[c]([H])[c]([O][H])[c]2[H]",
+        description="CYSTEINE-CONJUGATED FLUOROPHORE MALEIMIDE",
+    )
+
+    pdb_path = get_test_data_path(filename)
+
+    top = topology_from_pdb(pdb_path, additional_definitions=[resdef])
+
+    sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
+    assert top.molecule(0) == Molecule.from_file(sdf_path, "SDF")
+
+
+def test_3ip9_trimmed_loads_via_anon_whole_molecule_additional_definitions():
     pdb_path = get_test_data_path("3ip9_dye_trimmed.pdb")
     sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
 

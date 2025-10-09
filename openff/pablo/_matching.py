@@ -233,22 +233,18 @@ class ResidueMatch(MatchProtocol):
             )
         }
 
-        if self.crosslink_idcs is not None:
-            assert self.residue_definition.crosslink is not None
-            if self.crosslink_idcs[0] < self.crosslink_idcs[1]:
-                d[self.crosslink_idcs] = self.residue_definition.crosslink
-            else:
-                d[sort_tuple(self.crosslink_idcs)] = (
-                    self.residue_definition.crosslink.flipped()
-                )
-
-        if self.prior_bond_idcs is not None:
-            assert self.residue_definition.linking_bond is not None
-            d[self.prior_bond_idcs] = self.residue_definition.linking_bond
-
-        if self.posterior_bond_idcs is not None:
-            assert self.residue_definition.linking_bond is not None
-            d[self.posterior_bond_idcs] = self.residue_definition.linking_bond
+        for bond_idcs, bond_definition in [
+            (self.crosslink_idcs, self.residue_definition.crosslink),
+            (self.prior_bond_idcs, self.residue_definition.linking_bond),
+            (self.posterior_bond_idcs, self.residue_definition.linking_bond),
+        ]:
+            if bond_idcs is not None:
+                assert bond_definition is not None
+                i, j = bond_idcs
+                if i < j:
+                    d[i, j] = bond_definition
+                else:
+                    d[j, i] = bond_definition.flipped()
 
         return d
 

@@ -26,11 +26,6 @@ def apply_additional_definitions(
 
     Raises
     ======
-    AmbiguousResidueMatch
-        If any residue has more than one successful match in ``matches``. This
-        function can only fill in missing information, not adjudicate
-        ambiguities. It is OK for a residue to have zero matches - that's what
-        this function is for!
     ValueError
         If an additional definition can be mapped to an otherwise unknown atom
         in multiple chemically distinct ways.
@@ -136,11 +131,11 @@ def _apply_resdef_to_graph(
 
     def node_matcher(pdb_idx: int, new_atomdef: AtomDefinition) -> bool:
         old_atomdef = atoms[pdb_idx]
-        if old_atomdef is None:
+        if old_atomdef is None or new_atomdef.symbol == "":
             return True
-        ret = new_atomdef.symbol == "" or (
-            (old_atomdef.symbol == new_atomdef.symbol)
-            and (old_atomdef.charge == new_atomdef.charge)
+        ret = (  # nofmt
+            old_atomdef.symbol == new_atomdef.symbol
+            and old_atomdef.charge == new_atomdef.charge
         )
 
         # logging.debug(
@@ -168,7 +163,9 @@ def _apply_resdef_to_graph(
         return ret
 
     mappings: list[AdditionalDefMatch] = []
-    for resdef_graph in resdef._to_graphs():
+    resdef_graphs = list(resdef._to_graphs())
+    logging.debug(f"{resdef.description} has {len(resdef_graphs)} graphs")
+    for resdef_graph in resdef_graphs:
         mappings.extend(
             AdditionalDefMatch.from_mapping(mapping, resdef)
             for mapping in pdb_graph.get_mappings(
@@ -216,20 +213,34 @@ def _has_valid_connectivity(
 
     1. Any atom whose elemental symbol in ``resdef_graph`` is not the empty
     string has the same number of neighbours in both graphs
-    2. Any atom whose elemental symbol in ``resdef_graph`` is the empty
-    string has a name in the PDB file that is either the canonical name
-    of the atom definition or one of its synonyms.
+    2. Any atom whose (a) elemental symbol in ``resdef_graph`` is the empty
+    string and whose (b) name does not begin with ``"NON_MATCHING_ATOM_"`` has a
+    name in the PDB file that is either the canonical name of the atom
+    definition or one of its synonyms.
+
     """
-    logging.debug("found possible mapping")
+    logging.debug("begin mapping validity check")
     for pdb_idx, resdef_atom in mapping.items():
+        if (  # nofmt
+            resdef_atom.symbol == ""
+            and resdef_atom.name.startswith("NON_MATCHING_ATOM_")
+        ):
+            continue
+
         if resdef_atom.symbol == "":
             if data.name[pdb_idx] not in resdef_atom.names:
+                logging.debug(
+                    f"  REJECTED: invalid name {data.name[pdb_idx]} in PDB for {resdef_atom}",
+                )
                 return False
             continue
 
         n_resdef_neighbours = sum(1 for _ in resdef_graph.neighbours(resdef_atom))
         n_pdb_neighbours = sum(1 for _ in pdb_graph.neighbours(pdb_idx))
         if n_resdef_neighbours != n_pdb_neighbours:
+            logging.debug(
+                f"  REJECTED: {n_pdb_neighbours=} but {n_resdef_neighbours=} for {resdef_atom}",
+            )
             return False
 
     return True
@@ -251,34 +262,42 @@ class AdditionalDefMatch(ResidueMatch):
             atom.name: i for i, atom in atom_mapping.items() if atom.symbol == ""
         }
 
-        if resdef.prior_bond_leaving_atoms.isdisjoint(matched_atoms):
+        if (  # nofmt
+            resdef.linking_bond is None
+            or resdef.prior_bond_leaving_atoms.issubset(matched_atoms)
+        ):
+            prior_bond = None
+        elif resdef.prior_bond_leaving_atoms.isdisjoint(matched_atoms):
             prior_bond = (
                 neighbouring_atoms[resdef.prior_bond_linking_atom],
                 matched_atoms[resdef.posterior_bond_linking_atom],
             )
-        elif resdef.prior_bond_leaving_atoms.issubset(matched_atoms):
-            prior_bond = None
         else:
             assert False
 
-        if resdef.posterior_bond_leaving_atoms.isdisjoint(matched_atoms):
+        if (  # nofmt
+            resdef.linking_bond is None
+            or resdef.posterior_bond_leaving_atoms.issubset(matched_atoms)
+        ):
+            posterior_bond = None
+        elif resdef.posterior_bond_leaving_atoms.isdisjoint(matched_atoms):
             posterior_bond = (
                 matched_atoms[resdef.prior_bond_linking_atom],
                 neighbouring_atoms[resdef.posterior_bond_linking_atom],
             )
-        elif resdef.posterior_bond_leaving_atoms.issubset(matched_atoms):
-            posterior_bond = None
         else:
             assert False
 
-        if resdef.crosslink_leaving_atoms.isdisjoint(matched_atoms):
-            assert resdef.crosslink is not None
+        if (  # nofmt
+            resdef.crosslink is None
+            or resdef.crosslink_leaving_atoms.issubset(matched_atoms)
+        ):
+            crosslink = None
+        elif resdef.crosslink_leaving_atoms.isdisjoint(matched_atoms):
             crosslink = (
                 matched_atoms[resdef.crosslink.atom1],
                 neighbouring_atoms[resdef.crosslink.atom2],
             )
-        elif resdef.crosslink_leaving_atoms.issubset(matched_atoms):
-            crosslink = None
         else:
             assert False
 

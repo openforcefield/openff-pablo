@@ -181,15 +181,3 @@ class UnknownOrAmbiguousSerialInConectError(ValueError):
             msg += "but multiple corresponding ATOM/HETATM records were found "
             msg += f"(records {','.join(map(str, possible_indices))})"
         super().__init__(msg)
-
-
-class AmbiguousResidueMatch(ValueError):
-    def __init__(self, data: "PdbData", matches: Sequence[SuccessfulMatch]):
-        super().__init__(
-            (
-                f"Atoms {matches[0].res_atom_idcs} were assigned"
-                + f" ambiguous matches: {matches}"
-            ),
-            data,
-            matches,
-        )

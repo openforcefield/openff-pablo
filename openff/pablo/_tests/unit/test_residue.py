@@ -499,3 +499,13 @@ class TestResidueDefinition:
         mol = Molecule.from_file(sdf_path, "SDF")
         resdef = ResidueDefinition.anon_from_sdf(sdf_path)
         assert resdef.to_openff_molecule() == mol
+
+    def test_leaving_fragment_of_core_atom(self, cys_def: ResidueDefinition):
+        assert sorted(cys_def._leaving_fragment_of("SG")) == ["HG"]
+        assert sorted(cys_def._leaving_fragment_of("N")) == ["H2"]
+        assert sorted(cys_def._leaving_fragment_of("C")) == ["HXT", "OXT"]
+
+    def test_leaving_fragment_of_leaving_atom(self, cys_def: ResidueDefinition):
+        assert sorted(cys_def._leaving_fragment_of("HG")) == ["HG"]
+        assert sorted(cys_def._leaving_fragment_of("H2")) == ["H2"]
+        assert sorted(cys_def._leaving_fragment_of("OXT")) == ["HXT", "OXT"]
