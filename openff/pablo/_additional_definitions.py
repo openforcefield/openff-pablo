@@ -131,36 +131,30 @@ def _apply_resdef_to_graph(
 
     def node_matcher(pdb_idx: int, new_atomdef: AtomDefinition) -> bool:
         old_atomdef = atoms[pdb_idx]
-        if old_atomdef is None or new_atomdef.symbol == "":
+        # If the new atom is a non-matching atom, then it matches any node
+        if new_atomdef.symbol == "":
             return True
-        ret = (  # nofmt
-            old_atomdef.symbol == new_atomdef.symbol
+        # If this atom is unidentified, check the element matches the PDB file
+        if old_atomdef is None:
+            return new_atomdef.symbol == data.element[pdb_idx]
+        # Otherwise, check that the chemical information matches
+        # between PDB file, old chem info, and new chem info
+        return (  # nofmt
+            data.element[pdb_idx] == new_atomdef.symbol
+            and old_atomdef.symbol == new_atomdef.symbol
             and old_atomdef.charge == new_atomdef.charge
         )
-
-        # logging.debug(
-        #     f"matching {pdb_idx} to {new_atomdef}: {old_atomdef=} {ret=}"
-        #     + f"\n{new_atomdef.symbol=} {old_atomdef.symbol=}"
-        #     + f"\n{old_atomdef.charge=} {new_atomdef.charge=}",
-        # )
-
-        return ret
 
     def edge_matcher(
         pdb_idcs: tuple[int, int],
         new_bonddef: BondDefinition,
     ) -> bool:
         old_bonddef = bonds[pdb_idcs]
+        # If this bond is unidentified, accept the new chemical information
         if old_bonddef is None:
             return True
-        ret = old_bonddef.order == new_bonddef.order
-
-        # logging.debug(
-        #     f"matching {pdb_idcs} to {new_bonddef}: {old_bonddef=} {ret=}"
-        #     + f"\n{new_bonddef.order=} {old_bonddef.order=}",
-        # )
-
-        return ret
+        # Otherwise, accept this match if both assign the same chemical information
+        return old_bonddef.order == new_bonddef.order
 
     mappings: list[AdditionalDefMatch] = []
     resdef_graphs = list(resdef._to_graphs())

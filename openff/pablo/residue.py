@@ -1324,7 +1324,6 @@ class ResidueDefinition:
         left_atoms: Sequence[str] = (),
     ) -> Graph[AtomDefinition, BondDefinition]:
         graph = self._to_core_graph()
-        core_node_names = {node.name for node in graph.nodes}
         restore_leaving_atoms: set[str] = (  # nofmt
             self._unassigned_leaving_atoms() - set(left_atoms)
         )
@@ -1402,14 +1401,14 @@ class ResidueDefinition:
         else:
             restore_leaving_atoms.update(self.prior_bond_leaving_atoms)
 
-        added_node_names = set(core_node_names)
+        added_nodes = {atom.name: atom for atom in graph.nodes}
         for leaving_name in restore_leaving_atoms:
             try:
                 bond = unwrap(
                     bond
                     for bond in self.bonds
-                    if (bond.atom1 in added_node_names and bond.atom2 == leaving_name)
-                    or (bond.atom2 in added_node_names and bond.atom1 == leaving_name)
+                    if (bond.atom1 in added_nodes and bond.atom2 == leaving_name)
+                    or (bond.atom2 in added_nodes and bond.atom1 == leaving_name)
                 )
             except ValueError:
                 continue
@@ -1418,17 +1417,18 @@ class ResidueDefinition:
                 leaving=False,
             )
             graph.add_node(leaving_atom)
-            added_node_names.add(leaving_name)
+            assert leaving_name not in added_nodes
+            added_nodes[leaving_name] = leaving_atom
 
             if bond.atom1 == leaving_name:
                 graph.add_edge(
                     leaving_atom,
-                    self.canonical_name_to_atom[bond.atom2],
+                    added_nodes[bond.atom2],
                     bond,
                 )
             else:
                 graph.add_edge(
-                    self.canonical_name_to_atom[bond.atom1],
+                    added_nodes[bond.atom1],
                     leaving_atom,
                     bond,
                 )

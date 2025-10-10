@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from functools import cached_property
@@ -255,15 +256,25 @@ class ResidueMatch(MatchProtocol):
         connectivity graphs (ignoring bond order) and net formal charges are
         identical."""
         if set(self.index_to_atomdef.keys()) != set(other.index_to_atomdef.keys()):
+            logging.debug(
+                "  DISAGREE: Covers different indices"
+                + f" ({set(self.index_to_atomdef.keys())}"
+                + f" vs {set(other.index_to_atomdef.keys())})",
+            )
             return False
 
         if not isinstance(other, ResidueMatch):
+            logging.debug("  deferring to super class")
             return super().agrees_with(other)
 
         # All atoms should have the same element
         for i, self_atom in self.index_to_atomdef.items():
             other_atom = other.index_to_atomdef[i]
             if self_atom.symbol != other_atom.symbol:
+                logging.debug(
+                    f"  DISAGREE: elements differ at index {i}:"
+                    + f" {self_atom.symbol} vs {other_atom.symbol}",
+                )
                 return False
 
         # Net charge should be identical
@@ -278,6 +289,10 @@ class ResidueMatch(MatchProtocol):
             if atom.name in other.canonical_atom_name_to_index
         )
         if self_net_charge != other_net_charge:
+            logging.debug(
+                "  DISAGREES: Total formal charge differs:"
+                + f" {self_net_charge} vs {other_net_charge}",
+            )
             return False
 
         # Internal connectivity graph should be identical
@@ -304,6 +319,7 @@ class ResidueMatch(MatchProtocol):
             and bond.atom2 in other.canonical_atom_name_to_index
         }
         if self_bonds != other_bonds:
+            logging.debug("  DISAGREES: Bonds differ")
             return False
 
         # External connectivity graph should be identical
@@ -318,19 +334,24 @@ class ResidueMatch(MatchProtocol):
                 )
             )
         ):
+            logging.debug("  DISAGREES: external bonds differ")
             return False
 
         if (self.expects_prior_bond or self.expects_posterior_bond) and (
             self.residue_definition.linking_bond
             != other.residue_definition.linking_bond
         ):
+            logging.debug("  DISAGREES: linking bonds differ")
             return False
 
-        return (
+        expect_same_bonds = (
             self.expects_crosslink == other.expects_crosslink
             and self.expects_prior_bond == other.expects_prior_bond
             and self.expects_posterior_bond == other.expects_posterior_bond
         )
+        if not expect_same_bonds:
+            logging.debug("  DISAGREES: Expects different linking bonds")
+        return expect_same_bonds
 
 
 class ResidueConectMismatch(ResidueMismatch):

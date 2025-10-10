@@ -25,8 +25,6 @@ class Graph(Generic[NodeT, EdgeT]):
         )
         self._node_idcs: dict[NodeT, int] = {}
         self._edge_idcs: dict[EdgeT, int] = {}
-        self._out_of_bounds_edge: int = 1
-        self._out_of_bounds_node: int = 1
         super().__init__()
 
     def __contains__(self, item: NodeT | EdgeT):
@@ -55,10 +53,9 @@ class Graph(Generic[NodeT, EdgeT]):
             yield self._graph.get_node_data(neighbour_idx)
 
     def add_edge(self, node_a: NodeT, node_b: NodeT, edge: EdgeT):
-        node_a_idx = self._node_idcs.get(node_a, self._out_of_bounds_node)
-        node_b_idx = self._node_idcs.get(node_b, self._out_of_bounds_node)
+        node_a_idx = self._node_idcs[node_a]
+        node_b_idx = self._node_idcs[node_b]
         self._edge_idcs[edge] = self._graph.add_edge(node_a_idx, node_b_idx, edge)
-        self._out_of_bounds_edge += 1
 
     def add_edges_from(self, obj_list: Iterable[tuple[NodeT, NodeT, EdgeT]]):
         for params in obj_list:
@@ -70,7 +67,6 @@ class Graph(Generic[NodeT, EdgeT]):
                 return
             raise ValueError("Cannot add existing node")
         self._node_idcs[node] = self._graph.add_node(node)
-        self._out_of_bounds_node += 1
 
     def add_nodes_from(self, nodes: Iterable[NodeT], *, skip_existing: bool = False):
         for node in nodes:
