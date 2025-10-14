@@ -22,6 +22,7 @@ from openff.pablo._cif import (
     parse_cif,
 )
 from openff.pablo._graph import Graph
+from openff.pablo._rdkit import EditableRdMol, RdAtom, RdMol
 
 from ._matching import (
     MismatchProtocol,
@@ -276,8 +277,12 @@ class PdbData:
 
     @property
     def n_atoms(self) -> int:
-        """The number of ATOM/HETATM records"""
-        return len(self.name)
+        """The number of ATOM/HETATM records in the first model"""
+        try:
+            first_model = self.model[0]
+        except KeyError:
+            return 0
+        return sum(1 for model in self.model if model == first_model)
 
     def _append_coord_line(self, line: str):
         """
@@ -1598,10 +1603,10 @@ class PdbData:
         logging.info("------")
         return matches
 
-    def get_residue_matches(
+    def get_successful_matches(
         self,
         residue_database: Mapping[str, Iterable[ResidueDefinition]],
-        additional_definitions: Iterable[ResidueDefinition],
+        additional_definitions: Sequence[ResidueDefinition],
     ) -> list[SuccessfulMatch]:
         """
         Get one successful match for each residue in the PDB file, or raise an error.
@@ -1625,6 +1630,7 @@ class PdbData:
         errors: list[list[MismatchProtocol] | list[SuccessfulMatch]] = []
         all_residues_successful = True
         check_additional_definitions: None | bool = None
+        unmatched_atoms: set[int] = set()
         for possible_residue_matches in self.match_residues(
             residue_database,
             additional_definitions,
@@ -1647,6 +1653,7 @@ class PdbData:
                 )
                 # No matches, PDB loading has failed
                 all_residues_successful = False
+                unmatched_atoms.update(mismatches[0].res_atom_idcs)
                 if check_additional_definitions is None:
                     check_additional_definitions = True
                 errors.append(mismatches)
@@ -1669,6 +1676,7 @@ class PdbData:
                 # Multiple matches that specify different chemistry, PDB loading has failed
                 all_residues_successful = False
                 check_additional_definitions = False
+                unmatched_atoms.update(mismatches[0].res_atom_idcs)
                 errors.append(matches)
 
         if all_residues_successful:
@@ -1683,12 +1691,129 @@ class PdbData:
                 residues,
                 additional_definitions,
             )
-            if len(additional_matches) != 0:
-                # TODO: check that all atoms now have chemical information
-                raise NotImplementedError()
+            unmatched_atoms -= {
+                i
+                for match in additional_matches
+                for i in match.res_atom_idcs
+                if match.index_to_atomdef[i].symbol != ""
+            }
+            logging.debug(
+                f"{unmatched_atoms=} (n={len(unmatched_atoms)})",
+            )
+            if len(unmatched_atoms) == 0:
                 return residues + additional_matches
+            else:
+                raise PdbResidueMatchError(
+                    data=self,
+                    errors=errors,
+                    additional_definitions=additional_definitions,
+                    additional_matches=additional_matches,
+                    unmatched_pdb_idcs=unmatched_atoms,
+                )
 
-        raise PdbResidueMatchError(self, errors)
+        raise PdbResidueMatchError(
+            data=self,
+            errors=errors,
+            additional_definitions=additional_definitions,
+        )
+
+    def matches_to_rdmol(
+        self,
+        matches: Iterable[SuccessfulMatch],
+        *,
+        use_canonical_names: bool = False,
+    ) -> RdMol:
+        rdmol = EditableRdMol()
+        pdb_idcs = {i for i in range(self.n_atoms) if self.alt_loc[i] in {"", " ", "A"}}
+        bonds: dict[tuple[int, int], int] = {}
+        """{(pdb_idx_1, pdb_idx_2): bond_order, ...}"""
+        atoms: dict[int, tuple[AtomDefinition, SuccessfulMatch]] = {}
+        """{pdb_idx: (atom_definition, match), ...}"""
+        for match in matches:
+            for vsite in match.vsite_idcs:
+                pdb_idcs.remove(vsite)
+
+            for i, atom in match.index_to_atomdef.items():
+                if atom.symbol == "" or i in atoms:
+                    continue
+                atoms[i] = (atom, match)
+                pdb_idcs.remove(i)
+
+            for bond in match.residue_definition.bonds:
+                atom1 = match.canonical_atom_name_to_index.get(bond.atom1)
+                atom2 = match.canonical_atom_name_to_index.get(bond.atom2)
+                if atom1 is not None and atom2 is not None:
+                    idcs = sort_tuple((atom1, atom2))
+                    if idcs in bonds:
+                        assert bonds[idcs] == bond.order
+                    bonds[idcs] = bond.order
+            for idcs, bond in (
+                (match.posterior_bond_idcs, match.residue_definition.linking_bond),
+                (match.prior_bond_idcs, match.residue_definition.linking_bond),
+                (match.crosslink_idcs, match.residue_definition.crosslink),
+            ):
+                if idcs is not None:
+                    assert bond is not None
+                    idcs = sort_tuple(idcs)
+                    if idcs in bonds:
+                        assert bonds[idcs] == bond.order
+                    bonds[idcs] = bond.order
+
+        # We should now have added every atom in the PDB file's first model
+        if len(pdb_idcs) != 0:
+            raise ValueError(
+                f"Unidentified atoms: {pdb_idcs} (lines {', '.join(str(self.line_no[i]) for i in pdb_idcs)})",
+            )
+
+        # Add the atoms to the rdmol in PDB index order
+        idx_pdb_to_rdmol: dict[int, int] = {}
+        for i, (atom, match) in sorted(atoms.items(), key=lambda t: t[0]):
+            idx_pdb_to_rdmol[i] = rdmol.add_atom_with(
+                element=atom.symbol,
+                formal_charge=atom.charge,
+                is_aromatic=atom.aromatic,
+                properties={
+                    **self._generate_atom_metadata(i),
+                    "_name": atom.name if use_canonical_names else self.name[i],
+                    "canonical_name": atom.name,
+                    "matched_residue_description": match.residue_definition.description,
+                },
+            )
+
+        # rdmol indices should be in the same order as PDB indices
+        assert (  # nofmt
+            sorted(idx_pdb_to_rdmol.values())
+            == [idx_pdb_to_rdmol[k] for k in sorted(idx_pdb_to_rdmol.keys())]
+        )
+
+        # Add the bonds to the rdmol
+        for (atom1, atom2), order in bonds.items():
+            rdmol.add_bond(idx_pdb_to_rdmol[atom1], idx_pdb_to_rdmol[atom2], order)
+
+        # Sanitize and apply edits
+        rdmol = rdmol.sanitize_and().freeze()
+
+        # Check for radicals to give more detailed error reporting
+        def format_atom(atom: RdAtom) -> str:
+            return (
+                f"{atom.properties['chain_id']}:{atom.properties['residue_name']}"
+                + f"{atom.properties['res_seq']}.{atom.name}"
+                + f" (l{atom.properties['pdb_line_no']})"
+            )
+
+        for atom in rdmol.atoms:
+            if atom.n_radical_electrons != 0:
+                logging.warning(
+                    f"Atom {format_atom(atom)} has {atom.n_radical_electrons} radical"
+                    + f" electrons, formal charge {atom.formal_charge:+}, and"
+                    + f" {atom.n_bonds} bonds.",
+                )
+                for atom1, atom2, order in atom.bonded_to():
+                    logging.warning(
+                        f"  {format_atom(atom1)} bonded to {format_atom(atom2)} with order {order}",
+                    )
+
+        return rdmol
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         """
@@ -1743,4 +1868,5 @@ class PdbData:
             "occupancy": str(self.occupancy[pdb_index]),
             "alt_loc": str(self.alt_loc[pdb_index]),
             "pdb_line_no": self.line_no[pdb_index],
+            "used_synonym": self.name[pdb_index],
         }

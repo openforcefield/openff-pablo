@@ -17,6 +17,7 @@ from typing import DefaultDict, Literal, Self, TextIO
 from openff.toolkit import Molecule, RDKitToolkitWrapper
 from openff.units import elements, unit
 
+from openff.pablo._base_exceptions import ResidueValidationError
 from openff.pablo._graph import Graph
 from openff.pablo._utils import __UNSET__, flatten, unwrap
 
@@ -337,18 +338,18 @@ class ResidueDefinition:
             and True in {atom.leaving for atom in self.atoms}
             and not self.is_anonymous
         ):
-            raise ValueError(
+            raise ResidueValidationError(
                 f"{self.residue_name}: Leaving atoms were specified, but there is no linking bond or crosslink",
                 self,
             )
         if len({atom.name for atom in self.atoms}) != len(self.atoms):
-            raise ValueError(
+            raise ResidueValidationError(
                 f"{self.residue_name}: All atoms must have unique canonical names",
             )
 
         unassigned_leaving_atoms = self._unassigned_leaving_atoms()
         if len(unassigned_leaving_atoms) != 0 and not self.is_anonymous:
-            raise ValueError(
+            raise ResidueValidationError(
                 f"{self.residue_name}: Leaving atoms could not be assigned to a"
                 + f" bond: {unassigned_leaving_atoms}",
             )
@@ -357,10 +358,27 @@ class ResidueDefinition:
         all_synonyms = set(flatten(atom.synonyms for atom in self.atoms))
         all_atom_names = all_canonical_names.union(all_synonyms)
         if not set(self.virtual_sites).isdisjoint(all_atom_names):
-            raise ValueError(
+            raise ResidueValidationError(
                 f"{self.residue_name}: Virtual sites may not clash with any atom name"
                 + f" or synonym: {all_atom_names.intersection(self.virtual_sites)}",
             )
+
+        linking_atoms: list[str] = []
+        if self.linking_bond is not None:
+            linking_atoms.extend([self.linking_bond.atom1, self.linking_bond.atom2])
+        if self.crosslink is not None:
+            linking_atoms.append(self.crosslink.atom1)
+        for linking_atom in linking_atoms:
+            n_bonded_atoms = sum(
+                1
+                for atom in self.atoms_bonded_to(linking_atom)
+                if self.name_to_atom[atom].leaving
+            )
+            if n_bonded_atoms > 1:
+                raise ResidueValidationError(
+                    f"{self.residue_name} ({self.description}): Linking atom"
+                    + f"{linking_atom} must be bonded to no more than 1 leaving atom",
+                )
 
     @classmethod
     def anon_from_molecule(
@@ -631,7 +649,7 @@ class ResidueDefinition:
         if description is None:
             description = str(file)
             if len(description) > 30:
-                description = description[:28] + "..."
+                description = description[:3] + "..." + description[-23:]
         return cls.anon_from_molecule(mol, description=description)
 
     @classmethod

@@ -213,7 +213,6 @@ def _has_valid_connectivity(
     definition or one of its synonyms.
 
     """
-    logging.debug("begin mapping validity check")
     for pdb_idx, resdef_atom in mapping.items():
         if (  # nofmt
             resdef_atom.symbol == ""
@@ -224,7 +223,7 @@ def _has_valid_connectivity(
         if resdef_atom.symbol == "":
             if data.name[pdb_idx] not in resdef_atom.names:
                 logging.debug(
-                    f"  REJECTED: invalid name {data.name[pdb_idx]} in PDB for {resdef_atom}",
+                    f"  MAPPING INVALID: invalid name {data.name[pdb_idx]} in PDB for {resdef_atom}",
                 )
                 return False
             continue
@@ -233,7 +232,7 @@ def _has_valid_connectivity(
         n_pdb_neighbours = sum(1 for _ in pdb_graph.neighbours(pdb_idx))
         if n_resdef_neighbours != n_pdb_neighbours:
             logging.debug(
-                f"  REJECTED: {n_pdb_neighbours=} but {n_resdef_neighbours=} for {resdef_atom}",
+                f"  MAPPING INVALID: {n_pdb_neighbours=} but {n_resdef_neighbours=} for {resdef_atom}",
             )
             return False
 

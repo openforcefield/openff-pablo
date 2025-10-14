@@ -23,7 +23,7 @@ def test_get_pdb_graph_creates_complete_single_residue_graph(
 
 
 def test_get_pdb_graph_partial():
-    data = PdbData(conects=[{1}, {0}])
+    data = PdbData(conects=[{1}, {0}], model=[None, None])
     resdef = ResidueDefinition(
         residue_name="AAA",
         description="demo",

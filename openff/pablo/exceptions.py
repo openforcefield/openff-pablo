@@ -5,12 +5,16 @@ Exceptions for the PDB loader.
 __all__ = [
     "PdbResidueMatchError",
     "UnknownOrAmbiguousSerialInConectError",
+    "PabloError",
+    "ResidueValidationError",
 ]
 
 
-from collections.abc import Collection, Sequence
+import itertools
+from collections.abc import Collection, Iterable, Sequence
 from typing import TYPE_CHECKING
 
+from openff.pablo._base_exceptions import PabloError, ResidueValidationError
 from openff.pablo._matching import (
     MatchProtocol,
     MismatchProtocol,
@@ -40,11 +44,14 @@ def _format_linenos(data: "PdbData", res_atom_idcs: Sequence[int]) -> str:
         return f"l{first}"
 
 
-class PdbResidueMatchError(ValueError):
+class PdbResidueMatchError(PabloError):
     def __init__(
         self,
         data: "PdbData",
         errors: list[list[MismatchProtocol] | list[SuccessfulMatch]],
+        additional_definitions: Sequence[ResidueDefinition] = (),
+        additional_matches: Sequence[SuccessfulMatch] | None = None,
+        unmatched_pdb_idcs: Iterable[int] = (),
     ):
         msg: list[str] = [
             "some residues could not be identified",
@@ -167,10 +174,81 @@ class PdbResidueMatchError(ValueError):
         if msg[-1] == "":
             msg = msg[:-1]
 
+        unmatched_atoms = [
+            f"{data.chain_id[i]}:{data.res_name[i]}{data.res_seq[i]}.{data.name[i]} (l{data.line_no[i]})"
+            for i in unmatched_pdb_idcs
+        ]
+        if len(additional_definitions) > 0:
+            if additional_matches is None:
+                msg.extend(
+                    [
+                        "",
+                        "additional_definitions were not consulted because they",
+                        "cannot resolve the above ambiguity.",
+                    ],
+                )
+            elif len(additional_matches) == 0:
+                msg.extend(
+                    [
+                        "",
+                        "Also, no graph-based matches could be found amongst",
+                        "the additional_definitions",
+                    ],
+                )
+            elif len(unmatched_atoms) > 0:
+                msg.extend(
+                    [
+                        "",
+                        "Also, the following additional_definitions could be",
+                        "matched to unknown atoms, but they did not cover all",
+                        "atoms that were left unknown and so some atoms were",
+                        "left without chemical information:",
+                    ],
+                )
+                for match in additional_matches:
+                    msg.append(f"    {match.description}")
+
+                if len(unmatched_atoms) < 100:
+                    atom_len = max(len(s) for s in unmatched_atoms)
+                    batch_size = (80) // (atom_len + 2)
+                    msg.extend(
+                        [
+                            "The following atoms were left unidentified:",
+                            *(
+                                "  "
+                                + "  ".join(
+                                    f"{{:<{atom_len}}}".format(
+                                        atom.replace(
+                                            " ",
+                                            " " * (atom_len - len(atom) + 1),
+                                        ),
+                                    )
+                                    for atom in atoms
+                                )  # nofmt
+                                for atoms in itertools.batched(
+                                    unmatched_atoms,
+                                    batch_size,
+                                )
+                            ),
+                        ],
+                    )
+            else:
+                msg.extend(
+                    [
+                        "",
+                        "Also, the following additional_definitions could be",
+                        "matched to unknown atoms, but they did not cover all",
+                        "bonds that were left unknown and so some bonds were",
+                        "left without chemical information:",
+                    ],
+                )
+                for match in additional_matches:
+                    msg.append(f"    {match.description}")
+
         return super().__init__("\n".join(msg))
 
 
-class UnknownOrAmbiguousSerialInConectError(ValueError):
+class UnknownOrAmbiguousSerialInConectError(PabloError):
     def __init__(self, serial: str, possible_indices: Collection[int]):
         self.serial = serial
         self.possible_indices = possible_indices
