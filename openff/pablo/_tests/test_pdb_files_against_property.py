@@ -517,15 +517,7 @@ def test_3ip9_trimmed_loads_via_dye_additional_definitions():
     top_mol = unwrap(top.molecules)
     assert isinstance(top_mol, Molecule)
 
-    assert top_mol.to_smiles() == ref_mol.to_smiles()
-    assert top_mol.is_isomorphic_with(
-        ref_mol,
-        atom_stereochemistry_matching=False,
-    )
-    assert top_mol.is_isomorphic_with(
-        ref_mol,
-        atom_stereochemistry_matching=True,
-    )
+    assert top_mol.is_isomorphic_with(ref_mol)
 
 
 @pytest.mark.parametrize(

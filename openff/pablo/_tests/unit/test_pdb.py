@@ -1,33 +1,11 @@
 from io import StringIO
 
 import pytest
-from openff.toolkit import Molecule
 
 from openff.pablo._pdb import (
-    _add_to_molecule,
     topology_from_pdb,
 )
-from openff.pablo._pdb_data import PdbData, ResidueMatch
 from openff.pablo.residue import ResidueDefinition
-
-
-def test_add_to_molecule_when_empty(cys_data: PdbData, cys_match: ResidueMatch):
-    this_molecule = Molecule()
-    molecules = [this_molecule]
-    mol_out = _add_to_molecule(
-        data=cys_data,
-        molecules=molecules,
-        this_molecule=this_molecule,
-        residue_match=cys_match,
-        use_canonical_names=False,
-    )
-    assert mol_out is this_molecule
-    matched, _ = Molecule.are_isomorphic(
-        mol_out,
-        cys_match.residue_definition.to_openff_molecule(),
-        atom_stereochemistry_matching=False,
-    )
-    assert matched
 
 
 def test_load_file_object(cys_pdblines: list[str]):

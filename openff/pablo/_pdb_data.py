@@ -79,7 +79,7 @@ class PdbData:
     serial_to_index: DefaultDict[str, list[int]] = field(
         default_factory=lambda: defaultdict(list),
     )
-    conects: list[set[int]] = field(default_factory=list)
+    conects: list[set[int]] = field(default_factory=list[set[int]])
     """The ith set contains atom indices CONECTed to atom index i"""
     cryst1_a: float | None = None
     cryst1_b: float | None = None
