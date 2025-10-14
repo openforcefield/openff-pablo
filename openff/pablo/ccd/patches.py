@@ -161,6 +161,7 @@ def add_protonation_variants(res: ResidueDefinition) -> list[ResidueDefinition]:
     this means a residue with ``n`` abstractable hydrogens and ``m`` acidic atoms
     will have ``2**(n+m)`` variants.
     """
+    assert res.residue_name is not None
     return res.vary_protonation(
         acidic=ACIDIC_PROTONS.get(res.residue_name, []),
         basic=BASIC_ATOMS.get(res.residue_name, []),
@@ -172,6 +173,7 @@ def add_synonyms(res: ResidueDefinition) -> list[ResidueDefinition]:
     """
     Patch a residue definition to include synonyms from :py:data:`ATOM_NAME_SYNONYMS`.
     """
+    assert res.residue_name is not None
     return [res.with_synonyms(ATOM_NAME_SYNONYMS.get(res.residue_name, {}))]
 
 
