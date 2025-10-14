@@ -1,17 +1,12 @@
 from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping
-from typing import Generic, Literal, TypeVar
+from typing import Literal
 
 import rustworkx as rx
-
-NodeT = TypeVar("NodeT", bound=Hashable)
-EdgeT = TypeVar("EdgeT", bound=Hashable)
-OtherNodeT = TypeVar("OtherNodeT", bound=Hashable)
-OtherEdgeT = TypeVar("OtherEdgeT", bound=Hashable)
 
 __all__ = ["Graph"]
 
 
-class Graph(Generic[NodeT, EdgeT]):
+class Graph[NodeT: Hashable, EdgeT: Hashable]:
     def __init__(
         self,
         *,
@@ -72,7 +67,7 @@ class Graph(Generic[NodeT, EdgeT]):
         for node in nodes:
             self.add_node(node, skip_existing=skip_existing)
 
-    def is_isomorphic_to(
+    def is_isomorphic_to[OtherNodeT: Hashable, OtherEdgeT: Hashable](
         self,
         other: "Graph[OtherNodeT, OtherEdgeT]",
         node_matcher: Callable[[NodeT, OtherNodeT], bool] | None = None,
@@ -95,7 +90,7 @@ class Graph(Generic[NodeT, EdgeT]):
         else:
             return True
 
-    def is_subgraph_of(
+    def is_subgraph_of[OtherNodeT: Hashable, OtherEdgeT: Hashable](
         self,
         other: "Graph[OtherNodeT, OtherEdgeT]",
         node_matcher: Callable[[NodeT, OtherNodeT], bool] | None = None,
@@ -124,7 +119,7 @@ class Graph(Generic[NodeT, EdgeT]):
         else:
             return True
 
-    def get_mappings(
+    def get_mappings[OtherNodeT: Hashable, OtherEdgeT: Hashable](
         self,
         other: "Graph[OtherNodeT, OtherEdgeT]",
         node_matcher: Callable[[NodeT, OtherNodeT], bool] | None = None,
@@ -152,7 +147,12 @@ class Graph(Generic[NodeT, EdgeT]):
         return rx.is_connected(self._graph)
 
 
-def _vf2_mapping(
+def _vf2_mapping[
+    NodeT: Hashable,
+    EdgeT: Hashable,
+    OtherNodeT: Hashable,
+    OtherEdgeT: Hashable,
+](
     first: rx.PyGraph[NodeT, EdgeT],
     second: rx.PyGraph[OtherNodeT, OtherEdgeT],
     node_matcher: Callable[[NodeT, OtherNodeT], bool] | None = None,

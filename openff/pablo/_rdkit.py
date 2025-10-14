@@ -1,13 +1,11 @@
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import (
     Concatenate,
     Literal,
-    ParamSpec,
     Self,
-    TypeVar,
 )
-from collections.abc import Callable, Iterator, Mapping
 
 import numpy
 from numpy.typing import ArrayLike
@@ -41,9 +39,6 @@ ORDER_TO_BOND_TYPE: dict[int, BondType] = {
 }
 
 PERIODIC_TABLE: PeriodicTable = GetPeriodicTable()
-
-T = TypeVar("T")
-P = ParamSpec("P")
 
 
 @dataclass(frozen=True)
@@ -118,7 +113,7 @@ class EditableRdMol:
     def _commit_batch_edit(self):
         self._rdmol.CommitBatchEdit()
 
-    def _modify_via_mol(
+    def _modify_via_mol[T, **P](
         self,
         func: Callable[Concatenate[Mol, P], T],
         *args: P.args,

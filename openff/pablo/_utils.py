@@ -5,13 +5,11 @@ from typing import (
     Any,
     DefaultDict,
     Literal,
-    ParamSpec,
     TypeGuard,
-    TypeVar,
-    TypeVarTuple,
     no_type_check,
     overload,
 )
+from collections.abc import Hashable
 
 import rdkit
 import rdkit.Chem
@@ -41,43 +39,39 @@ __all__ = [
     "dbg",
 ]
 
-T = TypeVar("T")
-U = TypeVar("U")
-V = TypeVar("V")
-Ts = TypeVarTuple("Ts")
-P = ParamSpec("P")
-
 
 class __UNSET__:
     pass
 
 
-def dbg(o: T, msg: str = "{}") -> T:
+def dbg[T](o: T, msg: str = "{}") -> T:
     if "{}" not in msg:
         msg += ": {}"
     logging.debug(msg.format(o))
     return o
 
 
-def default_dict(
+def default_dict[K: Hashable, T, U](
     default_factory: Callable[[], T],
-    map: Mapping[U, V] = {},
-) -> DefaultDict[U, T | V]:
-    dd: DefaultDict[U, T | V] = defaultdict(default_factory)
+    map: Mapping[K, U] = {},
+) -> DefaultDict[K, T | U]:
+    dd: DefaultDict[K, T | U] = defaultdict(default_factory)
     dd.update(map)
     return dd
 
 
-def no_none_in_values(d: Mapping[T, U | None]) -> TypeGuard[Mapping[T, U]]:
+def no_none_in_values[K: Hashable, V](
+    d: Mapping[K, V | None],
+) -> TypeGuard[Mapping[K, V]]:
     return None not in d.values()
 
 
-def option_to_iter(option: T | None) -> Iterator[T]:
+def option_to_iter[T](option: T | None) -> Iterator[T]:
     if option is not None:
         yield option
 
 
-def unwrap(container: Iterable[T], msg: str = "") -> T:
+def unwrap[T](container: Iterable[T], msg: str = "") -> T:
     """
     Unwrap an iterable only if it has a single element; raise ValueError otherwise
     """
@@ -99,7 +93,7 @@ def unwrap(container: Iterable[T], msg: str = "") -> T:
     raise ValueError(msg + "container has multiple elements")
 
 
-def unwrap_or_none(container: Iterable[T]) -> T | None:
+def unwrap_or_none[T](container: Iterable[T]) -> T | None:
     """
     Unwrap an iterable only if it has a single element; return None otherwise
     """
@@ -109,16 +103,16 @@ def unwrap_or_none(container: Iterable[T]) -> T | None:
         return None
 
 
-def sort_tuple(tup: tuple[*Ts]) -> tuple[*Ts]:
+def sort_tuple[*Ts](tup: tuple[*Ts]) -> tuple[*Ts]:
     return tuple(sorted(tup))  # type: ignore
 
 
-def flatten(container: Iterable[Iterable[T]]) -> Iterator[T]:
+def flatten[T](container: Iterable[Iterable[T]]) -> Iterator[T]:
     for inner in container:
         yield from inner
 
 
-def try_or(
+def try_or[**P, T, U](
     default: U,
     func: Callable[P, T],
     catch: type[BaseException],
@@ -132,7 +126,7 @@ def try_or(
         return default
 
 
-def try_or_none(
+def try_or_none[**P, T](
     func: Callable[P, T],
     catch: type[BaseException],
     /,
@@ -142,14 +136,14 @@ def try_or_none(
     return try_or(None, func, catch, *args, **kwargs)
 
 
-def coerce_or_none(value: Any, func: Callable[[Any], T]) -> T | None:
+def coerce_or_none[T](value: Any, func: Callable[[Any], T]) -> T | None:
     try:
         return func(value)
     except Exception:
         return None
 
 
-def with_neighbours(
+def with_neighbours[T, U](
     iterable: Iterable[T],
     default: U = None,
 ) -> Iterator[tuple[T | U, T, T | U]]:

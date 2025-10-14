@@ -4,7 +4,7 @@ channels:
 dependencies:
   # Base depends (runtime and imports)
   - pip
-  - python>=3.11
+  - python>=3.12
   - openff-toolkit-base>=0.17.0
   - rdkit
   - openmm
