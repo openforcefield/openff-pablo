@@ -414,12 +414,12 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         Examples
         ========
 
-        Add a custom definition to the ``CCD_RESIDUE_DEFINITION_CACHE``. We use
+        Add a custom definition to the ``CCD_LIBRARY_CACHE``. We use
         a 4-letter residue code as they are supported by Pablo's PDB reader and
         do not clash with the CCD's definitions.
 
-        >>> from openff.pablo import CCD_RESIDUE_DEFINITION_CACHE, ResidueDefinition
-        >>> my_ccd_cache = CCD_RESIDUE_DEFINITION_CACHE.with_([
+        >>> from openff.pablo import CCD_LIBRARY_CACHE, ResidueDefinition
+        >>> my_ccd_cache = CCD_LIBRARY_CACHE.with_([
         ...     ResidueDefinition.from_smiles(
         ...         "[H:1][O:2][O:3][H:4]",
         ...         {1: "H1", 2: "O1", 3: "O2", 4: "H2"},
@@ -430,20 +430,20 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         Add protonation variants of a residue by specifying acidic and basic
         atoms.
 
-        >>> from openff.pablo import CCD_RESIDUE_DEFINITION_CACHE, ResidueDefinition
+        >>> from openff.pablo import CCD_LIBRARY_CACHE, ResidueDefinition
         >>>
         >>> # Get the GABA (γ-amino butanoic acid) residue definition from CCD
-        >>> gaba_resdef = CCD_RESIDUE_DEFINITION_CACHE["ABU"][0]
+        >>> gaba_resdef = CCD_LIBRARY_CACHE["ABU"][0]
         >>>
         >>> # Generate the variants and add them to a new cache
-        >>> my_ccd_cache = CCD_RESIDUE_DEFINITION_CACHE.with_({
+        >>> my_ccd_cache = CCD_LIBRARY_CACHE.with_({
         ...     "ABU": gaba_resdef.vary_protonation(
         ...         acidic=["HXT"], # Atom name of abstractable proton
         ...         basic=[("N", "H3")], # Atom to protonate, name of new proton
         ...     )[1:], # Skip the first entry, which is already in the cache
         ... })
         >>> # Should have added three variants - positive, negative, zwitterion
-        >>> len(my_ccd_cache["ABU"]) - len(CCD_RESIDUE_DEFINITION_CACHE["ABU"])
+        >>> len(my_ccd_cache["ABU"]) - len(CCD_LIBRARY_CACHE["ABU"])
         3
 
         See Also

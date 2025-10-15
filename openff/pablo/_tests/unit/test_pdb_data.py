@@ -8,7 +8,7 @@ from openff.pablo._matching import (
 )
 from openff.pablo._pdb_data import PdbData, ResidueMatch
 from openff.pablo._utils import default_dict
-from openff.pablo.ccd import CCD_RESIDUE_DEFINITION_CACHE
+from openff.pablo.ccd import CCD_LIBRARY_CACHE
 from openff.pablo.exceptions import UnknownOrAmbiguousSerialInConectError
 from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
 
@@ -466,7 +466,7 @@ def test_match_residues_loads_vicinal_disulfide(
     match1, match2, *excess_matches = (
         [p for p in residue_matches if isinstance(p, ResidueMatch)]
         for residue_matches in vicinal_disulfide_data.match_residues(
-            residue_database={"CYS": [cys_def, cys_def_deprotonated_sidechain]},
+            residue_library={"CYS": [cys_def, cys_def_deprotonated_sidechain]},
             additional_definitions=[],
         )
     )
@@ -499,7 +499,7 @@ def test_match_residues_loads_vicinal_disulfide(
 
 def test_get_name_based_matches_one_per_residue(pdbfn: Path):
     data = PdbData.from_file(pdbfn)
-    results = list(data.get_name_based_matches(CCD_RESIDUE_DEFINITION_CACHE))
+    results = list(data.get_name_based_matches(CCD_LIBRARY_CACHE))
     assert len(results) == len(list(data.residue_indices))
     assert data.res_idx is not None
     assert len(list(data.residue_indices)) == len(set(data.res_idx))
@@ -519,7 +519,7 @@ def test_get_name_based_matches_subsequence_contains_noresiduedefs_when_unmatche
 
 
 def test_filter_on_polymer_linkages_yields_all_matches_simple(cys_data: PdbData):
-    matches = list(cys_data.get_name_based_matches(CCD_RESIDUE_DEFINITION_CACHE))
+    matches = list(cys_data.get_name_based_matches(CCD_LIBRARY_CACHE))
     residue_matches = matches[0]
     results = list(
         cys_data.identify_polymer_linkages(0, [residue_matches]),
@@ -542,7 +542,7 @@ def test_filter_on_polymer_linkages_yields_all_matches():
     data = PdbData.from_file(get_test_data_path("prepared_pdbs/polyglycines.pdb"))
     matches = list(
         data.get_name_based_matches(
-            CCD_RESIDUE_DEFINITION_CACHE.with_(
+            CCD_LIBRARY_CACHE.with_(
                 [
                     ResidueDefinition.from_smiles(
                         mapped_smiles="[N-:1]([H:2])[C:3]([H:4])([H:5])[C:6](=[O:7])[O:8][H:9]",

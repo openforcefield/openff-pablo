@@ -56,6 +56,8 @@ extensions = [
     "openff_sphinx_theme",
     "sphinxcontrib.autodoc_pydantic",
     "sphinx_click",
+    "hoverxref.extension",
+    "sphinx_paramlinks",
 ]
 
 # API docs settings
@@ -178,6 +180,11 @@ myst_enable_extensions = [
 ]
 myst_heading_anchors = 3
 
+hoverxref_role_types = {"term": "tooltip"}
+hoverxref_roles = list(hoverxref_role_types.keys())
+
+paramlinks_hyperlink_param = "link_symbol"
+
 # sphinx-notfound-page
 # https://github.com/readthedocs/sphinx-notfound-page
 # Renders a 404 page with absolute links
@@ -265,7 +272,7 @@ html_theme_options = {
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
 
-html_css_files = []
+html_css_files = ["css/paramref.css"]
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.

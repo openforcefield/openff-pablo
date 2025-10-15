@@ -1,5 +1,5 @@
-OpenFF Pablo
-==============================
+# OpenFF Pablo
+
 [//]: # (Badges)
 
 | **Latest release** | [![Last release tag](https://img.shields.io/github/release-pre/openforcefield/openff-pablo.svg)](https://github.com/openforcefield/openff-pablo/releases) ![GitHub commits since latest release (by date) for a branch](https://img.shields.io/github/commits-since/openforcefield/openff-pablo/latest)  [![Documentation Status](https://readthedocs.org/projects/openff-pablo/badge/?version=latest)](https://openff-pablo.readthedocs.io/en/latest/?badge=latest)                                                                                                                                                                                                                        |
@@ -10,7 +10,7 @@ New, independent implementation of OpenFF's `Topology.from_pdb`
 
 OpenFF Pablo is bound by a [Code of Conduct](https://github.com/openforcefield/openff-pablo/blob/main/CODE_OF_CONDUCT.md).
 
-### Installation
+## Installation
 
 This is a pre-release of Pablo and is not yet published in any package manager.
 You can install it by managing your own Conda environment and installing it manually.
@@ -23,7 +23,7 @@ Download the user environment YAML file and create a virtual environment from it
 curl https://raw.githubusercontent.com/openforcefield/openff-pablo/refs/heads/main/devtools/conda-envs/user_env.yaml | micromamba env create --name pablo -f /dev/stdin
 ```
 
-#### Development build
+### Development build
 
 Clone the repository:
 
@@ -60,7 +60,7 @@ micromamba activate pablo-dev
 
 Or use `micromamba run -n pablo-dev`.
 
-### Copyright
+## Copyright
 
 The OpenFF Pablo source code is hosted at https://github.com/openforcefield/openff-pablo
 and is available under the MIT license (see the file [LICENSE](https://github.com/openforcefield/openff-pablo/blob/main/LICENSE)).
@@ -68,7 +68,7 @@ and is available under the MIT license (see the file [LICENSE](https://github.co
 Copyright (c) 2025, Josh Mitchell
 
 
-#### Acknowledgements
+## Acknowledgements
 
 Project based on the
 [OpenFF Cookiecutter](https://github.com/lilyminium/cookiecutter-openff) version 0.1.

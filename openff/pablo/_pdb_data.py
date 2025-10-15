@@ -644,7 +644,7 @@ class PdbData:
 
     def get_name_based_matches(
         self,
-        residue_database: Mapping[str, Iterable[ResidueDefinition]],
+        residue_library: Mapping[str, Iterable[ResidueDefinition]],
     ) -> Iterator[list[PossibleResidueMatch]]:
         """
         Get possible matches for residues based on their names.
@@ -654,7 +654,7 @@ class PdbData:
 
         Parameters
         ----------
-        residue_database
+        residue_library
             A mapping from residue names to their possible definitions
         """
         for res_atom_idcs in self.residue_indices:
@@ -671,7 +671,7 @@ class PdbData:
                     res_atom_idcs,
                     residue_definition,
                 )
-                for residue_definition in residue_database.get(res_name, [])
+                for residue_definition in residue_library.get(res_name, [])
             ]
             if len(matches) > 0:
                 yield matches
@@ -1521,7 +1521,7 @@ class PdbData:
 
     def match_residues(
         self,
-        residue_database: Mapping[str, Iterable[ResidueDefinition]],
+        residue_library: Mapping[str, Iterable[ResidueDefinition]],
         additional_definitions: Iterable[ResidueDefinition],
     ) -> list[list[PossibleResidueMatch]]:
         """
@@ -1557,7 +1557,7 @@ class PdbData:
 
         Parameters
         ----------
-        residue_database
+        residue_library
             A mapping from residue names to their possible definitions
         additional_definitions
             Additional substructure definitions to match against the graph of
@@ -1570,7 +1570,7 @@ class PdbData:
             element for each residue in the PDB file, while each inner list contains all
             possible matches (both successful and unsuccessful) for that residue.
         """
-        matches = list(self.get_name_based_matches(residue_database))
+        matches = list(self.get_name_based_matches(residue_library))
 
         class Filter(Protocol):
             def __call__(
@@ -1605,7 +1605,7 @@ class PdbData:
 
     def get_successful_matches(
         self,
-        residue_database: Mapping[str, Iterable[ResidueDefinition]],
+        residue_library: Mapping[str, Iterable[ResidueDefinition]],
         additional_definitions: Sequence[ResidueDefinition],
     ) -> list[SuccessfulMatch]:
         """
@@ -1613,7 +1613,7 @@ class PdbData:
 
         Parameters
         ----------
-        residue_database
+        residue_library
             A mapping from residue names to their possible definitions
         additional_definitions
             Additional substructure definitions to match against the graph of
@@ -1632,7 +1632,7 @@ class PdbData:
         check_additional_definitions: None | bool = None
         unmatched_atoms: set[int] = set()
         for possible_residue_matches in self.match_residues(
-            residue_database,
+            residue_library,
             additional_definitions,
         ):
             logging.debug(

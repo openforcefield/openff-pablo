@@ -3,7 +3,7 @@ from openff.toolkit import Molecule
 
 from openff.pablo._tests.utils import get_test_data_path
 from openff.pablo._utils import unwrap
-from openff.pablo.ccd import CCD_RESIDUE_DEFINITION_CACHE
+from openff.pablo.ccd import CCD_LIBRARY_CACHE
 from openff.pablo.chem import DISULFIDE_BOND, PEPTIDE_BOND
 from openff.pablo.exceptions import ResidueValidationError
 from openff.pablo.residue import (
@@ -516,7 +516,7 @@ class TestResidueDefinition:
     def test_validate_linking_atoms_have_single_leaving_fragment(self):
         resdef = unwrap(
             resdef
-            for resdef in CCD_RESIDUE_DEFINITION_CACHE["LYS"]
+            for resdef in CCD_LIBRARY_CACHE["LYS"]
             if resdef.description == "LYSINE"
         )
         with pytest.raises(ResidueValidationError):

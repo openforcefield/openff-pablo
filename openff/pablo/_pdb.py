@@ -17,7 +17,7 @@ from ._utils import (
     cryst_to_box_vectors,
     sort_tuple,
 )
-from .ccd import CCD_RESIDUE_DEFINITION_CACHE
+from .ccd import CCD_LIBRARY_CACHE
 from .residue import ResidueDefinition
 
 __all__ = [
@@ -28,10 +28,10 @@ __all__ = [
 def topology_from_pdb(
     file: PathLike[str] | str | IO[str] | TextIOBase,
     *,
-    residue_database: Mapping[
+    residue_library: Mapping[
         str,
         Iterable[ResidueDefinition],
-    ] = CCD_RESIDUE_DEFINITION_CACHE,
+    ] = CCD_LIBRARY_CACHE,
     additional_definitions: Iterable[ResidueDefinition] = [],
     format: Literal["PDB", "CIF", None] = None,
     use_canonical_names: bool = False,
@@ -43,12 +43,12 @@ def topology_from_pdb(
 
     This function requires all hydrogens (and all other atoms) to be present in
     the PDB file, and that atom and residue names are consistent with the
-    ``residue_database``. In return, it provides full chemical information on
+    ``residue_library``. In return, it provides full chemical information on
     the entire PDB file.
 
     To load a PDB file with molecules including any residue not found in the
     CCD, or with residues that differ from that specified under a particular
-    residue name, provide your own ``residue_database``. Any mapping from a
+    residue name, provide your own ``residue_library``. Any mapping from a
     residue name to a list of :py:data:`ResidueDefinition
     <openff.pdbscan.pdb.residue.ResidueDefinition>` objects may be used,
     but the :py:mod:`ccd <openff.pdbscan.pdb.ccd>` module  provides tools for
@@ -56,28 +56,26 @@ def topology_from_pdb(
 
     Alternatively, to load a single-residue molecule that is not present in the
     CCD, name that molecule ``"UNL"`` (or any name not present in the
-    ``residue_database``), specify its CONECT records, and provide the
-    appropriate molecule to the ``unknown_molecules`` argument.
+    ``residue_library``), specify its CONECT records, and provide the
+    appropriate molecule to the ``additional_definitions`` argument.
 
     Parameters
     ----------
     file
         The path to the PDB file or the PDB file as a file-like object.
-    unknown_molecules
-        A list of molecules to match residues not found in the
-        ``residue_database`` against. Unlike ``residue_database``, this requires
-        that CONECT records be present and performs a match between the chemical
-        graphs rather than using residue and atom names to detect chemistry.
-    residue_database
+    residue_library
         The database of residues to identify the atoms in the PDB file by. By
         default, a patched version of the CCD. Chemistry is identified by atom
         and residue names. If multiple residue definitions match a particular
         residue, the first one encountered is applied.
-    additional_substructures
+    additional_definitions
         Additional residue definitions to match against all residues that found
-        no matches in the ``residue_database``. These definitions can match
-        whether or not the residue name matches. To use this argument with
-        OpenFF ``Molecule`` objects or SMILES strings, see the
+        no matches in the ``residue_library``. These definitions can match
+        whether or not the residue name matches. Unlike ``residue_library``,
+        this requires that CONECT records be present for any bonds not covered
+        by the library and performs a match between the chemical graphs rather
+        than using residue and atom names to detect chemistry. To use this
+        argument with OpenFF ``Molecule`` objects or SMILES strings, see the
         ``ResidueDefinition.from_*`` class methods.
     format
         The file format the file is encoded in. `"PDB"` expects a standard PDB
@@ -95,15 +93,15 @@ def topology_from_pdb(
         If this argument is ``True``, this error is suppressed.
     set_stereochemistry_from_3d
         If ``True``, stereochemistry will be set according to the structure of
-        the PDB file. This takes considerable time. If ``False``, leave stereo
-        as set in the ``ResidueDefinition``.
+        the PDB file. If ``False``, leave stereo as set in the
+        ``ResidueDefinition``.
 
     Notes
     -----
 
     This function uses a residue database to load a PDB file from its atom and
     residue names without guessing bonds. Bonds will be added by comparing atom
-    and residue names to the residues defined in the ``residue_database``
+    and residue names to the residues defined in the ``residue_library``
     argument, which by default uses a patched version of the RCSB Chemical
     Component Dictionary (CCD). This is the dictionary of residue and atom names
     that the RCSB PDB is referenced against. The CCD is very large and cannot be
@@ -177,7 +175,7 @@ def topology_from_pdb(
         data = PdbData.from_file(file, format=format)  # type: ignore
 
     matches = data.get_successful_matches(
-        residue_database,
+        residue_library,
         list(additional_definitions),
     )
 
