@@ -312,7 +312,7 @@ class PdbData:
         )
         self.chain_id[-1] = line[21].strip()
         self.res_seq[-1] = line[22:26].strip()
-        self.i_code[-1] = line[26].strip() or " "
+        self.i_code[-1] = line[26].strip() if line[26].strip() else " "
         self.x[-1] = float(line[30:38])
         self.y[-1] = float(line[38:46])
         self.z[-1] = float(line[46:54])
