@@ -70,7 +70,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -n 1 -v --color=yes --timeout 300
+          pytest -n auto -v --color=yes --timeout 300
 
     # - name: codecov
     #   uses: codecov/codecov-action@v3
