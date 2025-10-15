@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import IO, Literal
 
 import numpy as np
-from openff.toolkit import Topology
+from openff.toolkit import Molecule, Topology
 from openff.units import unit
 
 from openff.pablo._matching import SuccessfulMatch
@@ -204,19 +204,20 @@ def _build_topology(
     rdmol = data.matches_to_rdmol(matches, use_canonical_names=use_canonical_names)
 
     # Set positions
+    logging.debug("Setting conformer to PDB positions")
     rdmol_pdb_indices = [atom.properties["pdb_index"] for atom in rdmol.atoms]
     positions = np.stack([data.x, data.y, data.z], axis=-1) * unit.angstrom
     rdmol = rdmol.edit().add_conformer_and(positions[rdmol_pdb_indices]).freeze()
 
-    if set_stereochemistry_from_3d:
-        rdmol = rdmol.edit().assign_stereochemistry_from_3d_and().freeze()
-
-    molecules = [mol.to_openff_molecule() for mol in rdmol.split_molecule_fragments()]
-
-    for offmol in molecules:
-        offmol._invalidate_cached_properties()
+    molecules: list[Molecule] = []
+    for rdmol in rdmol.split_molecule_fragments():
+        if set_stereochemistry_from_3d:
+            rdmol = rdmol.edit().assign_stereochemistry_from_3d_and().freeze()
+        offmol = rdmol.to_openff_molecule()
         offmol.add_default_hierarchy_schemes()
+        molecules.append(offmol)
 
+    logging.debug("produce topology")
     topology = Topology.from_molecules(molecules)
 
     topology_pdb_indices = [atom.metadata["pdb_index"] for atom in topology.atoms]

@@ -1115,3 +1115,6 @@ def test_sindhikara_using_sdf():
         file=get_test_data_path("sindhikara/7yv1_prepped.pdb"),
         additional_definitions=[ligand],
     )
+
+
+# TODO: Test that the correct atom metadata are written out (as documented in topology_from_pdb())

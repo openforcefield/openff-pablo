@@ -1729,6 +1729,8 @@ class PdbData:
         """{(pdb_idx_1, pdb_idx_2): bond_order, ...}"""
         atoms: dict[int, tuple[AtomDefinition, SuccessfulMatch]] = {}
         """{pdb_idx: (atom_definition, match), ...}"""
+
+        logging.debug("Begin collating chemical information from matches")
         for match in matches:
             for vsite in match.vsite_idcs:
                 pdb_idcs.remove(vsite)
@@ -1765,6 +1767,8 @@ class PdbData:
                 f"Unidentified atoms: {pdb_idcs} (lines {', '.join(str(self.line_no[i]) for i in pdb_idcs)})",
             )
 
+        logging.debug("Begin adding atoms to RDMol")
+
         # Add the atoms to the rdmol in PDB index order
         idx_pdb_to_rdmol: dict[int, int] = {}
         for i, (atom, match) in sorted(atoms.items(), key=lambda t: t[0]):
@@ -1786,12 +1790,17 @@ class PdbData:
             == [idx_pdb_to_rdmol[k] for k in sorted(idx_pdb_to_rdmol.keys())]
         )
 
+        logging.debug("Begin adding bonds to RDMol")
+
         # Add the bonds to the rdmol
         for (atom1, atom2), order in bonds.items():
             rdmol.add_bond(idx_pdb_to_rdmol[atom1], idx_pdb_to_rdmol[atom2], order)
 
+        logging.debug("Sanitizing...")
         # Sanitize and apply edits
         rdmol = rdmol.sanitize_and().freeze()
+
+        logging.debug("Checking radicals")
 
         # Check for radicals to give more detailed error reporting
         def format_atom(atom: RdAtom) -> str:
@@ -1808,11 +1817,12 @@ class PdbData:
                     + f" electrons, formal charge {atom.formal_charge:+}, and"
                     + f" {atom.n_bonds} bonds.",
                 )
-                for atom1, atom2, order in atom.bonded_to():
+                for bond in atom.bonds:
                     logging.warning(
-                        f"  {format_atom(atom1)} bonded to {format_atom(atom2)} with order {order}",
+                        f"  {format_atom(bond.begin_atom)} bonded to {format_atom(bond.end_atom)} with order {bond.order}",
                     )
 
+        logging.debug("Finished producing rdmol")
         return rdmol
 
     def __getitem__(self, index: int) -> dict[str, Any]:
