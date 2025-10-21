@@ -4,7 +4,7 @@ from openff.pablo._additional_definitions import _get_pdb_graph
 from openff.pablo._matching import SuccessfulMatch, unwrap_successful
 from openff.pablo._pdb_data import PdbData, ResidueMatch
 from openff.pablo._tests.utils import get_test_data_path
-from openff.pablo.ccd import CCD_LIBRARY_CACHE
+from openff.pablo.ccd import STD_CCD_CACHE
 from openff.pablo.chem import PEPTIDE_BOND
 from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
 
@@ -56,7 +56,7 @@ def test_get_pdb_graph_vicinal_disulfide(
 ):
     matches: list[SuccessfulMatch] = []
     for match in vicinal_disulfide_data.match_residues(
-        CCD_LIBRARY_CACHE,
+        STD_CCD_CACHE,
         (),
     ):
         try:
@@ -94,7 +94,7 @@ def test_get_pdb_graph_3ip9_trimmed_partial():
 
     matches: list[SuccessfulMatch] = []
     for match in data.match_residues(
-        CCD_LIBRARY_CACHE,
+        STD_CCD_CACHE,
         (),
     ):
         try:
@@ -146,7 +146,7 @@ def test_get_pdb_graph_3ip9_trimmed_complete():
 
     matches: list[SuccessfulMatch] = []
     for match in data.match_residues(
-        CCD_LIBRARY_CACHE.with_([resdef]),
+        STD_CCD_CACHE.with_([resdef]),
         (),
     ):
         try:

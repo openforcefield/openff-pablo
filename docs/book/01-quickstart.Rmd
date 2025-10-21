@@ -1,0 +1,85 @@
+(chapter:quickstart)=
+# Quickstart: Loading standard PDBs
+
+```{python echo=FALSE, results='hide'}
+import os
+from openff.pablo._tests.utils import get_test_data_path
+os.chdir(get_test_data_path('prepared_pdbs/'))
+```
+
+Pablo tries its best to make it as easy as possible (but no easier) to get complete chemical information out of a PDB file. This is a surprisingly hard problem; see [](#chapter:why-pablo). Fortunately, most ordinary use cases are easy!
+
+The function used to load all files in Pablo is [`topology_from_pdb`]. Many PDB files using standard atom and residue names "just work" in Pablo, as long as they aren't missing any atoms:
+
+```{python}
+from openff.pablo import topology_from_pdb
+
+topology = topology_from_pdb("2zuq_prepared.pdb")
+topology.visualize()
+```
+
+Even files that include ligands can load automatically, as long as the ligands are complete and named in the standard way.
+
+```{python}
+from openff.pablo import topology_from_pdb
+
+topology = topology_from_pdb("3h34_prepared.pdb")
+topology.visualize()
+```
+
+[`topology_from_pdb`] can also load from file-like objects. 1A4T is a rare example of a PDB file from the PDB that is chemically complete and can load without modification:
+
+```{python}
+from urllib.request import urlopen
+from openff.pablo import topology_from_pdb
+
+with urlopen("https://files.rcsb.org/download/1A4T.pdb") as pdb_file_object:
+    topology = topology_from_pdb(pdb_file_object)
+topology.visualize()
+```
+
+## Non-standard ligands
+
+Non-standard molecules can be loaded by providing the chemical information that Pablo doesn't know about. This works regardless of what the atoms in the molecule are named or what residues they're in, as long as they have CONECT records and elements:
+
+```{python}
+from openff.pablo import topology_from_pdb, ResidueDefinition
+
+topology = topology_from_pdb(
+    "../5ap1_nosol.pdb",
+    additional_definitions=[
+        ResidueDefinition.anon_from_smiles(
+            "O=C([O-])Cn1cc(cn1)c2ccc(cc2OCC#N)Nc3ccc(c(n3)NC4CCCCC4)C#N"
+        ),
+    ],
+)
+topology.visualize()
+```
+
+[`additional_definitions`] is a powerful, flexible mechanism that can do much more than assigning chemical information to a ligand with complete CONECT records. It can "fill in the gaps" between known residues in a partially-standard polymer, only requiring CONECT records for bonds that aren't present in the standard residues. It can do this by matching the whole molecule, or defining a substructure, as long as all atoms and bonds are described and unambiguous. We'll come back to it and dig further in [](#chapter:additional_definitions).
+
+## What are the standard names and residues?
+
+The PDB format is designed to be interpreted in concert with the [Chemical Component Dictionary], or CCD. The CCD defines standard atom names, residue codes, and resonance forms for tens of thousands of chemicals, as well as how they may bond into larger polymers.
+
+Pablo interprets the CCD as faithfully as is practical, but unfortunately the CCD is designed for crystallography and not biomolecular simulation and this limits its applicability. Pablo provides many tools to augment, patch, and even replace the CCD, which we'll dig into in [](#chapter:ccdcache) and [](#chapter:reslib).
+
+You can investigate the standard atom names for a given residue by inspecting the `STD_CCD_CACHE`:
+
+```{python}
+from openff.pablo import STD_CCD_CACHE
+
+{
+    resdef.description: ", ".join(
+        "|".join((atom.name, *atom.synonyms))
+        for atom in resdef.atoms
+    ) for resdef in STD_CCD_CACHE["GLY"]
+}
+```
+
+Note that we do not provide support for Amber atom/residue names - though you could easily write (and distribute!) your own Amber library.
+
+
+[`topology_from_pdb`]: #openff.pablo.topology_from_pdb
+[`additional_definitions`]: #openff.pablo.topology_from_pdb.params.additional_definitions
+[Chemical Component Dictionary]: https://www.wwpdb.org/data/ccd

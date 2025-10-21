@@ -182,6 +182,7 @@ myst_enable_extensions = [
 myst_heading_anchors = 3
 nb_render_markdown_format = "myst"
 nb_custom_formats = {".Rmd": ["jupytext.reads", {"fmt": "Rmd"}]}
+nb_execution_timeout = 90
 
 hoverxref_role_types = {"term": "tooltip"}
 hoverxref_roles = list(hoverxref_role_types.keys())

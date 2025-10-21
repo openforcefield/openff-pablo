@@ -7,7 +7,7 @@ from openff.toolkit import Molecule, Topology, unit
 from openff.pablo._pdb import topology_from_pdb
 from openff.pablo._tests.utils import get_test_data_path
 from openff.pablo._utils import sort_tuple, unwrap
-from openff.pablo.ccd import CCD_LIBRARY_CACHE
+from openff.pablo.ccd import STD_CCD_CACHE
 from openff.pablo.chem import PEPTIDE_BOND
 from openff.pablo.exceptions import PdbResidueMatchError
 from openff.pablo.residue import BondDefinition, ResidueDefinition
@@ -141,7 +141,7 @@ def test_3ip9_loads_with_augmented_resdb():
     leavers = {16, 19, 59}
     pablo_top = topology_from_pdb(
         get_test_data_path("prepared_pdbs/3ip9_dye_solvated.pdb"),
-        residue_library=CCD_LIBRARY_CACHE.with_(
+        residue_library=STD_CCD_CACHE.with_(
             {
                 "DYE": [
                     ResidueDefinition.from_smiles(
@@ -291,7 +291,7 @@ def test_3ip9_loads_via_conects():
 
     pablo_top = topology_from_pdb(
         path,
-        residue_library=CCD_LIBRARY_CACHE.with_(
+        residue_library=STD_CCD_CACHE.with_(
             [
                 ResidueDefinition.from_molecule(
                     molecule=substructure_mol,
@@ -349,7 +349,7 @@ def test_e2_loads_via_conects():
     """Check that a file that consists of a single residue non-polymer molecule
     with the wrong atom names and correct CONECT records matches"""
     path = get_test_data_path("e2_7nel.pdb")
-    substructure_mol = unwrap(CCD_LIBRARY_CACHE["EST"]).to_openff_molecule()
+    substructure_mol = unwrap(STD_CCD_CACHE["EST"]).to_openff_molecule()
     for atom in substructure_mol.atoms:
         atom.name = ""
         atom.metadata["synonyms"] = ""
@@ -412,7 +412,7 @@ def test_3ip9_trimmed_loads_via_conects_like_legacy():
 
     pablo_top = topology_from_pdb(
         path,
-        residue_library=CCD_LIBRARY_CACHE.with_(
+        residue_library=STD_CCD_CACHE.with_(
             [
                 ResidueDefinition.from_molecule(
                     molecule=substructure_mol,
@@ -480,7 +480,7 @@ def test_3ip9_trimmed_loads_via_conects():
 
     top = topology_from_pdb(
         pdb_path,
-        residue_library=CCD_LIBRARY_CACHE.with_([resdef]),
+        residue_library=STD_CCD_CACHE.with_([resdef]),
     )
 
     sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
@@ -590,6 +590,7 @@ def test_3ip9_trimmed_loads_via_whole_molecule_unique_molecules():
 
 
 @pytest.mark.slow
+@pytest.mark.timeout(120)
 def test_big_bilayer():
     """
     Test file with 100k+ atoms w/ CONECT records and 4-letter residue names
@@ -600,7 +601,7 @@ def test_big_bilayer():
     """
     top = topology_from_pdb(
         get_test_data_path("big_bilayer.pdb"),
-        residue_library=CCD_LIBRARY_CACHE.with_(
+        residue_library=STD_CCD_CACHE.with_(
             {
                 "DLPC": [
                     ResidueDefinition.from_smiles(
@@ -841,7 +842,7 @@ def test_polyglycines_loads_with_augmented_ccd():
     # of residue-residue interface; see prepared_pdbs/polyglycines.py
     topology = topology_from_pdb(
         get_test_data_path("prepared_pdbs/polyglycines.pdb"),
-        residue_library=CCD_LIBRARY_CACHE.with_(
+        residue_library=STD_CCD_CACHE.with_(
             [
                 ResidueDefinition.from_smiles(
                     mapped_smiles="[N-:1]([H:2])[C:3]([H:4])([H:5])[C:6](=[O:7])[O:8][H:9]",
@@ -901,8 +902,8 @@ def test_polyglycines_loads_with_augmented_ccd():
 @pytest.mark.parametrize(
     "resdb",
     [
-        {**CCD_LIBRARY_CACHE.without({"PRO"})},
-        {**CCD_LIBRARY_CACHE.without({"GLY"})},
+        {**STD_CCD_CACHE.without({"PRO"})},
+        {**STD_CCD_CACHE.without({"GLY"})},
         {},
     ],
     ids=[
@@ -937,9 +938,9 @@ def test_5ap1_fails_with_broken_resdefs(
 
 
 def test_microviridin_crosslinks():
-    from openff.pablo import CCD_LIBRARY_CACHE, topology_from_pdb
+    from openff.pablo import STD_CCD_CACHE, topology_from_pdb
 
-    custom_residue_database = CCD_LIBRARY_CACHE.with_(
+    custom_residue_database = STD_CCD_CACHE.with_(
         {
             "TH4": [
                 resdef.replace(
@@ -951,7 +952,7 @@ def test_microviridin_crosslinks():
                     ],
                     description=resdef.description + " w/ crosslink",
                 )
-                for resdef in CCD_LIBRARY_CACHE["THR"]
+                for resdef in STD_CCD_CACHE["THR"]
                 if resdef.description == "THREONINE"
             ],
             "A10": [
@@ -968,7 +969,7 @@ def test_microviridin_crosslinks():
                     ],
                     description=resdef.description + " w/ crosslink",
                 )
-                for resdef in CCD_LIBRARY_CACHE["ASP"]
+                for resdef in STD_CCD_CACHE["ASP"]
                 if resdef.description == "ASPARTIC ACID"
             ],
             "LY6": [
@@ -989,7 +990,7 @@ def test_microviridin_crosslinks():
                     ],
                     description=resdef.description + " w/ crosslink",
                 )
-                for resdef in CCD_LIBRARY_CACHE["LYS"]
+                for resdef in STD_CCD_CACHE["LYS"]
                 if resdef.description == "LYSINE -HZ3"
             ],
             "G13": [
@@ -1004,7 +1005,7 @@ def test_microviridin_crosslinks():
                     ],
                     description=resdef.description + " w/ crosslink",
                 )
-                for resdef in CCD_LIBRARY_CACHE["GLU"]
+                for resdef in STD_CCD_CACHE["GLU"]
                 if resdef.description == "GLUTAMIC ACID"
             ],
             "SE9": [
@@ -1017,7 +1018,7 @@ def test_microviridin_crosslinks():
                     ],
                     description=resdef.description + " w/ crosslink",
                 )
-                for resdef in CCD_LIBRARY_CACHE["SER"]
+                for resdef in STD_CCD_CACHE["SER"]
                 if resdef.description == "SERINE"
             ],
             "G12": [
@@ -1032,7 +1033,7 @@ def test_microviridin_crosslinks():
                     ],
                     description=resdef.description + " w/ crosslink",
                 )
-                for resdef in CCD_LIBRARY_CACHE["GLU"]
+                for resdef in STD_CCD_CACHE["GLU"]
                 if resdef.description == "GLUTAMIC ACID"
             ],
         },
@@ -1056,7 +1057,7 @@ def test_complex_pdb_1flr():
         topology = topology_from_pdb(
             get_test_data_path("prepared_pdbs/1FLR_prepared.pdb"),
             additional_definitions=[ligand],
-            residue_library=CCD_LIBRARY_CACHE.with_(
+            residue_library=STD_CCD_CACHE.with_(
                 {
                     "NMA": [
                         ResidueDefinition.from_smiles(

@@ -1,3 +1,4 @@
+(chapter:why-pablo)=
 # Why Pablo is different
 
 PDB files are a highly permissive format widely used in molecular modeling. The rules for how a PDB file should be written or read are vague enough --- and the chemistry familiar enough --- that the format often runs on the principle of "you know what I mean". For traditional MD workflows, this permissiveness is an asset. Simulation engines can write PDB files with arbitrary virtual sites or coarse-grainings safe in the knowledge that most tools will be able to make do, at least in the biochemical context where the user has force field parameters.

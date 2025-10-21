@@ -1,7 +1,7 @@
 """
 Tools for reading and patching the PDB Chemical Component Dictionary (CCD).
 
-The ``CCD_LIBRARY_CACHE`` loads, caches, and provides residue
+The ``STD_CCD_CACHE`` loads, caches, and provides residue
 definitions from the CCD and is the default residue database used by
 ``topology_from_pdb``.
 """
@@ -27,13 +27,12 @@ from .patches import (
 )
 
 __all__ = [
-    "CCD_LIBRARY_CACHE",
+    "STD_CCD_CACHE",
     "CcdCache",
     "patches",
 ]
 
-# TODO: Replace these patches with CONECT records?
-CCD_LIBRARY_CACHE: CcdCache = CcdCache(
+STD_CCD_CACHE: CcdCache = CcdCache(
     # TODO: Use a proper resource setup for this
     library_paths=[Path(__file__).parent / "data/ccd_cache"],
     patches=[

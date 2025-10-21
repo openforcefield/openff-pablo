@@ -715,6 +715,7 @@ class ResidueDefinition:
     def anon_from_smiles_marked_leaving(
         cls,
         smiles: str,
+        *,
         linking_bond: BondDefinition | None = None,
         crosslink: BondDefinition | None = None,
         virtual_sites: Collection[str] = (),
@@ -728,25 +729,20 @@ class ResidueDefinition:
         residue_name
             The 3-letter code used to identify the residue in a PDB file. See
             :py:data:`openff.pablo.ResidueDefinition.residue_name`
-        mapped_smiles
+        smiles
             The SMILES string. Leaving atoms should be mapped. All other atoms
             must not be.
-        atom_names
-            Mapping from SMILES string mapping numbers to the canonical atom
-            name. Note that this refers to numbers in the actual SMILES string,
-            and so keys should be contiguous integers starting at 1. Atom names
-            must be unique.
         linking_bond
             The bond linking this residue to its neighbours in a polymer. See
             :py:data:`openff.pablo.ResidueDefinition.linking_bond`
         crosslink
             See :py:data:`openff.pablo.ResidueDefinition.crosslink`
-        description
-            An optional string describing the residue. See
-            :py:data:`openff.pablo.ResidueDefinition.description`
         virtual_sites
             Virtual sites expected by the residue. See
             :py:data:`openff.pablo.ResidueDefinition.virtual_sites`
+        description
+            An optional string describing the residue. See
+            :py:data:`openff.pablo.ResidueDefinition.description`
         """
         molecule = Molecule.from_smiles(
             smiles,
@@ -1406,13 +1402,13 @@ class ResidueDefinition:
 
         if prior_bond is not None:
             prior_target = AtomDefinition.with_defaults(
-                prior_bond.atom2,
+                prior_bond.atom1,
                 "",
                 leaving=True,
             )
             graph.add_node(prior_target)
             graph.add_edge(
-                self.canonical_name_to_atom[prior_bond.atom1],
+                self.canonical_name_to_atom[prior_bond.atom2],
                 prior_target,
                 prior_bond,
             )

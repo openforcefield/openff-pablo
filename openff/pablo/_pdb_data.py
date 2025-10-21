@@ -1,5 +1,4 @@
 import dataclasses
-import functools
 import itertools
 import logging
 import warnings
@@ -147,16 +146,14 @@ class PdbData:
         format
             Which format to interpet the file as
         """
+        lines = [
+            (line if isinstance(line, str) else line.decode())
+            for line in file.readlines()
+        ]
         if format.upper() == "PDB":
-            return cls.parse_pdb(
-                (line if isinstance(line, str) else line.decode())
-                for line in file.readlines()
-            )
+            return cls.parse_pdb(lines)
         elif format.upper() == "CIF":
-            return cls.parse_cif(
-                (line if isinstance(line, str) else line.decode())
-                for line in file.readlines()
-            )
+            return cls.parse_cif(lines)
         else:
             raise ValueError(f"format must be one of 'PDB' or 'CIF', not {format!r}")
 
@@ -237,7 +234,7 @@ class PdbData:
         return data
 
     @classmethod
-    def parse_pdb(cls, lines: Iterable[str], strict: bool = False) -> Self:
+    def parse_pdb(cls, lines: Sequence[str], strict: bool = False) -> Self:
         """
         Parse PDB file lines into a new ``PdbData`` object.
 
@@ -371,7 +368,7 @@ class PdbData:
             Updated connectivity information as a list of sets
         """
         for line in lines:
-            if line.startswith("CONECT "):
+            if line.startswith("CONECT"):
                 # a is the serial of the first atom in the conect, we need its indices
                 a = line[6:11].strip()
                 a_idcs = serial_to_index.get(a, [])
@@ -817,7 +814,10 @@ class PdbData:
                     node_matcher=lambda b, c: (
                         self.element[c] == b.symbol
                         and (
-                            (self.name[c] in (b.name, *b.synonyms))
+                            (
+                                self.name[c] in (b.name, *b.synonyms)
+                                and not resdef.is_anonymous
+                            )
                             or (self.charge[c] is None and not self.strict)
                             or ((self.charge[c] or 0) == b.charge)
                         )
@@ -1586,10 +1586,10 @@ class PdbData:
             ) -> Iterator[PossibleResidueMatch]: ...
 
         match_filters: list[Filter] = [
-            functools.partial(
-                self.match_additional_definitions,
-                additional_definitions=additional_definitions,
-            ),
+            # functools.partial(
+            #     self.match_additional_definitions,
+            #     additional_definitions=additional_definitions,
+            # ),
             self.rescue_partial_matches_with_conect_records,
             self.identify_polymer_linkages,
             self.filter_on_crosslinks,
@@ -1692,6 +1692,7 @@ class PdbData:
             return residues
 
         if check_additional_definitions:
+            logging.debug(f"Checking additional definitions {additional_definitions}")
             additional_matches = apply_additional_definitions(
                 self,
                 residues,
@@ -1703,9 +1704,6 @@ class PdbData:
                 for i in match.res_atom_idcs
                 if match.index_to_atomdef[i].symbol != ""
             }
-            logging.debug(
-                f"{unmatched_atoms=} (n={len(unmatched_atoms)})",
-            )
             if len(unmatched_atoms) == 0:
                 return residues + additional_matches
             else:
@@ -1738,6 +1736,9 @@ class PdbData:
 
         logging.debug("Begin collating chemical information from matches")
         for match in matches:
+            logging.debug(
+                f"  collating {match.residue_definition.description} with {match.canonical_atom_name_to_index}",
+            )
             for vsite in match.vsite_idcs:
                 pdb_idcs.remove(vsite)
 
@@ -1800,6 +1801,7 @@ class PdbData:
 
         # Add the bonds to the rdmol
         for (atom1, atom2), order in bonds.items():
+            logging.debug(f"{atom1, atom2, order}")
             rdmol.add_bond(idx_pdb_to_rdmol[atom1], idx_pdb_to_rdmol[atom2], order)
 
         logging.debug("Sanitizing...")

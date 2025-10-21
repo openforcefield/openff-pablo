@@ -1,3 +1,4 @@
+(chapter:how-loading)=
 # How Pablo loads PDB files
 
 Loading a PDB file with Pablo follows four steps:

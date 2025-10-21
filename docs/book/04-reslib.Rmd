@@ -1,0 +1,42 @@
+(chapter:reslib)=
+# The residue library
+
+Unlike all other PDB loading tools we know about, Pablo exposes its library of known residues to the user for inspection, modification, and even replacement at runtime. This can be done with the [`residue_library`] argument to `topology_from_pdb`. `residue_library` takes a mapping from residue IDs to a list of residue definitions (see [](#chapter:resdef)). All of these definitions are matched against any residue with that ID, and all that do match must agree on their chemistry --- Pablo would rather raise an error than provide ambiguous chemistry. Pablo does permit alternate resonance forms --- matches agree chemically if that have identical elements, connectivity, and net formal charge.
+
+The simplest residue library is a dictionary:
+
+```{python}
+from openff.pablo import topology_from_pdb, ResidueDefinition
+from openff.pablo.chem import PEPTIDE_BOND
+
+reslib = {
+    "GLY": [
+        ResidueDefinition.from_smiles(
+            "[H:1][N:2]([H:3])[C:4]([H:5])([H:6])[C:7](=[O:8])[O:9][H:10]",
+            atom_names={
+                1: "H2", 2: "N", 3: "H", 4: "CA", 5: "HA1", 6: "HA2", 7: "C",
+                8: "O", 9: "OXT", 10: "HXT"
+            },
+            residue_name="GLY",
+            linking_bond=PEPTIDE_BOND,
+            leaving_atoms=[1, 9, 10],
+        )
+    ]
+}
+```
+
+You can read more about defining new residues in [](#chapter:resdef) and the [`ResidueDefinition`] reference. This residue library would be sufficient to load polyglycines of arbitrary length, as long as they have neutral termini:
+
+```{python}
+topology_from_pdb("polygly.pdb", residue_library=reslib).visualize()
+```
+
+## The default residue library: `STD_CCD_CACHE`
+
+The default value of the `residue_library` argument is a module-level constant called [`STD_CCD_CACHE`]. This is an instance of the [`CcdCache`] class that comes
+
+
+[`residue_library`]: openff.pablo.topology_from_pdb.params.residue_library
+[`ResidueDefinition`]: openff.pablo.ResidueDefinition
+[`STD_CCD_CACHE`]: openff.pablo.STD_CCD_CACHE
+[`CcdCache`]: openff.pablo.ccd.CcdCache

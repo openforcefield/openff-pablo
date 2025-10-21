@@ -34,10 +34,19 @@ def apply_additional_definitions(
         verified statically by the type checker. Any assert error in user code
         is a bug and may indicate that results are incorrect - please report it!
     """
+    logging.debug("Generating graph of known info")
     pdb_graph, atoms, bonds = _get_pdb_graph(data, matches)
+    logging.debug(
+        "Generated graph with"
+        + f" {len(atoms)} atoms"
+        + f" ({sum(1 for atom in atoms.values() if atom is None)} unknown),"
+        + f" {len(bonds)} bonds"
+        + f" ({sum(1 for bond in bonds.values() if bond is None)} unknown)",
+    )
 
     new_matches: list[AdditionalDefMatch] = []
     for resdef in additional_definitions:
+        logging.debug(f"checking {resdef.description}")
         match = _apply_resdef_to_graph(
             data,
             resdef,
@@ -46,6 +55,7 @@ def apply_additional_definitions(
             bonds,
         )
         if match is None:
+            logging.debug("  no matches")
             continue
         new_matches.append(
             match,
@@ -211,6 +221,8 @@ def _has_valid_connectivity(
     string and whose (b) name does not begin with ``"NON_MATCHING_ATOM_"`` has a
     name in the PDB file that is either the canonical name of the atom
     definition or one of its synonyms.
+    3. All atoms have the same number of neighbours in the PDB graph as the
+    residue definition
 
     """
     for pdb_idx, resdef_atom in mapping.items():
@@ -248,12 +260,13 @@ class AdditionalDefMatch(ResidueMatch):
         resdef: ResidueDefinition,
     ) -> Self:
         """Compute the bond mapping for a particular atom mapping"""
-        matched_atoms = {
-            atom.name: i for i, atom in atom_mapping.items() if atom.symbol != ""
-        }
-        neighbouring_atoms = {
-            atom.name: i for i, atom in atom_mapping.items() if atom.symbol == ""
-        }
+        neighbouring_atoms: dict[str, int] = {}
+        matched_atoms: dict[str, int] = {}
+        for i, atom in atom_mapping.items():
+            if atom.symbol == "":
+                neighbouring_atoms[atom.name] = i
+            else:
+                matched_atoms[atom.name] = i
 
         if (  # nofmt
             resdef.linking_bond is None
@@ -266,7 +279,7 @@ class AdditionalDefMatch(ResidueMatch):
                 matched_atoms[resdef.posterior_bond_linking_atom],
             )
         else:
-            assert False
+            assert False, "this is not a valid mapping"
 
         if (  # nofmt
             resdef.linking_bond is None
@@ -296,7 +309,7 @@ class AdditionalDefMatch(ResidueMatch):
 
         return cls(
             residue_definition=resdef,
-            index_to_atomdef=atom_mapping,
+            index_to_atomdef={k: v for k, v in atom_mapping.items() if v.symbol != ""},
             vsite_idcs=(),
             prior_bond_idcs=prior_bond,
             posterior_bond_idcs=posterior_bond,

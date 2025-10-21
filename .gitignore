@@ -116,4 +116,5 @@ poetry.lock
 # zed
 .zed/
 
-.ccd_cache
+.ccd_cache/
+.docs-build/

@@ -1,5 +1,5 @@
-"""This generates a PDB file including every kind of residue-residue interface
-understood by ``PdbData.filter_on_polymer_linkages()``:
+"""This generates a nonsense PDB file including every kind of residue-residue
+interface understood by ``PdbData.filter_on_polymer_linkages()``:
 
 - no_polymer_new_chain (water chain B -> C)
 - no_polymer_after_ter (water chain C -> X and X -> X)
@@ -40,10 +40,9 @@ from collections.abc import Iterable
 from io import StringIO
 from pathlib import Path
 
+from openff.interchange.components._packmol import pack_box
 from openff.toolkit import Molecule, Topology
 from openff.units import Quantity
-
-from openff.interchange.components._packmol import pack_box
 
 
 def molecule_from_smiles_and_metadata(

@@ -17,7 +17,7 @@ from ._utils import (
     cryst_to_box_vectors,
     sort_tuple,
 )
-from .ccd import CCD_LIBRARY_CACHE
+from .ccd import STD_CCD_CACHE
 from .residue import ResidueDefinition
 
 __all__ = [
@@ -31,7 +31,7 @@ def topology_from_pdb(
     residue_library: Mapping[
         str,
         Iterable[ResidueDefinition],
-    ] = CCD_LIBRARY_CACHE,
+    ] = STD_CCD_CACHE,
     additional_definitions: Iterable[ResidueDefinition] = [],
     format: Literal["PDB", "CIF", None] = None,
     use_canonical_names: bool = False,
