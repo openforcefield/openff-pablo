@@ -6,12 +6,17 @@ dependencies:
   - python>=3.12,<3.13
   - pip
 
-  # Documentation
+  # Documentation depends
   - myst-parser
   - sphinx==6.1.2
   - sphinx-notfound-page
   - autodoc-pydantic
   - sphinx-click
+  - myst-nb
+  - jupytext
+
+  # Dev tools
+  - sphinx-autobuild
 
   # Imports
   - openff-units
@@ -20,8 +25,8 @@ dependencies:
   - openmm
   - mdtraj
   - numpy
-  - nglview
-  - typer>=0.14
+  - nglview==3.0.8
+  # - nglview
   - mdanalysis
   - rdkit
   - pyxdg
@@ -30,6 +35,7 @@ dependencies:
 
   #  Pip-only installs
   - pip:
+      # Documentation depends
       - git+https://github.com/openforcefield/openff-sphinx-theme.git@main
       - sphinx-hoverxref
       - sphinx-paramlinks

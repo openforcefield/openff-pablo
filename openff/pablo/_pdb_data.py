@@ -7,7 +7,7 @@ from collections import defaultdict
 from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
-from io import TextIOBase
+from io import IOBase, TextIOBase
 from os import PathLike
 from pathlib import Path
 from typing import IO, Any, DefaultDict, Literal, Protocol, Self
@@ -134,7 +134,7 @@ class PdbData:
     @classmethod
     def from_file_object(
         cls,
-        file: IO[str] | TextIOBase,
+        file: IO[str] | TextIOBase | IO[bytes] | IOBase,
         format: Literal["PDB", "CIF"] = "PDB",
     ) -> Self:
         """
@@ -148,15 +148,21 @@ class PdbData:
             Which format to interpet the file as
         """
         if format.upper() == "PDB":
-            return cls.parse_pdb(file.readlines())
+            return cls.parse_pdb(
+                (line if isinstance(line, str) else line.decode())
+                for line in file.readlines()
+            )
         elif format.upper() == "CIF":
-            return cls.parse_cif(file.readlines())
+            return cls.parse_cif(
+                (line if isinstance(line, str) else line.decode())
+                for line in file.readlines()
+            )
         else:
             raise ValueError(f"format must be one of 'PDB' or 'CIF', not {format!r}")
 
     @classmethod
     def parse_cif(cls, lines: Iterable[str]) -> Self:
-        if isinstance(lines, str):
+        if isinstance(lines, (str)):
             lines = [lines]
         block = unwrap(parse_cif("\n".join(lines)))
 

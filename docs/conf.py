@@ -52,7 +52,8 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
-    "myst_parser",
+    # "myst_parser",
+    "myst_nb",
     "openff_sphinx_theme",
     "sphinxcontrib.autodoc_pydantic",
     "sphinx_click",
@@ -179,6 +180,8 @@ myst_enable_extensions = [
     "deflist",
 ]
 myst_heading_anchors = 3
+nb_render_markdown_format = "myst"
+nb_custom_formats = {".Rmd": ["jupytext.reads", {"fmt": "Rmd"}]}
 
 hoverxref_role_types = {"term": "tooltip"}
 hoverxref_roles = list(hoverxref_role_types.keys())
