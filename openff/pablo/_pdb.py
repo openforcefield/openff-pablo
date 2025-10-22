@@ -63,7 +63,7 @@ def topology_from_pdb(
     file
         The path to the PDB file or the PDB file as a file-like object.
     residue_library
-        The database of residues to identify the atoms in the PDB file by. By
+        The library of residues to identify the atoms in the PDB file by. By
         default, a patched version of the CCD. Chemistry is identified by atom
         and residue names. If multiple residue definitions match a particular
         residue, the first one encountered is applied.
@@ -83,11 +83,11 @@ def topology_from_pdb(
         extension, or an unknown filename extension as PDB.
     use_canonical_names
         If ``True``, atom names in the PDB file will be replaced by the
-        canonical name for the same atom from the residue database.
+        canonical name for the same atom from the residue library.
     ignore_unknown_CONECT_records
         CONECT records do not include chemical information such as bond order
         and cannot be used on their own to add bonds beyond those specified
-        through the residue database and unknown molecules. By default, any
+        through the residue library and unknown molecules. By default, any
         CONECT records not reflected in the final topology raise an error.
         If this argument is ``True``, this error is suppressed.
     set_stereochemistry_from_3d
@@ -98,7 +98,7 @@ def topology_from_pdb(
     Notes
     -----
 
-    This function uses a residue database to load a PDB file from its atom and
+    This function uses a residue library to load a PDB file from its atom and
     residue names without guessing bonds. Bonds will be added by comparing atom
     and residue names to the residues defined in the ``residue_library``
     argument, which by default uses a patched version of the RCSB Chemical
@@ -140,22 +140,22 @@ def topology_from_pdb(
     ``"pdb_index"``
         The atom's index in the PDB file. Sometimes called rank. Not to be
         confused with ``"atom_serial"``, which is the number given to the atom
-        in the second column of the PDB file. Guaranteed to be unique and to
-        match the index of the atom within the topology.
+        in the second column of the PDB file. Guaranteed to be unique. Care is
+        taken to make this match the index of the atom within the topology as
+        closely as possible, but this is not possible when virtual sites are
+        present or when the PDB atom order cannot be represented in a
+        ``Topology``.
     ``"used_synonym"``
         The name of the atom that was found in the PDB file. By default,
-        `atom.name` is set to this. This value is not set for atoms matched via
-        ``unknown_molecules``.
+        `atom.name` is set to this.
     ``"canonical_name"``
-        The canonical name of the atom in the residue database. `atom.name` can
-        be set to this with the `use_canonical_names` argument. This value is
-        not set for atoms matched via ``unknown_molecules``.
+        The canonical name of the atom in the residue library. `atom.name` can
+        be set to this with the `use_canonical_names` argument.
     ``"atom_serial"``
         The serial number of the atom, found in the second column of the PDB
         file, as a string. Not guaranteed to be unique.
     ``"matched_residue_description"``
-        The residue description found in the residue database. This value is not
-        set for atoms matched via ``unknown_molecules``.
+        The residue description found in the residue library.
     ``"b_factor"``
         The temperature b-factor for the atom.
     ``"occupancy"``
