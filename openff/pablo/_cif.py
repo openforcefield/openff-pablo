@@ -4,13 +4,14 @@ from collections.abc import Iterable
 import gemmi
 
 from openff.pablo._utils import flatten
+from openff.pablo.exceptions import PabloError
 
 
 def cif_float(s: str) -> float:
     """Convert a CIF value to a float; raise error if missing or invalid"""
     n = gemmi.cif.as_number(s)
     if math.isnan(n):
-        raise ValueError(f"cannot convert {s!r} to float")
+        raise PabloError(f"cannot convert {s!r} to float")
     return n
 
 
@@ -107,7 +108,7 @@ def parse_cif(string: str) -> list[dict[str, list[str]]]:
                     flatten((tag, tag + ".__pablo__line_no") for tag in loop.tags),
                 )
                 if any(tag in blocks[-1] for tag in tags):
-                    raise ValueError("tag cannot be set twice")
+                    raise PabloError("tag cannot be set twice")
                 blocks[-1].update(
                     {
                         tag: [loop[j, i] for j in range(loop.length())]
@@ -125,12 +126,12 @@ def parse_cif(string: str) -> list[dict[str, list[str]]]:
             elif item.pair is not None:
                 tag, value = item.pair  # type: ignore
                 if tag in blocks[-1] or tag + ".__pablo__line_no" in blocks[-1]:
-                    raise ValueError("tag cannot be set twice")
+                    raise PabloError("tag cannot be set twice")
                 blocks[-1][tag] = [value]
                 blocks[-1][tag + ".__pablo__line_no"] = [str(item.line_number // 2)]
             elif item.frame is not None:  # type: ignore
-                raise ValueError("frames not supported")
+                raise PabloError("frames not supported")
             else:
-                raise ValueError("unknown item type")
+                raise PabloError("unknown item type")
 
     return blocks

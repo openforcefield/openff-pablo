@@ -10,6 +10,7 @@ import xdg.BaseDirectory as xdg_base_dir
 from openmm.app.internal.pdbx.reader.PdbxReader import PdbxReader
 
 from openff.pablo._utils import flatten
+from openff.pablo.exceptions import PabloError
 
 from ..chem import PEPTIDE_BOND, PHOSPHODIESTER_BOND
 from ..residue import (
@@ -218,7 +219,7 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         definition = self._res_def_from_ccd_str(s)
         if res_name is None:
             if definition.residue_name is None:
-                raise ValueError(
+                raise PabloError(
                     "Anonymous residue definitions cannot be added to a CcdCache",
                 )
             res_name = definition.residue_name.upper()
@@ -238,11 +239,11 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
 
         for definition in definitions:
             if definition.residue_name is None:
-                raise ValueError(
+                raise PabloError(
                     "Anonymous residue definitions cannot be added to a CcdCache",
                 )
             if res_name != definition.residue_name.upper():
-                raise ValueError(
+                raise PabloError(
                     f"ResidueDefinition {definition.residue_name}"
                     + f" ({definition.description}) must have residue name {res_name}",
                 )
@@ -455,7 +456,7 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
             definitions_map: dict[str, list[ResidueDefinition]] = {}
             for resdef in definitions:
                 if resdef.residue_name is None:
-                    raise ValueError(
+                    raise PabloError(
                         "Anonymous residue definitions cannot be added to a CcdCache",
                     )
                 definitions_map.setdefault(resdef.residue_name, []).append(resdef)
@@ -491,7 +492,7 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
             definitions_map: dict[str, list[ResidueDefinition]] = {}
             for resdef in definitions:
                 if resdef.residue_name is None:
-                    raise ValueError(
+                    raise PabloError(
                         "Anonymous residue definitions cannot be added to a CcdCache",
                     )
                 definitions_map.setdefault(resdef.residue_name, []).append(resdef)
@@ -530,18 +531,52 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         residue_name: str,
         patch: Callable[[ResidueDefinition], list[ResidueDefinition]],
     ) -> Self:
-        self._patches.append({residue_name: patch})
-        if residue_name in self._definitions:
-            self._definitions[residue_name] = list(
-                flatten(patch(resdef) for resdef in self._definitions[residue_name]),
+        """
+        Add a patch to the residues loaded via a copy of this ``CcdCache``.
+
+        The patch is added to a copy of the ``CcdCache``, and the copy is
+        returned. The original ``CcdCache`` is left unmodified.
+
+        The patch function is called on each residue definition stored under the
+        given residue name. The returned residue definitions are concatenated
+        and replace the originals. Patches can therefore add, modify, split, or
+        replace residue definitions depending on whether they include the
+        original definition in the output.
+
+        The patch is applied to all definitions in the cache when this function
+        is applied, as well as any definitions downloaded from the CCD in the
+        future. It is not applied to definitions added by the other
+        ``CcdCache.with_*()`` methods.
+        """
+        new = deepcopy(self)
+        new._patches.append({residue_name: patch})
+        if residue_name in new._definitions:
+            new._definitions[residue_name] = list(
+                flatten(patch(resdef) for resdef in new._definitions[residue_name]),
             )
-        return self
+        return new
 
     def with_virtual_sites(
         self,
         residue_name: str,
         virtual_sites: Iterable[str],
     ) -> Self:
+        """
+        Add a new residue definition requiring the given virtual site names.
+
+        The new definition is added to a copy of the ``CcdCache``, and the copy
+        is returned. The original ``CcdCache`` is left unmodified.
+
+        A new residue definition is added for each definition currently stored
+        in the cache under the given name. The new definition requires that all
+        the given virtual site names be present in order for it to match, and it
+        discards the corresponding ATOM/HETATM records.
+
+        This method works by adding a patch. It will affect any residue
+        definition already added to the cache under the given name, or any
+        definition downloaded in the future, but not any definition added in the
+        future by the ``with_`` or ``with_replaced`` methods.
+        """
         virtual_sites = tuple(virtual_sites)
         return self.with_patch(
             residue_name,
@@ -549,6 +584,24 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         )
 
     def with_vsite_water(self) -> Self:
+        """
+        Add new residue definitions for common multisite water models.
+
+        The new definitions are added to a copy of the ``CcdCache``, and the
+        copy is returned. The original ``CcdCache`` is left unmodified.
+
+        The new definitions require that all the virtual site names be
+        present in order for them to match, and they discard the corresponding
+        ATOM/HETATM records. The name for the 4-point model virtual site is
+        ``EPW``, and for the 5-point model ``EP1`` and ``EP2``.
+
+        This method works by adding a patch. It will affect any 3-atom residue
+        definitions already added to the cache under the names ``HOH``, ``WAT``,
+        or ``SOL``, or any so-named definition downloaded in the future, but not
+        any  definition added in the future by the ``with_`` or ``with_replaced``
+        methods.
+        """
+
         def add_vsites_to_water(resdef: ResidueDefinition) -> list[ResidueDefinition]:
             if resdef.n_expected_atoms == 3 and {
                 atom.name for atom in resdef.atoms

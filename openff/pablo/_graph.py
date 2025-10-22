@@ -3,6 +3,8 @@ from typing import Literal
 
 import rustworkx as rx
 
+from openff.pablo.exceptions import PabloError
+
 __all__ = ["Graph"]
 
 
@@ -60,7 +62,7 @@ class Graph[NodeT: Hashable, EdgeT: Hashable]:
         if node in self._node_idcs:
             if skip_existing:
                 return
-            raise ValueError("Cannot add existing node")
+            raise PabloError("Cannot add existing node")
         self._node_idcs[node] = self._graph.add_node(node)
 
     def add_nodes_from(self, nodes: Iterable[NodeT], *, skip_existing: bool = False):

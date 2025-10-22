@@ -3,6 +3,7 @@ Patches to add essential features to the CCD.
 """
 
 from openff.pablo.chem import DISULFIDE_BOND
+from openff.pablo.exceptions import PabloError
 
 from .._utils import unwrap
 from ..residue import (
@@ -22,9 +23,11 @@ __all__ = [
     "disambiguate_alt_ids",
     "add_disulfide_crosslink",
     "add_dephosphorylated_5p_terminus",
+    "set_hop3_leaving",
     "patch_his_sidechain_zwitterion",
     "delete_doubly_deprotonated_arginine",
     "add_nh2_leaving_atom",
+    "strip_linkless_leavers",
 ]
 
 
@@ -155,7 +158,7 @@ def fix_caps(res: ResidueDefinition) -> list[ResidueDefinition]:
 
 def add_protonation_variants(res: ResidueDefinition) -> list[ResidueDefinition]:
     """
-    Add protonation variants from the ACIDIC_PROTONS and BASIC_ATOMS constants
+    Add protonation variants from the ACIDIC_PROTONS and BASIC_ATOMS constants.
 
     Note that all combinations of protonations and deprotonations are generated;
     this means a residue with ``n`` abstractable hydrogens and ``m`` acidic atoms
@@ -264,8 +267,13 @@ def disambiguate_alt_ids(res: ResidueDefinition) -> list[ResidueDefinition]:
 
 
 def add_disulfide_crosslink(res: ResidueDefinition) -> list[ResidueDefinition]:
+    """
+    Add a disulfide crosslink to a thiol sulfur atom named "SG".
+
+    The leaving atom is the thiol proton and must be named "HG".
+    """
     if not {"HG", "SG"}.issubset({atom.name for atom in res.atoms}):
-        raise ValueError(
+        raise PabloError(
             "Can only add disulfide crosslink to residue with HG and SG atoms",
         )
 
@@ -281,6 +289,12 @@ def add_disulfide_crosslink(res: ResidueDefinition) -> list[ResidueDefinition]:
 
 
 def add_dephosphorylated_5p_terminus(res: ResidueDefinition) -> list[ResidueDefinition]:
+    """
+    Add a definition representing a dephosphorylated 5' nucleic acid terminus.
+
+    Assumes the phosphate has the standard CCD nucleic acid atom names: "P",
+    "HOP2", "HOP3", "OP1", "OP2", and "OP3".
+    """
     phosphate_names = {"P", "HOP2", "HOP3", "OP1", "OP2", "OP3"}
 
     return [
@@ -323,9 +337,13 @@ def add_dephosphorylated_5p_terminus(res: ResidueDefinition) -> list[ResidueDefi
 
 
 def set_hop3_leaving(res: ResidueDefinition) -> list[ResidueDefinition]:
-    """The OP3 and HOP3 atoms in nucleic acid residues are both absent when the
+    """
+    Mark the HOP3 leaving atom in nucleic acid residues as such.
+
+    The OP3 and HOP3 atoms in nucleic acid residues are both absent when the
     residue forms part of a polymer, but only OP3 is marked as leaving; HOP3
-    becomes a disconnected fragment"""
+    becomes a disconnected fragment.
+    """
     # TODO: Replace this with disconnected fragment detection in ResidueDefinition._leaving_fragment_of()
     return [
         res.replace(
@@ -338,6 +356,7 @@ def set_hop3_leaving(res: ResidueDefinition) -> list[ResidueDefinition]:
 
 
 def patch_his_sidechain_zwitterion(res: ResidueDefinition) -> list[ResidueDefinition]:
+    """Patch the histidine side chain so that it is neutral, not zwitterionic."""
     nd1_atom = res.name_to_atom.get("ND1", None)
     ne2_atom = res.name_to_atom.get("NE2", None)
 
@@ -364,7 +383,7 @@ def patch_his_sidechain_zwitterion(res: ResidueDefinition) -> list[ResidueDefini
             or ne2_ce1_bond is None
             or ne2_ce1_bond.order != 1
         ):
-            raise ValueError(
+            raise PabloError(
                 "Zwitterionic histidine side chain detected but could not be corrected",
             )
         else:
@@ -393,7 +412,7 @@ def patch_his_sidechain_zwitterion(res: ResidueDefinition) -> list[ResidueDefini
 def delete_doubly_deprotonated_arginine(
     res: ResidueDefinition,
 ) -> list[ResidueDefinition]:
-    """HH12 and HH22 are both acidic, but only one can leave at a time"""
+    """HH12 and HH22 are both acidic, but only one can leave at a time."""
     atom_names = {atom.name for atom in res.atoms}
     if "HH22" not in atom_names and "HH12" not in atom_names:
         return []
@@ -404,6 +423,7 @@ def delete_doubly_deprotonated_arginine(
 def add_nh2_leaving_atom(
     res: ResidueDefinition,
 ) -> list[ResidueDefinition]:
+    """Add the missing leaving atom to the NH3 residue."""
     return [
         res.replace(
             atoms=[
@@ -421,7 +441,7 @@ def strip_linkless_leavers(
     res: ResidueDefinition,
 ) -> list[ResidueDefinition]:
     """
-    Set ``leaving=False`` on all atoms if ``res`` has no linking bond or crosslink
+    Set ``leaving=False`` on all atoms if ``res`` has no linking bond or crosslink.
     """
     if res.linking_bond is None and res.crosslink is None:
         return [res.replace(atoms=[atom.replace(leaving=False) for atom in res.atoms])]

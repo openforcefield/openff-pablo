@@ -5,9 +5,9 @@ import pytest
 from openff.toolkit import Molecule, Topology, unit
 
 from openff.pablo._pdb import topology_from_pdb
+from openff.pablo._std_ccd_cache import STD_CCD_CACHE
 from openff.pablo._tests.utils import get_test_data_path
 from openff.pablo._utils import sort_tuple, unwrap
-from openff.pablo.ccd import STD_CCD_CACHE
 from openff.pablo.chem import PEPTIDE_BOND
 from openff.pablo.exceptions import PdbResidueMatchError
 from openff.pablo.residue import BondDefinition, ResidueDefinition

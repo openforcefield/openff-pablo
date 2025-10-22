@@ -20,14 +20,13 @@ from openff.pablo._cif import (
     cif_strs,
     parse_cif,
 )
-from openff.pablo._graph import Graph
-from openff.pablo._rdkit import EditableRdMol, RdAtom, RdMol
-
-from ._exceptions import (
+from openff.pablo._exceptions import (
+    PabloError,
     UnknownOrAmbiguousSerialInConectError,
     create_pdb_residue_match_error,
 )
-from ._matching import (
+from openff.pablo._graph import Graph
+from openff.pablo._matching import (
     MismatchProtocol,
     NoResidueDefinitions,
     PossibleResidueMatch,
@@ -37,7 +36,8 @@ from ._matching import (
     SuccessfulMatch,
     only_matched,
 )
-from ._utils import (
+from openff.pablo._rdkit import EditableRdMol, RdAtom, RdMol
+from openff.pablo._utils import (
     __UNSET__,
     charge_int_or_none,
     dec_hex,
@@ -47,7 +47,7 @@ from ._utils import (
     unwrap,
     unwrap_or_none,
 )
-from .residue import AtomDefinition, BondDefinition, ResidueDefinition
+from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
 
 __all__ = [
     "PdbData",
@@ -155,7 +155,7 @@ class PdbData:
         elif format.upper() == "CIF":
             return cls.parse_cif(lines)
         else:
-            raise ValueError(f"format must be one of 'PDB' or 'CIF', not {format!r}")
+            raise PabloError(f"format must be one of 'PDB' or 'CIF', not {format!r}")
 
     @classmethod
     def parse_cif(cls, lines: Iterable[str]) -> Self:
@@ -224,7 +224,7 @@ class PdbData:
             if this_res_seq != res_seq or this_chain_id != chain_id:
                 this_serial = data.serial[i]
                 this_line_no = data.line_no[i]
-                raise ValueError(
+                raise PabloError(
                     "Could not identify residue name"
                     + f" for atom serial {this_serial} (l{this_line_no})",
                 )
@@ -483,7 +483,7 @@ class PdbData:
         # Raise an error if the match would be empty - this way the
         # return value's truthiness always reflects whether there was a match
         if len(res_atom_idcs) == 0:
-            raise ValueError("cannot match empty res_atom_idcs")
+            raise PabloError("cannot match empty res_atom_idcs")
 
         logging.debug(f"  Attempting match against {residue_definition.description}")
 
@@ -1770,7 +1770,7 @@ class PdbData:
 
         # We should now have added every atom in the PDB file's first model
         if len(pdb_idcs) != 0:
-            raise ValueError(
+            raise PabloError(
                 f"Unidentified atoms: {pdb_idcs} (lines {', '.join(str(self.line_no[i]) for i in pdb_idcs)})",
             )
 

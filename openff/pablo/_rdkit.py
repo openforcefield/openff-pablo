@@ -32,6 +32,8 @@ from rdkit.Chem import (
     SanitizeMol,
 )
 
+from openff.pablo.exceptions import PabloError
+
 ORDER_TO_BOND_TYPE: dict[int, BondType] = {
     1: BondType.SINGLE,
     2: BondType.DOUBLE,
@@ -101,7 +103,7 @@ class RdMol:
                     bond.begin_atom.index not in idcs_set
                     or bond.end_atom.index not in idcs_set
                 ):
-                    raise ValueError("idcs must be a complete fragment")
+                    raise PabloError("idcs must be a complete fragment")
                 bonds[bond.begin_atom.index, bond.end_atom.index] = bond
             assert i not in idx_map
             idx_map[i] = fragment.add_atom(atom)
@@ -255,11 +257,11 @@ class EditableRdMol:
             if self._n_conformers == 1:
                 conformer_idx = 0
             elif self._n_conformers == 0:
-                raise ValueError(
+                raise PabloError(
                     "assign_stereochemistry_from_3d requires at least one conformer",
                 )
             else:
-                raise ValueError(
+                raise PabloError(
                     "Conformer index must be provided when there are more than one conformer",
                 )
 
@@ -482,6 +484,6 @@ class RdBond:
             case BondStereo.STEREONONE:
                 return None
             case _:
-                raise ValueError(
+                raise PabloError(
                     f"Expected RDKit bond stereochemistry of E or Z, got {tag} instead",
                 )

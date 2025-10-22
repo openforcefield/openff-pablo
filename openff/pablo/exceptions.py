@@ -14,13 +14,13 @@ from collections.abc import Collection
 
 
 class PabloError(ValueError):
-    """A generic Pablo error"""
+    """A generic Pablo error. Base class of all Pablo errors."""
 
     pass
 
 
 class ResidueValidationError(PabloError):
-    """The invariants required by a `ResidueDefinition` have been violated."""
+    """A newly created ``ResidueDefinition`` is invalid."""
 
     pass
 

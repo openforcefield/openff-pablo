@@ -11,6 +11,8 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
+import importlib.util
+
 # In case the project was not installed
 import os
 import sys
@@ -119,9 +121,9 @@ autodoc_pydantic_settings_show_config_member = False
 autodoc_pydantic_field_doc_policy = "both"
 autodoc_pydantic_field_list_validators = False
 
-_python_doc_base = "https://docs.python.org/3.7"
+_python_doc_base = "https://docs.python.org/3.12"
 intersphinx_mapping = {
-    "python": ("https://docs.python.org/3.7", None),
+    "python": ("https://docs.python.org/3.12", None),
     "numpy": ("https://numpy.org/doc/stable", None),
     "scipy": ("https://docs.scipy.org/doc/scipy/reference", None),
     "scikit.learn": ("https://scikit-learn.org/stable", None),
@@ -200,9 +202,7 @@ paramlinks_hyperlink_param = "link_symbol"
 # sphinx-notfound-page
 # https://github.com/readthedocs/sphinx-notfound-page
 # Renders a 404 page with absolute links
-from importlib.util import find_spec as find_import_spec
-
-if find_import_spec("notfound"):
+if importlib.util.find_spec("notfound"):
     extensions.append("notfound.extension")
 
     notfound_urls_prefix = "/projects/pablo/en/stable/"

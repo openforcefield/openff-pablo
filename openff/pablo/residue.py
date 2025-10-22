@@ -20,7 +20,7 @@ from openff.units import elements, unit
 
 from openff.pablo._graph import Graph
 from openff.pablo._utils import __UNSET__, flatten, unwrap
-from openff.pablo.exceptions import ResidueValidationError
+from openff.pablo.exceptions import PabloError, ResidueValidationError
 
 __all__ = [
     "AtomDefinition",
@@ -525,9 +525,9 @@ class ResidueDefinition:
                 if isinstance(atom_residue_name, str):
                     residue_name = atom_residue_name
                 else:
-                    raise ValueError("could not infer residue name from atom metadata")
+                    raise PabloError("could not infer residue name from atom metadata")
             else:
-                raise ValueError("could not infer residue name from atom metadata")
+                raise PabloError("could not infer residue name from atom metadata")
 
         if crosslink is None:
             molecule_crosslink = molecule.properties.get("crosslink")
@@ -836,9 +836,9 @@ class ResidueDefinition:
         index_to_atom_name = {i - 1: name for i, name in atom_names.items()}
 
         if len(index_to_atom_name) != molecule.n_atoms:
-            raise ValueError("Should be an atom name for each atom in SMILES string")
+            raise PabloError("Should be an atom name for each atom in SMILES string")
         if set(index_to_atom_name.keys()) != set(range(molecule.n_atoms)):
-            raise ValueError(
+            raise PabloError(
                 "Keys of atom_names should be contiguous integers starting at 1",
             )
 
@@ -908,13 +908,13 @@ class ResidueDefinition:
         for atom in self.atoms:
             for synonym in atom.synonyms:
                 if synonym in mapping and mapping[synonym] != atom:
-                    raise ValueError(
+                    raise PabloError(
                         f"synonym {synonym} degenerately defined for canonical"
                         + f" names {mapping[synonym].name} and {atom.name} in"
                         + f" residue {self.residue_name}",
                     )
                 if synonym in canonical_names:
-                    raise ValueError(
+                    raise PabloError(
                         f"synonym {synonym} of atom {atom.name} clashes with"
                         + f" another canonical name in residue {self.residue_name}",
                     )
@@ -982,13 +982,13 @@ class ResidueDefinition:
     @property
     def prior_bond_linking_atom(self) -> str:
         if self.linking_bond is None:
-            raise ValueError("not a linking residue")
+            raise PabloError("not a linking residue")
         return self.linking_bond.atom2
 
     @property
     def posterior_bond_linking_atom(self) -> str:
         if self.linking_bond is None:
-            raise ValueError("not a linking residue")
+            raise PabloError("not a linking residue")
         return self.linking_bond.atom1
 
     def _is_isomorphic_to(self, other: Self) -> bool:
@@ -1013,16 +1013,16 @@ class ResidueDefinition:
         try:
             atom = self.canonical_name_to_atom[name]
         except KeyError:
-            raise ValueError(f"Cannot deprotonate missing atom {name}")
+            raise PabloError(f"Cannot deprotonate missing atom {name}")
 
         if atom.symbol != "H":
-            raise ValueError(
+            raise PabloError(
                 f"Cannot deprotonate non-hydrogen atom {name}: {atom.symbol=}",
             )
 
         neighbours = list(self.atoms_bonded_to(name))
         if len(neighbours) != 1:
-            raise ValueError(
+            raise PabloError(
                 f"Cannot deprotonate atom {name} bonded to {len(neighbours)} other atoms",
             )
         neighbour = neighbours[0]
@@ -1061,14 +1061,14 @@ class ResidueDefinition:
         try:
             heavy_atom = self.canonical_name_to_atom[heavy_atom_name]
         except KeyError:
-            raise ValueError(f"Cannot protonate missing atom {heavy_atom_name}")
+            raise PabloError(f"Cannot protonate missing atom {heavy_atom_name}")
         if any(
             [
                 (ignore_synonym_clashes and proton_name in self.canonical_name_to_atom),
                 (not ignore_synonym_clashes and proton_name in self.name_to_atom),
             ],
         ):
-            raise ValueError(
+            raise PabloError(
                 f"name {proton_name} clashes with existing name in residue",
             )
 
@@ -1123,7 +1123,7 @@ class ResidueDefinition:
         acidic
             Each element specifies an atom name to remove, decrementing the
             formal charge on the neighbouring heavy atom. Multiply bonded,
-            unbonded, missing or non-hydrogen atoms raise ``ValueError``.
+            unbonded, missing or non-hydrogen atoms raise ``PabloError``.
         basic
             Each tuple specifies an atom name to protonate (increment the formal
             charge and form a bond) and the name of the added proton. Missing

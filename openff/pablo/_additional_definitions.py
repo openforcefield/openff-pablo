@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Self
 
 from openff.pablo._graph import Graph
 from openff.pablo._utils import flatten, sort_tuple
+from openff.pablo.exceptions import PabloError
 
 from ._matching import (
     ResidueMatch,
@@ -199,7 +200,7 @@ def _apply_resdef_to_graph(
     mapping = mappings.pop()
     for other_mapping in mappings:
         if not mapping.agrees_with(other_mapping):
-            raise ValueError("resdef does not unambiguously map")
+            raise PabloError("resdef does not unambiguously map")
 
     return mapping
 

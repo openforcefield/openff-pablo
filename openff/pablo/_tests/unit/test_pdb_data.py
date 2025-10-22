@@ -7,8 +7,8 @@ from openff.pablo._matching import (
     ResidueMismatch,
 )
 from openff.pablo._pdb_data import PdbData, ResidueMatch
+from openff.pablo._std_ccd_cache import STD_CCD_CACHE
 from openff.pablo._utils import default_dict
-from openff.pablo.ccd import STD_CCD_CACHE
 from openff.pablo.exceptions import UnknownOrAmbiguousSerialInConectError
 from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
 

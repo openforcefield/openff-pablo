@@ -22,6 +22,8 @@ from openff.toolkit.utils import UndefinedStereochemistryError
 from openff.units import unit
 from pint import Quantity
 
+from openff.pablo.exceptions import PabloError
+
 __all__ = [
     "default_dict",
     "unwrap",
@@ -226,7 +228,7 @@ def dec_hex(s: str) -> int:
         smallest_hex: int = 0xA * 16 ** (n - 1)
         largest_dec: int = 10**n - 1
         if parsed_as_hex < smallest_hex:
-            raise ValueError(f"hex value's leftmost character must be A-F: {s!r}")
+            raise PabloError(f"hex value's leftmost character must be A-F: {s!r}")
         return parsed_as_hex - smallest_hex + largest_dec + 1
 
 
@@ -312,7 +314,7 @@ def assign_stereochemistry_from_3d(molecule: MoleculeLike):
             elif tag == BondStereo.STEREOE:
                 stereochemistry = "E"
             elif tag == BondStereo.STEREOTRANS or tag == BondStereo.STEREOCIS:
-                raise ValueError(
+                raise PabloError(
                     f"Expected RDKit bond stereochemistry of E or Z, got {tag} instead",
                 )
             offbond._stereochemistry = stereochemistry

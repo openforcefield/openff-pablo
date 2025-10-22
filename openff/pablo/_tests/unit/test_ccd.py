@@ -2,8 +2,8 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from openff.pablo._std_ccd_cache import STD_CCD_CACHE
 from openff.pablo._utils import unwrap
-from openff.pablo.ccd import STD_CCD_CACHE
 from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.residue import ResidueDefinition
 

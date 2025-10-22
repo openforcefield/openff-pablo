@@ -11,14 +11,14 @@ from openff.toolkit import Molecule, Topology
 from openff.units import unit
 
 from openff.pablo._matching import SuccessfulMatch
-
-from ._pdb_data import PdbData
-from ._utils import (
+from openff.pablo._pdb_data import PdbData
+from openff.pablo._std_ccd_cache import STD_CCD_CACHE
+from openff.pablo._utils import (
     cryst_to_box_vectors,
     sort_tuple,
 )
-from .ccd import STD_CCD_CACHE
-from .residue import ResidueDefinition
+from openff.pablo.exceptions import PabloError
+from openff.pablo.residue import ResidueDefinition
 
 __all__ = [
     "topology_from_pdb",
@@ -249,7 +249,7 @@ def _check_all_conects(topology: Topology, data: PdbData):
         for j in js:
             conect_bonds.add(sort_tuple((i, j)))
     if not conect_bonds.issubset(all_bonds):
-        raise ValueError(
+        raise PabloError(
             "CONECT records without chemical information not supported",
             sorted(
                 {

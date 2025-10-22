@@ -3,8 +3,8 @@ from openff.toolkit import Molecule
 from openff.pablo._additional_definitions import _get_pdb_graph
 from openff.pablo._matching import SuccessfulMatch, unwrap_successful
 from openff.pablo._pdb_data import PdbData, ResidueMatch
+from openff.pablo._std_ccd_cache import STD_CCD_CACHE
 from openff.pablo._tests.utils import get_test_data_path
-from openff.pablo.ccd import STD_CCD_CACHE
 from openff.pablo.chem import PEPTIDE_BOND
 from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
 

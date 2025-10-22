@@ -1,9 +1,9 @@
 import pytest
 from openff.toolkit import Molecule
 
+from openff.pablo._std_ccd_cache import STD_CCD_CACHE
 from openff.pablo._tests.utils import get_test_data_path
 from openff.pablo._utils import unwrap
-from openff.pablo.ccd import STD_CCD_CACHE
 from openff.pablo.chem import DISULFIDE_BOND, PEPTIDE_BOND
 from openff.pablo.exceptions import ResidueValidationError
 from openff.pablo.residue import (
