@@ -468,14 +468,16 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
 
     def with_replaced(
         self,
-        definitions: Mapping[str, Sequence[ResidueDefinition]],
+        definitions: Mapping[str, Sequence[ResidueDefinition]]
+        | Sequence[ResidueDefinition],
     ) -> Self:
         """
         Get a new ``CcdCache`` with replaced definitions of some residue names.
 
         Similar to ``with_``, but does not retain existing definitions for the
-        specified residue names. All residue names that are keys of
-        ``definitions`` are removed from the new ``CcdCache`` before adding the
+        specified residue names. All residue names that are keys of a
+        ``definitions`` mapping or are residue names in a ``definitions``
+        sequence are removed from the new ``CcdCache`` before adding the
         new definitions.
 
         Note that patches are not applied to the new definitions.
@@ -485,6 +487,16 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         with_, without
 
         """
+        if not isinstance(definitions, Mapping):
+            definitions_map: dict[str, list[ResidueDefinition]] = {}
+            for resdef in definitions:
+                if resdef.residue_name is None:
+                    raise ValueError(
+                        "Anonymous residue definitions cannot be added to a CcdCache",
+                    )
+                definitions_map.setdefault(resdef.residue_name, []).append(resdef)
+            definitions = definitions_map
+
         new = deepcopy(self)
         for resname, resdefs in definitions.items():
             del new._definitions[resname]

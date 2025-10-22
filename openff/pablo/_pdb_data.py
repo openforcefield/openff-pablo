@@ -23,6 +23,10 @@ from openff.pablo._cif import (
 from openff.pablo._graph import Graph
 from openff.pablo._rdkit import EditableRdMol, RdAtom, RdMol
 
+from ._exceptions import (
+    UnknownOrAmbiguousSerialInConectError,
+    create_pdb_residue_match_error,
+)
 from ._matching import (
     MismatchProtocol,
     NoResidueDefinitions,
@@ -42,10 +46,6 @@ from ._utils import (
     sort_tuple,
     unwrap,
     unwrap_or_none,
-)
-from .exceptions import (
-    PdbResidueMatchError,
-    UnknownOrAmbiguousSerialInConectError,
 )
 from .residue import AtomDefinition, BondDefinition, ResidueDefinition
 
@@ -283,7 +283,7 @@ class PdbData:
         """The number of ATOM/HETATM records in the first model"""
         try:
             first_model = self.model[0]
-        except KeyError:
+        except IndexError:
             return 0
         return sum(1 for model in self.model if model == first_model)
 
@@ -1707,7 +1707,7 @@ class PdbData:
             if len(unmatched_atoms) == 0:
                 return residues + additional_matches
             else:
-                raise PdbResidueMatchError(
+                raise create_pdb_residue_match_error(
                     data=self,
                     errors=errors,
                     additional_definitions=additional_definitions,
@@ -1715,7 +1715,7 @@ class PdbData:
                     unmatched_pdb_idcs=unmatched_atoms,
                 )
 
-        raise PdbResidueMatchError(
+        raise create_pdb_residue_match_error(
             data=self,
             errors=errors,
             additional_definitions=additional_definitions,

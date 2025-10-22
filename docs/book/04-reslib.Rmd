@@ -3,6 +3,139 @@
 
 Unlike all other PDB loading tools we know about, Pablo exposes its library of known residues to the user for inspection, modification, and even replacement at runtime. This can be done with the [`residue_library`] argument to `topology_from_pdb`. `residue_library` takes a mapping from residue IDs to a list of residue definitions (see [](#chapter:resdef)). All of these definitions are matched against any residue with that ID, and all that do match must agree on their chemistry --- Pablo would rather raise an error than provide ambiguous chemistry. Pablo does permit alternate resonance forms --- matches agree chemically if that have identical elements, connectivity, and net formal charge.
 
+## The default residue library: `STD_CCD_CACHE`
+
+The default value of the `residue_library` argument is a module-level constant called [`STD_CCD_CACHE`]. This is an instance of the [`CcdCache`] class that comes pre-loaded with a number of common residues and patches designed to make it more usable for common biomolecular workflows.
+
+The `CcdCache` class provides a `Mapping` interface to the CCD itself; unknown residues are downloaded from the CCD when requested, and cached in `$XDG_CACHE_HOME/openff-pablo/ccd_cache`. If `$XDG_CACHE_HOME` is not set, it defaults to `~/.cache` on Linux, and `~/Library/Caches` on MacOS.
+
+## Augmenting the default library
+
+The `CcdCache` class also provides a fluent, declarative API for easily augmenting the residue library. Unfortunately it's not possible to prepare every residue in the CCD to the standard of, say, the canonical amino acids, and you may encounter bugs and missing protonation states. We try to make it as easy as possible to work around these issues.
+
+If you've generated a fix for a common residue, let us know --- we might upstream it so that everyone can use it!
+
+You can read the entire interface in the [`CcdCache`] reference docs, but we summarize and motivate some important use cases here. In general, the way to add residue definitions to the default library is with the [`with_`] and [`with_replaced`] methods:
+
+```{python}
+from openff.pablo import STD_CCD_CACHE, ResidueDefinition
+
+my_residue_library = STD_CCD_CACHE.with_([
+    ResidueDefinition.from_smiles(
+        "[H:1][O:2][O:3][H:4]",
+        atom_names={1: "H1", 2: "O1", 3: "O2", 4: "H2"},
+        residue_name="HOOH",
+        description="HYDROGEN PEROXIDE",
+    )
+])
+```
+
+Like the other `CcdCache.with_*()` methods, they return the modified `CcdCache` rather than modify it in place. This both preserves the original library and allows calls to be chained and used directly in calls to `topology_from_pdb`:
+
+<!--TODO: Make this more visual (actually generate the file?) -->
+```{python}
+from openff.pablo import STD_CCD_CACHE, topology_from_pdb, ResidueDefinition
+
+topology = topology_from_pdb(
+    "HOOH_tip5p.pdb",
+    residue_library=(
+        STD_CCD_CACHE
+            # Add hydrogen peroxide with resid HOOH
+            .with_([
+                ResidueDefinition.from_smiles(
+                    "[H:1][O:2][O:3][H:4]",
+                    atom_names={1: "H1", 2: "O1", 3: "O2", 4: "H2"},
+                    residue_name="HOOH",
+                    description="HYDROGEN PEROXIDE",
+                ),
+            ])
+            # Require 5-point water
+            .with_replaced([
+                ResidueDefinition.from_smiles(
+                    "[H:1][O:2][H:3]",
+                    atom_names={1: "H1", 2: "O", 3: "H2"},
+                    residue_name="HOH",
+                    virtual_sites=["EP1", "EP2"],
+                    description="5-POINT WATER",
+                ),
+            ])
+    ),
+)
+```
+
+### Protonation states
+
+The CCD format does not provide alternate protonation states for all residues, and for those it does many are chemical nonsense and represent fragments that may be visible crystallographically rather than something you'd want to simulate. As a result, all alternate protonation states must be specified either by Pablo or by the user. The [`ResidueDefinition.vary_protonation`] function makes this simple:
+
+```{python}
+my_residue_library = STD_CCD_CACHE.with_(
+    STD_CCD_CACHE["ABU"][0].vary_protonation(
+        acidic=["HXT"], # Atom name of abstractable proton
+        basic=[("N", "H3")], # Atom to protonate, name of new proton
+    )[1:]
+)
+```
+
+`vary_protonation` returns all combinations of the specified proton abstractions and additions, including the original residue. The original residue is always first, so we can safely avoid duplicates by just adding all new definitions but the first, as above.
+
+### Virtual sites
+
+Virtual sites can be defined on existing residues using [`with_virtual_sites`]:
+
+```{python}
+my_residue_library = (
+    STD_CCD_CACHE
+        .with_virtual_sites("HOH", ["EP1", "EP2"])
+        .with_virtual_sites("SOL", ["EP1", "EP2"])
+        .with_virtual_sites("WAT", ["EP1", "EP2"])
+        .with_virtual_sites("HOH", ["EPW"])
+        .with_virtual_sites("SOL", ["EPW"])
+        .with_virtual_sites("WAT", ["EPW"])
+)
+```
+
+`with_virtual_sites` adds a new residue definition for each existing definition with the given name. The new definitions require the exact set of virtual sites requested be present, and discards the virtual site atom records.
+
+For the common case of 4- and 5-point water models with virtual sites named `EPW` or `EP1` and `EP2`, the [`with_vsite_water`] method is even easier, and avoids some pitfalls of the above approach:
+
+```{python}
+my_residue_library = STD_CCD_CACHE.with_vsite_water()
+```
+
+Note that `with_virtual_sites` and `with_vsite_water` both use the patching mechanism under the hood, and so will not apply to residues added later with the `with_` and `with_replaced` methods. They will apply to all residues already in the cache and to new residues downloaded from the CCD.
+
+### Alternate atom names
+
+Synonyms for existing atoms can be added to residue definitions with [`ResidueDefinition.with_synonyms`]:
+
+```{python}
+my_residue_library = STD_CCD_CACHE.with_replaced([
+    resdef.with_synonyms({"H1": ["HA"], "H2": ["HB"]})
+    for resdef in STD_CCD_CACHE["HOH"] + STD_CCD_CACHE["WAT"]
+])
+```
+
+`with_synonyms` with raise an error if these synonyms introduce any ambiguity.
+
+### Arbitrary patches
+
+Arbitrary transformations can be made with the [`with_patch`] method:
+
+```{python}
+my_residue_library = STD_CCD_CACHE.with_patch(
+    "ALA",
+    lambda resdef: [resdef, resdef.replace(description="L-ALANINE (hi world)")],
+)
+```
+
+The patch is a function from a single residue definition to a list of residue definitions. It is applied to each residue definition already in the cache with the given residue name, and the returned definitions replace the definition that was patched. This means that residue definitions can be added by returning the original and modified definitions, split up by returning multiple modified definitions, or replaced by returning only the modified definition.
+
+The patching mechanism will not apply to residues added later with the `with_` and `with_replaced` methods. They will apply to all residues already in the cache and to new residues downloaded from the CCD.
+
+Some patch functions used by the default library are found in the [](openff.pablo.ccd.patches) module.
+
+## Defining a custom residue library
+
 The simplest residue library is a dictionary:
 
 ```{python}
@@ -31,12 +164,16 @@ You can read more about defining new residues in [](#chapter:resdef) and the [`R
 topology_from_pdb("polygly.pdb", residue_library=reslib).visualize()
 ```
 
-## The default residue library: `STD_CCD_CACHE`
-
-The default value of the `residue_library` argument is a module-level constant called [`STD_CCD_CACHE`]. This is an instance of the [`CcdCache`] class that comes
-
+You can also define a completely custom instance of `CcdCache`; this is described in [](#chapter:ccdcache).
 
 [`residue_library`]: openff.pablo.topology_from_pdb.params.residue_library
 [`ResidueDefinition`]: openff.pablo.ResidueDefinition
 [`STD_CCD_CACHE`]: openff.pablo.STD_CCD_CACHE
 [`CcdCache`]: openff.pablo.ccd.CcdCache
+[`ResidueDefinition.vary_protonation`]: openff.pablo.ResidueDefinition.vary_protonation
+[`with_`]: openff.pablo.ccd.CcdCache.with_
+[`with_replaced`]: openff.pablo.ccd.CcdCache.with_replaced
+[`with_virtual_sites`]: openff.pablo.ccd.CcdCache.with_virtual_sites
+[`with_vsite_water`]: openff.pablo.ccd.CcdCache.with_vsite_water
+[`ResidueDefinition.with_synonyms`]: openff.pablo.ResidueDefinition.with_synonyms
+[`with_patch`]: openff.pablo.ccd.CcdCache.with_patch

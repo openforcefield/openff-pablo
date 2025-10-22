@@ -49,10 +49,9 @@ def topology_from_pdb(
     To load a PDB file with molecules including any residue not found in the
     CCD, or with residues that differ from that specified under a particular
     residue name, provide your own ``residue_library``. Any mapping from a
-    residue name to a list of :py:data:`ResidueDefinition
-    <openff.pdbscan.pdb.residue.ResidueDefinition>` objects may be used,
-    but the :py:mod:`ccd <openff.pdbscan.pdb.ccd>` module  provides tools for
-    augmenting the CCD.
+    residue name to a list of :py:data:`ResidueDefinition <openff.pablo.ResidueDefinition>`
+    objects may be used, but the :py:mod:`ccd <openff.pablo.ccd>` module
+    provides tools for augmenting the CCD.
 
     Alternatively, to load a single-residue molecule that is not present in the
     CCD, name that molecule ``"UNL"`` (or any name not present in the
@@ -113,11 +112,12 @@ def topology_from_pdb(
     another molecule. This can happen, for example, if a PDB file with 3 chains
     A, B and C has a disulfide bond between A and C. In this case, chains A and
     C form a single molecule, but the atoms from B should be in the middle. This
-    atom ordering cannot be represented in :py:class:`openff.toolkit.Topology`
-    unless all 3 chains are included in a single
-    :py:class:`openff.toolkit.Molecule`, which would then represent two distinct
-    chemical molecules. When this occurs, atoms from the latter chain(s) appear
-    immediately after the first, and atoms from other molecules appear later.
+    atom ordering cannot be represented in :py:class:`openff.toolkit.Topology
+    <openff.toolkit.topology.Topology>` unless all 3 chains are included in a
+    single :py:class:`openff.toolkit.Molecule <openff.toolkit.topology.Molecule>`,
+    which would then represent two distinct chemical molecules. When this
+    occurs, atoms from the latter chain(s) appear immediately after the first,
+    and atoms from other molecules appear later.
 
     The following metadata are specified for all atoms produced by this function
     and can be accessed via ``topology.atom(i).metadata[key]``:

@@ -80,6 +80,6 @@ from openff.pablo import STD_CCD_CACHE
 Note that we do not provide support for Amber atom/residue names - though you could easily write (and distribute!) your own Amber library.
 
 
-[`topology_from_pdb`]: #openff.pablo.topology_from_pdb
-[`additional_definitions`]: #openff.pablo.topology_from_pdb.params.additional_definitions
+[`topology_from_pdb`]: openff.pablo.topology_from_pdb
+[`additional_definitions`]: openff.pablo.topology_from_pdb.params.additional_definitions
 [Chemical Component Dictionary]: https://www.wwpdb.org/data/ccd

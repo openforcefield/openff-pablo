@@ -61,6 +61,13 @@ extensions = [
     "sphinx_paramlinks",
 ]
 
+# Warn when reference target is not found
+nitpicky = True
+nitpick_ignore = [
+    # Ignore __UNSET__, as it is deliberately private and undocumented.
+    ("py:class", "openff.pablo._utils.__UNSET__"),
+]
+
 # API docs settings
 autosummary_generate = True
 # Document imported items iff they're in __all__
@@ -86,6 +93,7 @@ autodoc_class_signature = "mixed"
 # Workaround for autodoc_typehints_format not working for attributes
 # see https://github.com/sphinx-doc/sphinx/issues/10290#issuecomment-1079740009
 python_use_unqualified_type_names = True
+autodoc_member_order = "groupwise"  #  Or "bysource"
 
 napoleon_numpy_docstring = True
 napoleon_google_docstring = False

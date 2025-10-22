@@ -1,6 +1,6 @@
 import logging
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping
 from typing import (
     Any,
     DefaultDict,
@@ -9,7 +9,6 @@ from typing import (
     no_type_check,
     overload,
 )
-from collections.abc import Hashable
 
 import rdkit
 import rdkit.Chem
@@ -40,6 +39,8 @@ __all__ = [
 
 
 class __UNSET__:
+    """Reference value for an unset parameter."""
+
     pass
 
 
