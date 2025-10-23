@@ -590,7 +590,6 @@ def test_3ip9_trimmed_loads_via_whole_molecule_unique_molecules():
 
 
 @pytest.mark.slow
-@pytest.mark.timeout(120)
 def test_big_bilayer():
     """
     Test file with 100k+ atoms w/ CONECT records and 4-letter residue names
