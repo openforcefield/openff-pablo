@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import (
@@ -6,7 +6,6 @@ from typing import (
     Literal,
     Self,
 )
-from collections.abc import Sequence
 
 import numpy
 from numpy.typing import ArrayLike
@@ -405,10 +404,14 @@ class RdAtom:
     @property
     def properties(self) -> Mapping[str, int | str | float]:
         return MappingProxyType(
-            self._atom.GetPropsAsDict(
-                includePrivate=False,
-                includeComputed=False,
-            ),
+            {
+                # Work around https://github.com/rdkit/rdkit/issues/8890
+                k: (v if v != "" else self._atom.GetProp(k))
+                for k, v in self._atom.GetPropsAsDict(
+                    includePrivate=False,
+                    includeComputed=False,
+                ).items()
+            },
         )
 
     def stereochemistry(self) -> Literal[None, "R", "S"]:

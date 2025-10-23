@@ -1,3 +1,5 @@
+import pytest
+
 from openff.pablo._rdkit import RdMol
 
 
@@ -12,6 +14,7 @@ def test_split_simple_molecule_fragments():
     assert b.n_atoms == 3
 
 
+@pytest.mark.slow
 def test_split_many_molecule_fragments():
     n = 9999
     smiles = ".".join(["[H][O][H]"] * n)
