@@ -1,17 +1,12 @@
 from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping
-from typing import Generic, Literal, TypeVar
+from typing import Literal
 
 import rustworkx as rx
-
-NodeT = TypeVar("NodeT", bound=Hashable)
-EdgeT = TypeVar("EdgeT", bound=Hashable)
-OtherNodeT = TypeVar("OtherNodeT", bound=Hashable)
-OtherEdgeT = TypeVar("OtherEdgeT", bound=Hashable)
 
 __all__ = ["Graph"]
 
 
-class Graph(Generic[NodeT, EdgeT]):
+class Graph[NodeT: Hashable, EdgeT: Hashable]:
     def __init__(
         self,
         *,
@@ -25,8 +20,6 @@ class Graph(Generic[NodeT, EdgeT]):
         )
         self._node_idcs: dict[NodeT, int] = {}
         self._edge_idcs: dict[EdgeT, int] = {}
-        self._out_of_bounds_edge: int = 1
-        self._out_of_bounds_node: int = 1
         super().__init__()
 
     def __contains__(self, item: NodeT | EdgeT):
@@ -40,27 +33,41 @@ class Graph(Generic[NodeT, EdgeT]):
     def n_edges(self) -> int:
         return self._graph.num_edges()
 
+    @property
+    def nodes(self) -> Iterator[NodeT]:
+        yield from self._node_idcs.keys()
+
+    @property
+    def edges(self) -> Iterator[EdgeT]:
+        yield from self._edge_idcs.keys()
+
+    def neighbours(self, node: NodeT) -> Iterator[NodeT]:
+        node_idx = self._node_idcs[node]
+        neighbour_idcs = self._graph.neighbors(node_idx)
+        for neighbour_idx in neighbour_idcs:
+            yield self._graph.get_node_data(neighbour_idx)
+
     def add_edge(self, node_a: NodeT, node_b: NodeT, edge: EdgeT):
-        node_a_idx = self._node_idcs.get(node_a, self._out_of_bounds_node)
-        node_b_idx = self._node_idcs.get(node_b, self._out_of_bounds_node)
+        node_a_idx = self._node_idcs[node_a]
+        node_b_idx = self._node_idcs[node_b]
         self._edge_idcs[edge] = self._graph.add_edge(node_a_idx, node_b_idx, edge)
-        self._out_of_bounds_edge += 1
 
     def add_edges_from(self, obj_list: Iterable[tuple[NodeT, NodeT, EdgeT]]):
         for params in obj_list:
             self.add_edge(*params)
 
-    def add_node(self, node: NodeT):
+    def add_node(self, node: NodeT, *, skip_existing: bool = False):
         if node in self._node_idcs:
+            if skip_existing:
+                return
             raise ValueError("Cannot add existing node")
         self._node_idcs[node] = self._graph.add_node(node)
-        self._out_of_bounds_node += 1
 
-    def add_nodes_from(self, nodes: Iterable[NodeT]):
+    def add_nodes_from(self, nodes: Iterable[NodeT], *, skip_existing: bool = False):
         for node in nodes:
-            self.add_node(node)
+            self.add_node(node, skip_existing=skip_existing)
 
-    def is_isomorphic_to(
+    def is_isomorphic_to[OtherNodeT: Hashable, OtherEdgeT: Hashable](
         self,
         other: "Graph[OtherNodeT, OtherEdgeT]",
         node_matcher: Callable[[NodeT, OtherNodeT], bool] | None = None,
@@ -83,7 +90,36 @@ class Graph(Generic[NodeT, EdgeT]):
         else:
             return True
 
-    def get_mappings(
+    def is_subgraph_of[OtherNodeT: Hashable, OtherEdgeT: Hashable](
+        self,
+        other: "Graph[OtherNodeT, OtherEdgeT]",
+        node_matcher: Callable[[NodeT, OtherNodeT], bool] | None = None,
+        edge_matcher: Callable[[EdgeT, OtherEdgeT], bool] | None = None,
+        id_order: bool = True,
+        call_limit: int | None = None,
+    ) -> bool:
+        iterator = _vf2_mapping(
+            first=other._graph,
+            second=self._graph,
+            node_matcher=(
+                None if node_matcher is None else lambda x, y: node_matcher(y, x)
+            ),
+            edge_matcher=(
+                None if edge_matcher is None else lambda x, y: edge_matcher(y, x)
+            ),
+            id_order=id_order,
+            call_limit=call_limit,
+            subgraph=True,
+            induced=True,
+        )
+        try:
+            next(iterator)
+        except StopIteration:
+            return False
+        else:
+            return True
+
+    def get_mappings[OtherNodeT: Hashable, OtherEdgeT: Hashable](
         self,
         other: "Graph[OtherNodeT, OtherEdgeT]",
         node_matcher: Callable[[NodeT, OtherNodeT], bool] | None = None,
@@ -107,8 +143,16 @@ class Graph(Generic[NodeT, EdgeT]):
         ):
             yield {nodes[i]: other_nodes[j] for i, j in mapping.items()}
 
+    def is_connected(self) -> bool:
+        return rx.is_connected(self._graph)
 
-def _vf2_mapping(
+
+def _vf2_mapping[
+    NodeT: Hashable,
+    EdgeT: Hashable,
+    OtherNodeT: Hashable,
+    OtherEdgeT: Hashable,
+](
     first: rx.PyGraph[NodeT, EdgeT],
     second: rx.PyGraph[OtherNodeT, OtherEdgeT],
     node_matcher: Callable[[NodeT, OtherNodeT], bool] | None = None,

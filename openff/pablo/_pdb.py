@@ -1,20 +1,19 @@
 import logging
 import warnings
-from collections.abc import Iterable, Mapping, MutableSequence
+from collections.abc import Iterable, Mapping
 from io import TextIOBase
 from os import PathLike
 from pathlib import Path
-from typing import IO, Literal, assert_never
+from typing import IO, Literal
 
 import numpy as np
 from openff.toolkit import Molecule, Topology
-from openff.units import elements, unit
+from openff.units import unit
 
-from openff.pablo._matching import MoleculeMatch, SuccessfulMatch
+from openff.pablo._matching import SuccessfulMatch
 
-from ._pdb_data import PdbData, ResidueMatch
+from ._pdb_data import PdbData
 from ._utils import (
-    assign_stereochemistry_from_3d,
     cryst_to_box_vectors,
     sort_tuple,
 )
@@ -29,12 +28,11 @@ __all__ = [
 def topology_from_pdb(
     file: PathLike[str] | str | IO[str] | TextIOBase,
     *,
-    unknown_molecules: Iterable[Molecule] = [],
     residue_database: Mapping[
         str,
         Iterable[ResidueDefinition],
     ] = CCD_RESIDUE_DEFINITION_CACHE,
-    additional_substructures: Iterable[ResidueDefinition] = [],
+    additional_definitions: Iterable[ResidueDefinition] = [],
     format: Literal["PDB", "CIF", None] = None,
     use_canonical_names: bool = False,
     ignore_unknown_CONECT_records: bool = False,
@@ -178,22 +176,17 @@ def topology_from_pdb(
     else:
         data = PdbData.from_file(file, format=format)  # type: ignore
 
-    topology = _build_topology(
-        matches=data.get_residue_matches(
-            residue_database,
-            additional_substructures,
-            unknown_molecules,
-        ),
-        data=data,
-        use_canonical_names=use_canonical_names,
+    matches = data.get_successful_matches(
+        residue_database,
+        list(additional_definitions),
     )
 
-    if set_stereochemistry_from_3d:
-        for molecule in topology.molecules:
-            # TODO: Speed this up
-            #   - Build up molecules in RDMol form to skip conversion step?
-            # This accounts for nearly half of the time to load 5ap1_prepared.pdb
-            assign_stereochemistry_from_3d(molecule)
+    topology = _build_topology(
+        matches=matches,
+        data=data,
+        use_canonical_names=use_canonical_names,
+        set_stereochemistry_from_3d=set_stereochemistry_from_3d,
+    )
 
     if not ignore_unknown_CONECT_records:
         _check_all_conects(topology, data)
@@ -206,50 +199,28 @@ def _build_topology(
     data: PdbData,
     *,
     use_canonical_names: bool,
+    set_stereochemistry_from_3d: bool,
 ) -> Topology:
-    this_molecule = Molecule()
-    molecules: list[Molecule] = [this_molecule]
+    rdmol = data.matches_to_rdmol(matches, use_canonical_names=use_canonical_names)
 
-    for chemical_data in matches:
-        # Apply the chemical data we've collected
-        if isinstance(chemical_data, MoleculeMatch):
-            this_molecule = chemical_data.residue_definition
-            if molecules[-1].n_atoms == 0:
-                molecules[-1] = this_molecule
-            else:
-                molecules.append(this_molecule)
-        elif isinstance(chemical_data, ResidueMatch):
-            this_molecule = _add_to_molecule(
-                molecules,
-                this_molecule,
-                chemical_data,
-                data,
-                use_canonical_names,
-            )
-        else:
-            assert_never(chemical_data)
+    # Set positions
+    logging.debug("Setting conformer to PDB positions")
+    rdmol_pdb_indices = [atom.properties["pdb_index"] for atom in rdmol.atoms]
+    positions = np.stack([data.x, data.y, data.z], axis=-1) * unit.angstrom
+    rdmol = rdmol.edit().add_conformer_and(positions[rdmol_pdb_indices]).freeze()
 
-        # Terminate the current molecule if this residue has no posterior bond
-        if isinstance(chemical_data, MoleculeMatch) or (
-            isinstance(chemical_data, ResidueMatch)
-            and chemical_data.posterior_bond_idcs is None
-        ):
-            this_molecule = Molecule()
-            molecules.append(this_molecule)
-
-        # TODO: Load other data from PDB file
-        # TODO: Incorporate CONECT records
-        # TODO: Deal with multi-model files
-
-    for offmol in molecules:
-        offmol._invalidate_cached_properties()
+    molecules: list[Molecule] = []
+    for rdmol in rdmol.split_molecule_fragments():
+        if set_stereochemistry_from_3d:
+            rdmol = rdmol.edit().assign_stereochemistry_from_3d_and().freeze()
+        offmol = rdmol.to_openff_molecule()
         offmol.add_default_hierarchy_schemes()
+        molecules.append(offmol)
 
-    topology = Topology.from_molecules(filter(lambda m: m.n_atoms != 0, molecules))
+    logging.debug("produce topology")
+    topology = Topology.from_molecules(molecules)
 
     topology_pdb_indices = [atom.metadata["pdb_index"] for atom in topology.atoms]
-    positions = np.stack([data.x, data.y, data.z], axis=-1) * unit.angstrom
-    topology.set_positions(positions[topology_pdb_indices])
     if topology_pdb_indices != list(range(len(topology_pdb_indices))):
         logging.debug(
             "\n".join(
@@ -308,146 +279,3 @@ def _set_box_vectors(topology: Topology, data: PdbData):
             data.cryst1_beta,
             data.cryst1_gamma,
         )
-
-
-def _add_to_molecule(
-    molecules: MutableSequence[Molecule],
-    this_molecule: Molecule,
-    residue_match: ResidueMatch,
-    data: PdbData,
-    use_canonical_names: bool,
-) -> Molecule:
-    # Identify the previous linking atom
-    linking_atom_idx: None | int = None
-    if residue_match.expects_prior_bond:
-        assert residue_match.residue_definition.linking_bond is not None
-        linking_atom_name = residue_match.residue_definition.linking_bond.atom1
-        for i in reversed(range(this_molecule.n_atoms)):
-            if this_molecule.atom(i).metadata["canonical_name"] == linking_atom_name:
-                linking_atom_idx = i
-                break
-        assert linking_atom_idx is not None, (
-            "Expecting a prior bond, but no linking atom found"
-        )
-
-    # Add the residue to the current molecule
-    atom_name_to_mol_idx: dict[str, int] = {}
-    pdb_idx_to_mol_idx: dict[int, int] = this_molecule.properties.setdefault(
-        "pdb_idx_to_mol_atom_idx",
-        {},
-    )
-    for pdb_index in sorted(residue_match.res_atom_idcs):
-        atom_def = residue_match.atom(pdb_index)
-
-        mol_atom_idx = this_molecule._add_atom(
-            atomic_number=elements.NUMBERS[atom_def.symbol],
-            formal_charge=atom_def.charge,
-            is_aromatic=atom_def.aromatic,
-            stereochemistry=None,
-            name=atom_def.name if use_canonical_names else data.name[pdb_index],
-            metadata={
-                **data._generate_atom_metadata(pdb_index),
-                "used_synonym": data.name[pdb_index],
-                "canonical_name": atom_def.name,
-                "matched_residue_description": residue_match.residue_definition.description,
-            },
-            invalidate_cache=False,
-        )
-        atom_name_to_mol_idx[atom_def.name] = mol_atom_idx
-        pdb_idx_to_mol_idx[pdb_index] = mol_atom_idx
-
-    for bond in residue_match.residue_definition.bonds:
-        if bond.atom1 in atom_name_to_mol_idx and bond.atom2 in atom_name_to_mol_idx:
-            this_molecule._add_bond(
-                atom1=atom_name_to_mol_idx[bond.atom1],
-                atom2=atom_name_to_mol_idx[bond.atom2],
-                bond_order=bond.order,
-                is_aromatic=bond.aromatic,
-                stereochemistry=bond.stereo,
-                invalidate_cache=False,
-            )
-
-    if linking_atom_idx is not None:
-        linking_bond = residue_match.residue_definition.linking_bond
-        assert linking_bond is not None, (
-            "linking_atom_idx is only set when linking_atom_idx is None"
-        )
-        this_molecule._add_bond(
-            atom1=linking_atom_idx,
-            atom2=atom_name_to_mol_idx[linking_bond.atom2],
-            bond_order=linking_bond.order,
-            is_aromatic=linking_bond.aromatic,
-            stereochemistry=linking_bond.stereo,
-            invalidate_cache=False,
-        )
-
-    if residue_match.crosslink_idcs is not None:
-        this_idx, other_idx = residue_match.crosslink_idcs
-        crosslink_bond = residue_match.residue_definition.crosslink
-        assert crosslink_bond is not None, "Crosslink cannot be None if in match"
-        if other_idx > this_idx:
-            # If this residue is the first residue of the crosslink to be added,
-            # skip it and wait for the other residue to be read.
-            return this_molecule
-
-        # If the crosslink is within this molecule, just add the bond
-        if other_idx in pdb_idx_to_mol_idx:
-            this_molecule._add_bond(
-                atom1=pdb_idx_to_mol_idx[this_idx],
-                atom2=pdb_idx_to_mol_idx[other_idx],
-                bond_order=crosslink_bond.order,
-                is_aromatic=crosslink_bond.aromatic,
-                stereochemistry=crosslink_bond.stereo,
-                invalidate_cache=False,
-            )
-            return this_molecule
-
-        for other_molecule in molecules:
-            other_mol_pdb_idx_to_mol_atom_idx: dict[int, int] = (
-                other_molecule.properties["pdb_idx_to_mol_atom_idx"]
-            )
-            assert isinstance(
-                other_mol_pdb_idx_to_mol_atom_idx,
-                dict,
-            ), "This property should have already been set by Pablo"
-
-            if other_idx in other_mol_pdb_idx_to_mol_atom_idx:
-                # Forming a crosslink to a previously terminated molecule
-                # Transfer all atoms from this molecule into the other
-                old_to_new: dict[int, int] = {}
-                for old_idx, atom in enumerate(this_molecule.atoms):
-                    old_to_new[old_idx] = other_molecule._add_atom(
-                        atomic_number=atom.atomic_number,
-                        formal_charge=atom.formal_charge.m,  # type:ignore
-                        is_aromatic=atom.is_aromatic,
-                        stereochemistry=atom.stereochemistry,
-                        name=atom.name,
-                        metadata=dict(atom.metadata),
-                        invalidate_cache=False,
-                    )
-                for bond in this_molecule.bonds:
-                    other_molecule._add_bond(
-                        atom1=old_to_new[bond.atom1_index],
-                        atom2=old_to_new[bond.atom2_index],
-                        bond_order=bond.bond_order,
-                        is_aromatic=bond.is_aromatic,
-                        stereochemistry=bond.stereochemistry,
-                        invalidate_cache=False,
-                    )
-                other_mol_pdb_idx_to_mol_atom_idx.update(
-                    {k: old_to_new[v] for k, v in pdb_idx_to_mol_idx.items()},
-                )
-                # Add the crosslink
-                other_molecule._add_bond(
-                    atom1=other_mol_pdb_idx_to_mol_atom_idx[this_idx],
-                    atom2=other_mol_pdb_idx_to_mol_atom_idx[other_idx],
-                    bond_order=crosslink_bond.order,
-                    is_aromatic=crosslink_bond.aromatic,
-                    stereochemistry=crosslink_bond.stereo,
-                    invalidate_cache=False,
-                )
-                # Discard the old molecule
-                molecules[:] = [mol for mol in molecules if mol is not this_molecule]
-                return other_molecule
-
-    return this_molecule

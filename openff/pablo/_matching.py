@@ -1,18 +1,17 @@
+import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from functools import cached_property
-from typing import ClassVar, Protocol, Self, TypeAlias
-
-from openff.toolkit import Molecule
+from typing import ClassVar, Protocol, TypeAlias
 
 from openff.pablo._utils import sort_tuple
 
-from .residue import AtomDefinition, ResidueDefinition
+from .residue import AtomDefinition, BondDefinition, ResidueDefinition
 
 
 @dataclass(frozen=True)
 class PossibleMatchProtocol(Protocol):
-    residue_definition: ResidueDefinition | str | Molecule
+    residue_definition: ResidueDefinition | str
     index_to_atomdef: Mapping[int, AtomDefinition | None]
     is_match: ClassVar[bool]
 
@@ -27,8 +26,6 @@ class PossibleMatchProtocol(Protocol):
     def description(self) -> str:
         if isinstance(self.residue_definition, str):
             return self.residue_definition
-        elif isinstance(self.residue_definition, Molecule):
-            return self.residue_definition.name
         else:
             return self.residue_definition.description
 
@@ -97,6 +94,7 @@ class ResidueMismatch(MismatchProtocol):
 class ResidueMatch(MatchProtocol):
     residue_definition: ResidueDefinition
     index_to_atomdef: dict[int, AtomDefinition]
+    vsite_idcs: tuple[int, ...]
     prior_bond_idcs: tuple[int, int] | None = None
     posterior_bond_idcs: tuple[int, int] | None = None
     crosslink_idcs: tuple[int, int] | None = None
@@ -134,7 +132,7 @@ class ResidueMatch(MatchProtocol):
         if self.residue_definition.linking_bond is None:
             raise ValueError("cannot set prior bond without linking_bond")
         if atom1_idx in self.res_atom_idcs:
-            raise ValueError("atom1 in prior bond should be in previous residue")
+            raise ValueError("atom1 in prior bond should be in another residue")
         if atom2_idx not in self.res_atom_idcs:
             raise ValueError("atom2 in prior bond should be in this residue")
 
@@ -150,7 +148,7 @@ class ResidueMatch(MatchProtocol):
         if atom1_idx not in self.res_atom_idcs:
             raise ValueError("atom1 in posterior bond should be in this residue")
         if atom2_idx in self.res_atom_idcs:
-            raise ValueError("atom2 in posterior bond should be in next residue")
+            raise ValueError("atom2 in posterior bond should be in another residue")
 
         object.__setattr__(
             self,
@@ -221,6 +219,36 @@ class ResidueMatch(MatchProtocol):
             and expected_leaving_atoms.issubset(self.missing_leaving_atoms)
         )
 
+    def get_sorted_bond_map(self) -> dict[tuple[int, int], BondDefinition]:
+        d: dict[tuple[int, int], BondDefinition] = {
+            sort_tuple(
+                (
+                    self.canonical_atom_name_to_index[bond.atom1],
+                    self.canonical_atom_name_to_index[bond.atom2],
+                ),
+            ): bond
+            for bond in self.residue_definition.bonds
+            if (
+                bond.atom1 in self.canonical_atom_name_to_index
+                and bond.atom2 in self.canonical_atom_name_to_index
+            )
+        }
+
+        for bond_idcs, bond_definition in [
+            (self.crosslink_idcs, self.residue_definition.crosslink),
+            (self.prior_bond_idcs, self.residue_definition.linking_bond),
+            (self.posterior_bond_idcs, self.residue_definition.linking_bond),
+        ]:
+            if bond_idcs is not None:
+                assert bond_definition is not None
+                i, j = bond_idcs
+                if i < j:
+                    d[i, j] = bond_definition
+                else:
+                    d[j, i] = bond_definition.flipped()
+
+        return d
+
     def agrees_with(self, other: MatchProtocol) -> bool:
         """``True`` if both matches would assign the same chemistry, ``False`` otherwise.
 
@@ -228,15 +256,25 @@ class ResidueMatch(MatchProtocol):
         connectivity graphs (ignoring bond order) and net formal charges are
         identical."""
         if set(self.index_to_atomdef.keys()) != set(other.index_to_atomdef.keys()):
+            logging.debug(
+                "  DISAGREE: Covers different indices"
+                + f" ({set(self.index_to_atomdef.keys())}"
+                + f" vs {set(other.index_to_atomdef.keys())})",
+            )
             return False
 
         if not isinstance(other, ResidueMatch):
+            logging.debug("  deferring to super class")
             return super().agrees_with(other)
 
         # All atoms should have the same element
         for i, self_atom in self.index_to_atomdef.items():
             other_atom = other.index_to_atomdef[i]
             if self_atom.symbol != other_atom.symbol:
+                logging.debug(
+                    f"  DISAGREE: elements differ at index {i}:"
+                    + f" {self_atom.symbol} vs {other_atom.symbol}",
+                )
                 return False
 
         # Net charge should be identical
@@ -251,6 +289,10 @@ class ResidueMatch(MatchProtocol):
             if atom.name in other.canonical_atom_name_to_index
         )
         if self_net_charge != other_net_charge:
+            logging.debug(
+                "  DISAGREES: Total formal charge differs:"
+                + f" {self_net_charge} vs {other_net_charge}",
+            )
             return False
 
         # Internal connectivity graph should be identical
@@ -277,6 +319,7 @@ class ResidueMatch(MatchProtocol):
             and bond.atom2 in other.canonical_atom_name_to_index
         }
         if self_bonds != other_bonds:
+            logging.debug("  DISAGREES: Bonds differ")
             return False
 
         # External connectivity graph should be identical
@@ -291,36 +334,24 @@ class ResidueMatch(MatchProtocol):
                 )
             )
         ):
+            logging.debug("  DISAGREES: external bonds differ")
             return False
 
         if (self.expects_prior_bond or self.expects_posterior_bond) and (
             self.residue_definition.linking_bond
             != other.residue_definition.linking_bond
         ):
+            logging.debug("  DISAGREES: linking bonds differ")
             return False
 
-        return (
+        expect_same_bonds = (
             self.expects_crosslink == other.expects_crosslink
             and self.expects_prior_bond == other.expects_prior_bond
             and self.expects_posterior_bond == other.expects_posterior_bond
         )
-
-
-@dataclass(frozen=True)
-class MoleculeMatch(MatchProtocol):
-    residue_definition: Molecule
-    index_to_atomdef: dict[int, None]
-    is_match = True
-
-    def agrees_with(self, other: MatchProtocol) -> bool:
-        return (  # no-fmt
-            other.residue_definition is self.residue_definition
-            and set(self.index_to_atomdef.keys()) == set(other.index_to_atomdef.keys())
-        )
-
-    @property
-    def match(self) -> Self:
-        return self
+        if not expect_same_bonds:
+            logging.debug("  DISAGREES: Expects different linking bonds")
+        return expect_same_bonds
 
 
 class ResidueConectMismatch(ResidueMismatch):
@@ -338,11 +369,26 @@ class ResidueConectMatch(ResidueMatch):
         )
 
 
-SuccessfulMatch: TypeAlias = ResidueMatch | MoleculeMatch
+SuccessfulMatch: TypeAlias = ResidueMatch
 PossibleResidueMatch: TypeAlias = SuccessfulMatch | MismatchProtocol
 
 
 def only_matched(
     iterable: Iterable[PossibleResidueMatch],
-) -> Iterable[MatchProtocol]:
-    return (p for p in iterable if isinstance(p, MatchProtocol))
+) -> Iterable[SuccessfulMatch]:
+    return (p for p in iterable if isinstance(p, SuccessfulMatch))
+
+
+def unwrap_successful(iterable: Iterable[PossibleResidueMatch]) -> SuccessfulMatch:
+    iterator = iter(only_matched(iterable))
+
+    try:
+        value = next(iterator)
+    except StopIteration:
+        raise ValueError("container has no successful elements")
+
+    for redundancy in iterator:
+        if not value.agrees_with(redundancy):
+            raise ValueError("container has multiple disagreeing successful elements")
+
+    return value

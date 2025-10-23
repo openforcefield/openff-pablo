@@ -1,7 +1,11 @@
 import pytest
 from openff.toolkit import Molecule
 
+from openff.pablo._tests.utils import get_test_data_path
+from openff.pablo._utils import unwrap
+from openff.pablo.ccd import CCD_RESIDUE_DEFINITION_CACHE
 from openff.pablo.chem import DISULFIDE_BOND, PEPTIDE_BOND
+from openff.pablo.exceptions import ResidueValidationError
 from openff.pablo.residue import (
     AtomDefinition,
     BondDefinition,
@@ -492,3 +496,44 @@ class TestResidueDefinition:
         )
         with pytest.raises(ValueError, match="Virtual sites may not clash"):
             resdef.with_synonyms({"H": ["EP"]})
+
+    def test_anon_from_sdf(self):
+        sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
+        mol = Molecule.from_file(sdf_path, "SDF")
+        resdef = ResidueDefinition.anon_from_sdf(sdf_path)
+        assert resdef.to_openff_molecule() == mol
+
+    def test_leaving_fragment_of_core_atom(self, cys_def: ResidueDefinition):
+        assert sorted(cys_def._leaving_fragment_of("SG")) == ["HG"]
+        assert sorted(cys_def._leaving_fragment_of("N")) == ["H2"]
+        assert sorted(cys_def._leaving_fragment_of("C")) == ["HXT", "OXT"]
+
+    def test_leaving_fragment_of_leaving_atom(self, cys_def: ResidueDefinition):
+        assert sorted(cys_def._leaving_fragment_of("HG")) == ["HG"]
+        assert sorted(cys_def._leaving_fragment_of("H2")) == ["H2"]
+        assert sorted(cys_def._leaving_fragment_of("OXT")) == ["HXT", "OXT"]
+
+    def test_validate_linking_atoms_have_single_leaving_fragment(self):
+        resdef = unwrap(
+            resdef
+            for resdef in CCD_RESIDUE_DEFINITION_CACHE["LYS"]
+            if resdef.description == "LYSINE"
+        )
+        with pytest.raises(ResidueValidationError):
+            resdef.replace(
+                residue_name="LY6",
+                crosslink=BondDefinition.with_defaults(atom1="NZ", atom2="CD"),
+                atoms=[
+                    (
+                        atom.replace(leaving=True)
+                        if atom.name in {"HZ2", "HZ3"}
+                        else (
+                            atom.replace(synonyms=(*atom.synonyms, "HZ"))
+                            if atom.name == "HZ1"
+                            else atom
+                        )
+                    )
+                    for atom in resdef.atoms
+                ],
+                description=resdef.description + " w/ crosslink",
+            )

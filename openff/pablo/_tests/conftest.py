@@ -2,6 +2,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import pytest
+from openff.toolkit import Molecule, Topology
 
 from openff.pablo._pdb_data import PdbData, ResidueMatch
 from openff.pablo._tests.utils import get_test_data_path
@@ -72,6 +73,13 @@ def vicinal_disulfide_data() -> PdbData:
     return PdbData.from_file(
         get_test_data_path("3cu9_vicinal_disulfide.pdb"),
     )
+
+
+@pytest.fixture
+def vicinal_disulfide_molecule() -> Molecule:
+    return Topology.from_pdb(
+        get_test_data_path("3cu9_vicinal_disulfide.pdb"),
+    ).molecule(0)
 
 
 @pytest.fixture
@@ -348,6 +356,7 @@ def cys_match(cys_def: ResidueDefinition) -> ResidueMatch:
         residue_definition=cys_def,
         crosslink_idcs=None,
         index_to_atomdef={i: atom for i, atom in enumerate(cys_def.atoms)},
+        vsite_idcs=(),
     )
 
 
@@ -360,6 +369,7 @@ def cys_match_no_leaving(cys_def: ResidueDefinition) -> ResidueMatch:
         index_to_atomdef={
             next(counter): atom for atom in cys_def.atoms if not atom.leaving
         },
+        vsite_idcs=(),
     )
 
 
@@ -376,6 +386,7 @@ def cys_match_no_leaving_deprotonated_sidechain(
             for atom in cys_def_deprotonated_sidechain.atoms
             if not atom.leaving
         },
+        vsite_idcs=(),
     )
 
 
@@ -385,6 +396,7 @@ def hoh_match(hoh_def: ResidueDefinition) -> ResidueMatch:
         residue_definition=hoh_def,
         crosslink_idcs=None,
         index_to_atomdef={i: atom for i, atom in enumerate(hoh_def.atoms)},
+        vsite_idcs=(),
     )
 
 

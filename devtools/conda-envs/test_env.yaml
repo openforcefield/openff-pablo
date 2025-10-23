@@ -4,8 +4,8 @@ channels:
 dependencies:
   # Base depends (runtime and imports)
   - pip
-  - python>=3.11
-  - openff-toolkit-base>=0.17.0
+  - python>=3.12
+  - openff-toolkit-base>=0.17.1
   - rdkit
   - openmm
   - pyxdg
@@ -20,6 +20,7 @@ dependencies:
   - pytest
   - pytest-xdist
   - pytest-socket
+  - pytest-timeout
   # - pytest-cov
   # - codecov
 
@@ -44,6 +45,3 @@ dependencies:
   - openff-nagl-base >= 0.5.2
   - openff-nagl-models
   - pytorch-cpu >= 2.6
-
-  - pip:
-      - git+https://github.com/openforcefield/openff-toolkit.git@main

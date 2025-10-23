@@ -76,6 +76,7 @@ class TestResidueMatch:
             index_to_atomdef={
                 i: atom for i, atom in enumerate(hoh_def.atoms) if atom.name != "O"
             },
+            vsite_idcs=(),
         )
         assert match.missing_atoms == {"O"}
         assert match.missing_leaving_atoms == set()
@@ -141,10 +142,12 @@ class TestResidueMatch:
         match1 = ResidueMatch(
             residue_definition=resdef,
             index_to_atomdef={10: c, 11: h, 12: o, 13: ox},
+            vsite_idcs=(),
         )
         match2 = ResidueMatch(
             residue_definition=resdef,
             index_to_atomdef={10: c, 11: h, 12: ox, 13: o},
+            vsite_idcs=(),
         )
         assert match1.agrees_with(match2)
 
@@ -177,10 +180,12 @@ class TestResidueMatch:
         match1 = ResidueMatch(
             residue_definition=benzene,
             index_to_atomdef=dict(enumerate(benzene.atoms)),
+            vsite_idcs=(),
         )
         match2 = ResidueMatch(
             residue_definition=benzene_alt_kekulization,
             index_to_atomdef=dict(enumerate(benzene_alt_kekulization.atoms)),
+            vsite_idcs=(),
         )
         assert match1.agrees_with(match2), "alternate kekulization"
 
@@ -188,6 +193,7 @@ class TestResidueMatch:
         match1 = ResidueMatch(
             residue_definition=benzene,
             index_to_atomdef=dict(enumerate(benzene.atoms)),
+            vsite_idcs=(),
         )
         match2 = ResidueMatch(
             residue_definition=benzene,
@@ -205,6 +211,7 @@ class TestResidueMatch:
                 10: benzene.atoms[9],
                 11: benzene.atoms[11],
             },
+            vsite_idcs=(),
         )
         assert not match1.agrees_with(match2), "incorrect elements"
 
@@ -212,6 +219,7 @@ class TestResidueMatch:
         match1 = ResidueMatch(
             residue_definition=benzene,
             index_to_atomdef=dict(enumerate(benzene.atoms)),
+            vsite_idcs=(),
         )
         match2 = ResidueMatch(
             residue_definition=benzene,
@@ -229,6 +237,7 @@ class TestResidueMatch:
                 10: benzene.atoms[10],
                 11: benzene.atoms[11],
             },
+            vsite_idcs=(),
         )
         assert not match1.agrees_with(match2), "incorrect connectivity"
 
@@ -236,9 +245,11 @@ class TestResidueMatch:
         match1 = ResidueMatch(
             residue_definition=benzene,
             index_to_atomdef=dict(enumerate(benzene.atoms)),
+            vsite_idcs=(),
         )
         match2 = ResidueMatch(
             residue_definition=contrived_dicarbanion,
             index_to_atomdef=dict(enumerate(contrived_dicarbanion.atoms)),
+            vsite_idcs=(),
         )
         assert not match1.agrees_with(match2), "incorrect total charge"

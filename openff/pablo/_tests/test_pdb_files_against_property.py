@@ -387,7 +387,7 @@ def test_e2_loads_via_conects():
         assert i_atom.metadata["canonical_name"] == j_atom.name
 
 
-def test_3ip9_trimmed_loads_via_conects():
+def test_3ip9_trimmed_loads_via_conects_like_legacy():
     path = get_test_data_path("3ip9_dye_trimmed.pdb")
     smiles = "[c:1]1([H:41])[c:2]([H:42])[c:3]2[c:4]([c:5]([H:43])[c:6]1[N:7]1[C:8](=[O:9])[C:10]([H:44])([H:45])[C@@:11]([S:12][C:13]([C@:14]([N:15]([H:16])[H:50])([C:17](=[O:18])[O:19][H:59])[H:49])([H:47])[H:48])([H:46])[C:20]1=[O:21])[C:22](=[O:23])[O:24][C:25]21[c:26]2[c:27]([c:28]([H:51])[c:29]([O:32][H:54])[c:30]([H:52])[c:31]2[H:53])[O:33][c:34]2[c:35]1[c:36]([H:55])[c:37]([H:56])[c:38]([O:40][H:58])[c:39]2[H:57]"
 
@@ -464,6 +464,129 @@ def test_3ip9_trimmed_loads_via_conects():
             pablo_res_charge += pablo_atom.formal_charge  # type:ignore
             legacy_res_charge += legacy_atom.formal_charge  # type:ignore
         assert pablo_res_charge == legacy_res_charge
+
+
+def test_3ip9_trimmed_loads_via_conects():
+    resdef = ResidueDefinition.from_smiles(
+        mapped_smiles="[c:1]1([H:41])[c:2]([H:42])[c:3]2[c:4]([c:5]([H:43])[c:6]1[N:7]1[C:8](=[O:9])[C:10]([H:44])([H:45])[C@@:11]([S:12][C:13]([C@:14]([N:15]([H:16])[H:50])([C:17](=[O:18])[O:19][H:59])[H:49])([H:47])[H:48])([H:46])[C:20]1=[O:21])[C:22](=[O:23])[O:24][C:25]21[c:26]2[c:27]([c:28]([H:51])[c:29]([O:32][H:54])[c:30]([H:52])[c:31]2[H:53])[O:33][c:34]2[c:35]1[c:36]([H:55])[c:37]([H:56])[c:38]([O:40][H:58])[c:39]2[H:57]",
+        leaving_atoms=[16, 19, 59],
+        atom_names={**{i: str(i) for i in range(1, 60)}, 15: "N", 17: "C"},
+        residue_name="DYE",
+        linking_bond=PEPTIDE_BOND,
+        description="CYSTEINE-CONJUGATED FLUOROPHORE MALEIMIDE",
+    )
+
+    pdb_path = get_test_data_path("3ip9_dye_trimmed.pdb")
+
+    top = topology_from_pdb(
+        pdb_path,
+        residue_database=CCD_RESIDUE_DEFINITION_CACHE.with_([resdef]),
+    )
+
+    sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
+    ref_mol = Molecule.from_file(sdf_path, "SDF")
+    if not isinstance(ref_mol, Molecule):
+        ref_mol = unwrap(ref_mol)
+
+    top_mol = unwrap(top.molecules)
+    assert isinstance(top_mol, Molecule)
+
+    assert top_mol.to_smiles() == ref_mol.to_smiles()
+    assert top_mol.is_isomorphic_with(ref_mol)
+
+
+def test_3ip9_trimmed_loads_via_dye_additional_definitions():
+    resdef = ResidueDefinition.from_smiles(
+        mapped_smiles="[c:1]1([H:41])[c:2]([H:42])[c:3]2[c:4]([c:5]([H:43])[c:6]1[N:7]1[C:8](=[O:9])[C:10]([H:44])([H:45])[C@@:11]([S:12][C:13]([C@:14]([N:15]([H:16])[H:50])([C:17](=[O:18])[O:19][H:59])[H:49])([H:47])[H:48])([H:46])[C:20]1=[O:21])[C:22](=[O:23])[O:24][C:25]21[c:26]2[c:27]([c:28]([H:51])[c:29]([O:32][H:54])[c:30]([H:52])[c:31]2[H:53])[O:33][c:34]2[c:35]1[c:36]([H:55])[c:37]([H:56])[c:38]([O:40][H:58])[c:39]2[H:57]",
+        leaving_atoms=[16, 19, 59],
+        atom_names={**{i: str(i) for i in range(1, 60)}, 15: "N", 17: "C"},
+        residue_name="DYE",
+        linking_bond=PEPTIDE_BOND,
+        description="CYSTEINE-CONJUGATED FLUOROPHORE MALEIMIDE",
+    )
+
+    pdb_path = get_test_data_path("3ip9_dye_trimmed.pdb")
+
+    top = topology_from_pdb(pdb_path, additional_definitions=[resdef])
+
+    sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
+    ref_mol = Molecule.from_file(sdf_path, "SDF")
+    if not isinstance(ref_mol, Molecule):
+        ref_mol = unwrap(ref_mol)
+
+    top_mol = unwrap(top.molecules)
+    assert isinstance(top_mol, Molecule)
+
+    assert top_mol.is_isomorphic_with(ref_mol)
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "3ip9_dye_trimmed.pdb",
+        # TODO: Implement this somehow
+        pytest.param("3ip9_dye_trimmed_dyecys.pdb", marks=pytest.mark.xfail),
+    ],
+)
+def test_3ip9_trimmed_loads_via_anon_dye_additional_definitions(filename: str):
+    resdef = ResidueDefinition.anon_from_smiles_marked_leaving(
+        smiles="[H:1]N[C@@H](CS[C@H]1CC(=O)N(c2ccc3c(c2)C(=O)OC32c3ccc(O)cc3Oc3cc(O)ccc32)C1=O)C(=O)[O:2][H:3]",
+        # smiles="[c]1([H])[c]([H])[c]2[c]([c]([H])[c]1[N]1[C](=[O])[C]([H])([H])[C@@]([S][C]([C@]([N]([H:16])[H])([C](=[O])[O:19][H:59])[H])([H])[H])([H])[C]1=[O])[C](=[O])[O][C]21[c]2[c]([c]([H])[c]([O][H])[c]([H])[c]2[H])[O][c]2[c]1[c]([H])[c]([H])[c]([O][H])[c]2[H]",
+        description="CYSTEINE-CONJUGATED FLUOROPHORE MALEIMIDE",
+    )
+
+    pdb_path = get_test_data_path(filename)
+
+    top = topology_from_pdb(pdb_path, additional_definitions=[resdef])
+
+    sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
+    ref_mol = Molecule.from_file(sdf_path, "SDF")
+    if not isinstance(ref_mol, Molecule):
+        ref_mol = unwrap(ref_mol)
+
+    top_mol = unwrap(top.molecules)
+    assert isinstance(top_mol, Molecule)
+
+    assert top_mol.to_smiles() == ref_mol.to_smiles()
+    assert top_mol.is_isomorphic_with(ref_mol)
+
+
+def test_3ip9_trimmed_loads_via_anon_whole_molecule_additional_definitions():
+    pdb_path = get_test_data_path("3ip9_dye_trimmed.pdb")
+    sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
+
+    resdef = ResidueDefinition.anon_from_sdf(sdf_path)
+
+    top = topology_from_pdb(pdb_path, additional_definitions=[resdef])
+
+    ref_mol = Molecule.from_file(sdf_path, "SDF")
+    if not isinstance(ref_mol, Molecule):
+        ref_mol = unwrap(ref_mol)
+
+    top_mol = unwrap(top.molecules)
+    assert isinstance(top_mol, Molecule)
+
+    assert top_mol.to_smiles() == ref_mol.to_smiles()
+    assert top_mol.is_isomorphic_with(ref_mol)
+
+
+def test_3ip9_trimmed_loads_via_whole_molecule_unique_molecules():
+    pdb_path = get_test_data_path("3ip9_dye_trimmed.pdb")
+    sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
+
+    mol = Molecule.from_file(sdf_path, "SDF")
+    assert isinstance(mol, Molecule)
+    top = Topology.from_pdb(pdb_path, unique_molecules=[mol])
+
+    ref_mol = Molecule.from_file(sdf_path, "SDF")
+    if not isinstance(ref_mol, Molecule):
+        ref_mol = unwrap(ref_mol)
+
+    top_mol = unwrap(top.molecules)
+    assert isinstance(top_mol, Molecule)
+
+    assert top_mol.to_smiles() == ref_mol.to_smiles()
+    assert top_mol.is_isomorphic_with(ref_mol)
 
 
 @pytest.mark.slow
@@ -775,7 +898,6 @@ def test_polyglycines_loads_with_augmented_ccd():
         assert molecule.hill_formula == "H2O"
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize(
     "resdb",
     [
@@ -789,17 +911,25 @@ def test_polyglycines_loads_with_augmented_ccd():
         "empty",
     ],
 )
-def test_5ap1_prepared_fails_with_broken_resdefs(
+@pytest.mark.parametrize(
+    "filename",
+    [
+        pytest.param("5ap1_prepared.pdb", marks=pytest.mark.slow),
+        "5ap1_nosol.pdb",
+    ],
+)
+def test_5ap1_fails_with_broken_resdefs(
     resdb: Mapping[str, Sequence[ResidueDefinition]],
+    filename: str,
 ):
-    path = get_test_data_path("5ap1_prepared.pdb").absolute()
+    path = get_test_data_path(filename).absolute()
 
     with pytest.raises(PdbResidueMatchError):
         topology_from_pdb(
             path,
             residue_database=resdb,
-            unknown_molecules=[
-                Molecule.from_smiles(
+            additional_definitions=[
+                ResidueDefinition.anon_from_smiles(
                     "O=C([O-])Cn1cc(cn1)c2ccc(cc2OCC#N)Nc3ccc(c(n3)NC4CCCCC4)C#N",
                 ),
             ],
@@ -848,7 +978,7 @@ def test_microviridin_crosslinks():
                     atoms=[
                         (
                             atom.replace(leaving=True)
-                            if atom.name in {"HZ2", "HZ3"}
+                            if atom.name == "HZ2"
                             else (
                                 atom.replace(synonyms=(*atom.synonyms, "HZ"))
                                 if atom.name == "HZ1"
@@ -860,7 +990,7 @@ def test_microviridin_crosslinks():
                     description=resdef.description + " w/ crosslink",
                 )
                 for resdef in CCD_RESIDUE_DEFINITION_CACHE["LYS"]
-                if resdef.description == "LYSINE"
+                if resdef.description == "LYSINE -HZ3"
             ],
             "G13": [
                 resdef.replace(
@@ -916,18 +1046,16 @@ def test_microviridin_crosslinks():
 
 @pytest.mark.slow
 def test_complex_pdb_1flr():
-    ligand = Molecule.from_file(
+    ligand = ResidueDefinition.anon_from_sdf(
         get_test_data_path("prepared_pdbs/1FLR_Ligand.sdf"),
-        file_format="SDF",
     )
-    assert isinstance(ligand, Molecule)
 
     with pytest.warns(
         match="Alt locs not supported; only empty or 'A' alt locs will be read",
     ):
         topology = topology_from_pdb(
             get_test_data_path("prepared_pdbs/1FLR_prepared.pdb"),
-            unknown_molecules=[ligand],
+            additional_definitions=[ligand],
             residue_database=CCD_RESIDUE_DEFINITION_CACHE.with_(
                 {
                     "NMA": [
@@ -974,3 +1102,19 @@ def test_complex_pdb_1flr():
     #   (ATOM  |HETATM).{10}(A| ).{4}L
     assert topology.n_atoms == 7539
     assert {k: len(v) for k, v in chains.items()} == {"H": 3712, "L": 3827}
+
+
+# TODO: Debug this
+@pytest.mark.xfail
+def test_sindhikara_using_sdf():
+    ligand = ResidueDefinition.anon_from_sdf(
+        get_test_data_path("sindhikara/7yv1_ligand.sdf"),
+    )
+
+    _topology = topology_from_pdb(
+        file=get_test_data_path("sindhikara/7yv1_prepped.pdb"),
+        additional_definitions=[ligand],
+    )
+
+
+# TODO: Test that the correct atom metadata are written out (as documented in topology_from_pdb())
