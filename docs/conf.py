@@ -23,11 +23,7 @@ import openff.pablo
 # -- Project information -----------------------------------------------------
 
 project = "OpenFF Pablo"
-copyright = (
-    "2025, Josh Mitchell."
-    + " Project structure based on the OpenFF Cookiecutter"
-    + " version 0.1"
-)
+copyright = "2025, Open Force Field Initiative."
 author = "Josh Mitchell"
 
 # The short X.Y version
@@ -284,7 +280,7 @@ html_theme_options = {
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
 
-html_css_files = ["css/paramref.css"]
+html_css_files = ["css/paramref.css", "css/ipython3.css"]
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.

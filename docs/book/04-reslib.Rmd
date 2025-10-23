@@ -1,7 +1,7 @@
 (chapter:reslib)=
 # The residue library
 
-Unlike all other PDB loading tools we know about, Pablo exposes its library of known residues to the user for inspection, modification, and even replacement at runtime. This can be done with the [`residue_library`] argument to `topology_from_pdb`. `residue_library` takes a mapping from residue IDs to a list of residue definitions (see [](#chapter:resdef)). All of these definitions are matched against any residue with that ID, and all that do match must agree on their chemistry --- Pablo would rather raise an error than provide ambiguous chemistry. Pablo does permit alternate resonance forms --- matches agree chemically if that have identical elements, connectivity, and net formal charge.
+Unlike all other PDB loading tools we know about, Pablo exposes its library of known residues to the user for inspection, modification, and even replacement at runtime. This can be done with the [`residue_library`] argument to `topology_from_pdb`. `residue_library` takes a mapping from residue IDs to a list of residue definitions (see [](#chapter:resdef)). All of these definitions are matched against any residue with that ID, and all that do match must agree on their chemistry --- Pablo would rather raise an error than provide ambiguous chemistry. Pablo does permit alternate resonance forms --- matches agree chemically if they have identical elements, connectivity, and net formal charge.
 
 ## The default residue library: `STD_CCD_CACHE`
 

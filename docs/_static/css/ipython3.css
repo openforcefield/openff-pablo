@@ -1,0 +1,37 @@
+.content .highlight-python,
+.content .highlight-py,
+.content .highlight-python3,
+.content .highlight-py3,
+.content .highlight-pycon,
+.content .highlight-ipython3 {
+    position: relative;
+}
+.content .highlight-python .highlight::before,
+.content .highlight-py .highlight::before,
+.content .highlight-python3 .highlight::before,
+.content .highlight-py3 .highlight::before,
+.content .highlight-pycon .highlight::before,
+.content .highlight-ipython3 .highlight::before {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    content: "Python";
+    color: #696969;
+    font-size: 80%;
+    font-family: Cousine, monospace;
+    font-variant: small-caps;
+    position: absolute;
+    right: 0.18rem;
+    top: 0.18rem;
+    line-height: 0.8;
+}
+.content .highlight-python .highlight pre,
+.content .highlight-py .highlight pre,
+.content .highlight-python3 .highlight pre,
+.content .highlight-py3 .highlight pre,
+.content .highlight-pycon .highlight pre,
+.content .highlight-ipython3 .highlight pre {
+    background: none;
+}
