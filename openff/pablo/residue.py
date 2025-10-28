@@ -25,6 +25,7 @@ from openff.pablo.exceptions import PabloError, ResidueValidationError
 __all__ = [
     "AtomDefinition",
     "BondDefinition",
+    "ResidueDefinition",
 ]
 
 _residue_definition_skip_validation = False
@@ -391,7 +392,7 @@ class ResidueDefinition:
         virtual_sites: Collection[str] = (),
     ) -> Self:
         """
-        Create an anoymous ``ResidueDefinition`` from an `openff.toolkit.Molecule`.
+        Create an anoymous ``ResidueDefinition`` from an ``openff.toolkit.Molecule``.
 
         Parameters
         ----------
@@ -485,7 +486,7 @@ class ResidueDefinition:
         virtual_sites: Collection[str] = (),
     ) -> Self:
         """
-        Create a ``ResidueDefinition`` from an `openff.toolkit.Molecule`.
+        Create a ``ResidueDefinition`` from an ``openff.toolkit.Molecule``.
 
         Parameters
         ----------
@@ -594,7 +595,7 @@ class ResidueDefinition:
         description: str | None = None,
     ) -> Self:
         """
-        Create a linking ``ResidueDefinition`` from an `openff.toolkit.Molecule`
+        Create a linking ``ResidueDefinition`` from an ``openff.toolkit.Molecule``
 
         Parameters
         ----------

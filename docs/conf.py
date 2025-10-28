@@ -11,9 +11,9 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
-import importlib.util
 
 # In case the project was not installed
+import importlib.util
 import os
 import sys
 
@@ -71,7 +71,48 @@ autosummary_generate = True
 # Document imported items iff they're in __all__
 autosummary_imported_members = False
 autosummary_ignore_module_all = False
+
 # Autosummary template configuration
+type ObjInfo = set[str]
+
+
+def get_context_flat(obj: object, name: str, max_depth: int = 10) -> dict[str, ObjInfo]:
+    import functools
+    import inspect
+    from typing import Self
+
+    if name.count(".") > max_depth:
+        return {}
+
+    info = set()
+    if isinstance(obj, property) or isinstance(obj, functools.cached_property):
+        info.add("property")
+    if (
+        inspect.ismethod(obj)
+        and inspect.isclass(obj.__self__)
+        and inspect.signature(obj).return_annotation is Self
+    ):
+        info.add("constructor")
+    if inspect.isclass(obj):
+        info.add("class")
+    if inspect.isfunction(obj):
+        info.add("function")
+
+    context = {name: info}
+    for member_name, member in inspect.getmembers(obj):
+        if member_name.startswith("_"):
+            continue
+        member_dict = get_context_flat(
+            member,
+            f"{name}.{member_name}",
+            max_depth=max_depth - 1,
+        )
+        context.update(member_dict)
+
+    return context
+
+
+package_context = get_context_flat(openff.pablo, "openff.pablo")
 autosummary_context = {
     # Modules to exclude from API docs
     "exclude_modules": [
@@ -80,6 +121,7 @@ autosummary_context = {
     "show_inheritance": True,
     "show_inherited_members": False,
     "show_undoc_members": True,
+    "package": package_context,
 }
 
 autodoc_preserve_defaults = True
