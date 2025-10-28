@@ -35,8 +35,6 @@ def topology_from_pdb(
     additional_definitions: Iterable[ResidueDefinition] = [],
     format: Literal["PDB", "CIF", None] = None,
     use_canonical_names: bool = False,
-    ignore_unknown_CONECT_records: bool = False,
-    set_stereochemistry_from_3d: bool = True,
 ) -> Topology:
     """
     Load a PDB file into an OpenFF ``Topology``.
@@ -57,6 +55,14 @@ def topology_from_pdb(
     CCD, name that molecule ``"UNL"`` (or any name not present in the
     ``residue_library``), specify its CONECT records, and provide the
     appropriate molecule to the ``additional_definitions`` argument.
+
+    Note that chemical information is derived from matching the residue
+    definitions provided to this function to the atom names, residue names,
+    elements, formal charges, and CONECT records in the PDB file. In partiular,
+    the presence, absence, or electronic properties of a bond are never inferred
+    from atomic coordinates. However, the stereochemistry of atoms and bonds are
+    computed from their atomic coordinates, even when that information is
+    present in a residue definition.
 
     Parameters
     ----------
@@ -84,16 +90,6 @@ def topology_from_pdb(
     use_canonical_names
         If ``True``, atom names in the PDB file will be replaced by the
         canonical name for the same atom from the residue library.
-    ignore_unknown_CONECT_records
-        CONECT records do not include chemical information such as bond order
-        and cannot be used on their own to add bonds beyond those specified
-        through the residue library and unknown molecules. By default, any
-        CONECT records not reflected in the final topology raise an error.
-        If this argument is ``True``, this error is suppressed.
-    set_stereochemistry_from_3d
-        If ``True``, stereochemistry will be set according to the structure of
-        the PDB file. If ``False``, leave stereo as set in the
-        ``ResidueDefinition``.
 
     Notes
     -----
@@ -154,8 +150,6 @@ def topology_from_pdb(
     ``"atom_serial"``
         The serial number of the atom, found in the second column of the PDB
         file, as a string. Not guaranteed to be unique.
-    ``"matched_residue_description"``
-        The residue description found in the residue library.
     ``"b_factor"``
         The temperature b-factor for the atom.
     ``"occupancy"``
@@ -164,6 +158,13 @@ def topology_from_pdb(
         The alternate location code for the atom.
     ``"pdb_line_no"``
         The line number in the PDB file that contained this atom record.
+    ``"matched_residue_description"``
+        The residue description found in the residue library.
+    ``"matched_stereo"``
+        The stereochemistry defined for this atom in the residue definition.
+        This may differ from the stereochemistry assigned to the atom, which is
+        computed from the atomic coordinates. One of the strings ``"R"``,
+        ``"S"``, or ``""``.
     """
     if hasattr(file, "readlines"):
         if format is None and hasattr(file, "filename"):
@@ -183,11 +184,9 @@ def topology_from_pdb(
         matches=matches,
         data=data,
         use_canonical_names=use_canonical_names,
-        set_stereochemistry_from_3d=set_stereochemistry_from_3d,
     )
 
-    if not ignore_unknown_CONECT_records:
-        _check_all_conects(topology, data)
+    _check_all_conects(topology, data)
 
     return topology
 
@@ -197,7 +196,6 @@ def _build_topology(
     data: PdbData,
     *,
     use_canonical_names: bool,
-    set_stereochemistry_from_3d: bool,
 ) -> Topology:
     rdmol = data.matches_to_rdmol(matches, use_canonical_names=use_canonical_names)
 
@@ -209,9 +207,12 @@ def _build_topology(
 
     molecules: list[Molecule] = []
     for rdmol in rdmol.split_molecule_fragments():
-        if set_stereochemistry_from_3d:
-            rdmol = rdmol.edit().assign_stereochemistry_from_3d_and().freeze()
-        offmol = rdmol.to_openff_molecule()
+        offmol = (
+            rdmol.edit()
+            .assign_stereochemistry_from_3d_and()
+            .freeze()
+            .to_openff_molecule()
+        )
         offmol.add_default_hierarchy_schemes()
         molecules.append(offmol)
 

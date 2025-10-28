@@ -1729,7 +1729,7 @@ class PdbData:
     ) -> RdMol:
         rdmol = EditableRdMol()
         pdb_idcs = {i for i in range(self.n_atoms) if self.alt_loc[i] in {"", " ", "A"}}
-        bonds: dict[tuple[int, int], int] = {}
+        bonds: dict[tuple[int, int], BondDefinition] = {}
         """{(pdb_idx_1, pdb_idx_2): bond_order, ...}"""
         atoms: dict[int, tuple[AtomDefinition, SuccessfulMatch]] = {}
         """{pdb_idx: (atom_definition, match), ...}"""
@@ -1754,8 +1754,8 @@ class PdbData:
                 if atom1 is not None and atom2 is not None:
                     idcs = sort_tuple((atom1, atom2))
                     if idcs in bonds:
-                        assert bonds[idcs] == bond.order
-                    bonds[idcs] = bond.order
+                        assert bonds[idcs].order == bond.order
+                    bonds[idcs] = bond
             for idcs, bond in (
                 (match.posterior_bond_idcs, match.residue_definition.linking_bond),
                 (match.prior_bond_idcs, match.residue_definition.linking_bond),
@@ -1765,8 +1765,8 @@ class PdbData:
                     assert bond is not None
                     idcs = sort_tuple(idcs)
                     if idcs in bonds:
-                        assert bonds[idcs] == bond.order
-                    bonds[idcs] = bond.order
+                        assert bonds[idcs].order == bond.order
+                    bonds[idcs] = bond
 
         # We should now have added every atom in the PDB file's first model
         if len(pdb_idcs) != 0:
@@ -1788,6 +1788,7 @@ class PdbData:
                     "_name": atom.name if use_canonical_names else self.name[i],
                     "canonical_name": atom.name,
                     "matched_residue_description": match.residue_definition.description,
+                    "matched_stereo": atom.stereo or "",
                 },
             )
 
@@ -1800,9 +1801,9 @@ class PdbData:
         logging.debug("Begin adding bonds to RDMol")
 
         # Add the bonds to the rdmol
-        for (atom1, atom2), order in bonds.items():
-            logging.debug(f"{atom1, atom2, order}")
-            rdmol.add_bond(idx_pdb_to_rdmol[atom1], idx_pdb_to_rdmol[atom2], order)
+        for (atom1, atom2), bond in bonds.items():
+            logging.debug(f"{atom1, atom2, bond.order}")
+            rdmol.add_bond(idx_pdb_to_rdmol[atom1], idx_pdb_to_rdmol[atom2], bond.order)
 
         logging.debug("Sanitizing...")
         # Sanitize and apply edits
