@@ -171,6 +171,7 @@ intersphinx_mapping = {
     "rdkit": ("https://www.rdkit.org/docs", None),
     "openeye": ("https://docs.eyesopen.com/toolkits/python/", None),
     "mdtraj": ("https://www.mdtraj.org/1.9.5/", None),
+    "ipython": ("https://ipython.readthedocs.io/en/stable/", None),
     "openff.toolkit": (
         "https://docs.openforcefield.org/projects/toolkit/en/stable/",
         None,

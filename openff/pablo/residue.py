@@ -23,7 +23,7 @@ from openff.pablo._utils import __UNSET__, draw_molecule, flatten, sort_tuple, u
 from openff.pablo.exceptions import PabloError, ResidueValidationError
 
 if TYPE_CHECKING:
-    from IPython.display import SVG
+    import IPython.core.display
 
 __all__ = [
     "AtomDefinition",
@@ -1467,7 +1467,11 @@ class ResidueDefinition:
         assert graph.is_connected()
         return graph
 
-    def visualize(self, width: int = -1, height: int = 300) -> "SVG":
+    def visualize(
+        self,
+        width: int = -1,
+        height: int = 300,
+    ) -> "IPython.core.display.SVG":
         from IPython.display import SVG
 
         offmol = self.to_openff_molecule()

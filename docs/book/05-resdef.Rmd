@@ -129,11 +129,11 @@ phosphate.generate_unique_atom_names()
 product, _water = next(react( # react is a private function here as an example
     [offmol, phosphate],
     (
-        "[CH2:1]-[O:2]-[H:3]"
-        + ".[H:4]-[O:5]-[P:6]"
+        "[CH2:1]-[O:2]-[H:3]" # Serine sidechain
+        + ".[H:4]-[O:5]-[P:6]" # Phosphate hydroxyl
         + ">>"
-        + "[C:1]-[O:2]-[P:6]"
-        + ".[H:3][O:5][H:4]"
+        + "[C:1]-[O:2]-[P:6]" # Phosphorylated serine sidechain
+        + ".[H:3][O:5][H:4]" # Water
     ),
 ))
 
