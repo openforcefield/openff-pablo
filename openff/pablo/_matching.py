@@ -183,8 +183,8 @@ class ResidueMatch(MatchProtocol):
         if self.residue_definition.linking_bond is None:
             return False
 
-        linking_atom = self.residue_definition.prior_bond_linking_atom
-        expected_leaving_atoms = self.residue_definition.prior_bond_leaving_atoms
+        linking_atom = self.residue_definition._prior_bond_linking_atom
+        expected_leaving_atoms = self.residue_definition._prior_bond_leaving_atoms
 
         return (
             linking_atom in self.canonical_atom_name_to_index
@@ -197,8 +197,8 @@ class ResidueMatch(MatchProtocol):
         if self.residue_definition.linking_bond is None:
             return False
 
-        linking_atom = self.residue_definition.posterior_bond_linking_atom
-        expected_leaving_atoms = self.residue_definition.posterior_bond_leaving_atoms
+        linking_atom = self.residue_definition._posterior_bond_linking_atom
+        expected_leaving_atoms = self.residue_definition._posterior_bond_leaving_atoms
 
         return (
             linking_atom in self.canonical_atom_name_to_index
@@ -212,7 +212,7 @@ class ResidueMatch(MatchProtocol):
             return False
 
         linking_atom = self.residue_definition.crosslink.atom1
-        expected_leaving_atoms = self.residue_definition.crosslink_leaving_atoms
+        expected_leaving_atoms = self.residue_definition._crosslink_leaving_atoms
 
         return (
             linking_atom in self.canonical_atom_name_to_index

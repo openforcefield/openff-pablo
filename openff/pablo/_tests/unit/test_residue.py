@@ -308,19 +308,19 @@ class TestResidueDefinition:
         bond_name: str,
         leaving_atoms: set[str],
     ):
-        assert getattr(cys_def, bond_name + "_leaving_atoms") == leaving_atoms
+        assert getattr(cys_def, f"_{bond_name}_leaving_atoms") == leaving_atoms
 
     def test_prior_bond_linking_atom(
         self,
         cys_def: ResidueDefinition,
     ):
-        assert cys_def.prior_bond_linking_atom == "N"
+        assert cys_def._prior_bond_linking_atom == "N"
 
     def test_posterior_bond_linking_atom(
         self,
         cys_def: ResidueDefinition,
     ):
-        assert cys_def.posterior_bond_linking_atom == "C"
+        assert cys_def._posterior_bond_linking_atom == "C"
 
     def test_is_isomorphic_to(
         self,

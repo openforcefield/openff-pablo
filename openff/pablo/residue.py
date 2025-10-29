@@ -12,15 +12,18 @@ from copy import deepcopy
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import DefaultDict, Literal, Self, TextIO
+from typing import TYPE_CHECKING, DefaultDict, Literal, Self, TextIO
 
 from openff.toolkit.topology import Molecule
 from openff.toolkit.utils import RDKitToolkitWrapper
 from openff.units import elements, unit
 
 from openff.pablo._graph import Graph
-from openff.pablo._utils import __UNSET__, flatten, unwrap
+from openff.pablo._utils import __UNSET__, draw_molecule, flatten, sort_tuple, unwrap
 from openff.pablo.exceptions import PabloError, ResidueValidationError
+
+if TYPE_CHECKING:
+    from IPython.display import SVG
 
 __all__ = [
     "AtomDefinition",
@@ -55,11 +58,15 @@ class AtomDefinition:
     """
     Whether this atom is absent when a bond is formed between two residues.
 
-    Atoms marked as leaving are expected to be missing from a PDB file when a
-    bond is formed between this residue and another to satisfy the valence
-    change for the new bond. See also
-    :py:data:`openff.pablo.ResidueDefinition.linking_bond` and
-    :py:data:`openff.pablo.ResidueDefinition.crosslink`.
+    When a bond is formed between this residue and another, a "leaving fragment"
+    must be removed to satisfy the valence model with the new bond. The leaving
+    fragment is computed by identifying a single leaving atom bonded to each of
+    the atoms forming the bond, as well as all leaving atoms bonded to those
+    first leaving atoms.
+
+    See also
+    --------
+    openff.pablo.ResidueDefinition.linking_bond, openff.pablo.ResidueDefinition.crosslink
     """
     charge: int
     """The formal charge of this atom"""
@@ -80,6 +87,9 @@ class AtomDefinition:
         aromatic: bool = False,
         stereo: Literal["S", "R"] | None = None,
     ) -> Self:
+        """
+        Construct a new atom definition, optionally using some default values.
+        """
         return cls(
             name=name,
             symbol=symbol,
@@ -101,6 +111,7 @@ class AtomDefinition:
         aromatic: bool | __UNSET__ = __UNSET__(),
         stereo: Literal["S", "R"] | None | __UNSET__ = __UNSET__(),
     ) -> Self:
+        """Return a copy of ``self`` with the specified attributes replaced."""
         return self.__class__(
             name=self.name if isinstance(name, __UNSET__) else name,
             symbol=self.symbol if isinstance(symbol, __UNSET__) else symbol,
@@ -157,6 +168,9 @@ class BondDefinition:
         aromatic: bool = False,
         stereo: Literal["E", "Z"] | None = None,
     ) -> Self:
+        """
+        Construct a new bond definition, optionally using some default values.
+        """
         return cls(
             atom1=atom1,
             atom2=atom2,
@@ -174,6 +188,7 @@ class BondDefinition:
         aromatic: bool | __UNSET__ = __UNSET__(),
         stereo: Literal["E", "Z"] | None | __UNSET__ = __UNSET__(),
     ) -> Self:
+        """Return a copy of ``self`` with the specified attributes replaced."""
         return self.__class__(
             atom1=self.atom1 if isinstance(atom1, __UNSET__) else atom1,
             atom2=self.atom2 if isinstance(atom2, __UNSET__) else atom2,
@@ -203,7 +218,10 @@ class ResidueDefinition:
     canonical atom names of the atoms that form the linking bond. ``atom1`` is
     the name of the atom in the residue preceding the bond, and ``atom2`` is in
     the residue after the bond. Any atoms that the bond between residues
-    replaces should be marked as ``atom.leaving=True``.
+    replaces should be marked as ``atom.leaving=True``; there must be either
+    zero or one leaving fragments for each atom in a linking bond for the
+    residue definition to validate, and there must be exactly one for a bond to
+    form.
 
     A linking bond will be formed to join two residues if and only if all of the
     below are true:
@@ -236,7 +254,9 @@ class ResidueDefinition:
     atom names of the atoms that form the crosslink. ``atom1`` is the name of
     the atom in this residue, and ``atom2`` is in the other residue. Any atoms
     that the bond between residues replaces should be marked as
-    ``atom.leaving=True``.
+    ``atom.leaving=True``; there must be either zero or one leaving fragments
+    for each atom in a linking bond for the residue definition to validate, and
+    there must be exactly one for a bond to form.
 
     A crosslink will be formed between two residues if and only if all of the
     below are true:
@@ -299,6 +319,7 @@ class ResidueDefinition:
         bonds: Iterable[BondDefinition] | __UNSET__ = __UNSET__(),
         virtual_sites: Iterable[str] | __UNSET__ = __UNSET__(),
     ) -> Self:
+        """Return a copy of ``self`` with the specified attributes replaced."""
         return self.__class__(
             residue_name=(
                 self.residue_name
@@ -325,6 +346,9 @@ class ResidueDefinition:
 
     @property
     def is_anonymous(self) -> bool:
+        """
+        ``True`` if atom names may be used for matching, ``False`` otherwise.
+        """
         return self.residue_name is None
 
     def __post_init__(self):
@@ -365,21 +389,46 @@ class ResidueDefinition:
                 + f" or synonym: {all_atom_names.intersection(self.virtual_sites)}",
             )
 
-        linking_atoms: list[str] = []
+        linking_atoms: list[tuple[str, int]] = []
         if self.linking_bond is not None:
-            linking_atoms.extend([self.linking_bond.atom1, self.linking_bond.atom2])
+            linking_atoms.extend(
+                [
+                    (self.linking_bond.atom1, self.linking_bond.order),
+                    (self.linking_bond.atom2, self.linking_bond.order),
+                ],
+            )
         if self.crosslink is not None:
-            linking_atoms.append(self.crosslink.atom1)
-        for linking_atom in linking_atoms:
-            n_bonded_atoms = sum(
-                1
+            linking_atoms.append((self.crosslink.atom1, self.crosslink.order))
+        for linking_atom, bond_order in linking_atoms:
+            bonded_atoms = [
+                atom
                 for atom in self.atoms_bonded_to(linking_atom)
                 if self.name_to_atom[atom].leaving
-            )
-            if n_bonded_atoms > 1:
+            ]
+            if len(bonded_atoms) > 1:
                 raise ResidueValidationError(
                     f"{self.residue_name} ({self.description}): Linking atom"
                     + f"{linking_atom} must be bonded to no more than 1 leaving atom",
+                )
+            elif len(bonded_atoms) == 0:
+                continue
+
+            bonded_atom = unwrap(bonded_atoms)
+            replaced_bond_order = unwrap(
+                bond.order
+                for bond in self.bonds
+                if (
+                    sort_tuple((bond.atom1, bond.atom2))
+                    == sort_tuple((linking_atom, bonded_atom))
+                )
+            )
+            if bond_order != replaced_bond_order:
+                raise ResidueValidationError(
+                    f"{self.residue_name} ({self.description}): Bond between"
+                    + f" linking atom {linking_atom} and leaving fragment"
+                    + f" beginning at atom {bonded_atom} has order"
+                    + f" {replaced_bond_order}, but the linking bond has order"
+                    + f" {bond_order}",
                 )
 
     @classmethod
@@ -387,8 +436,6 @@ class ResidueDefinition:
         cls,
         molecule: Molecule,
         description: str | None = None,
-        linking_bond: BondDefinition | None = None,
-        crosslink: BondDefinition | None = None,
         virtual_sites: Collection[str] = (),
     ) -> Self:
         """
@@ -404,27 +451,21 @@ class ResidueDefinition:
             An optional string describing the residue. Taken from ``molecule``
             ``"description"`` property if ``None``. See
             :py:data:`openff.pablo.ResidueDefinition.description`
-        linking_bond
-            Residue linking bond. May be taken from ``molecule``
-            ``"linking_bond"`` property if ``None``. See
-            :py:data:`openff.pablo.ResidueDefinition.linking_bond`
-        crosslink
-            Residue crosslink. May be taken from ``molecule`` ``"crosslink"``
-            property if ``None``. See
-            :py:data:`openff.pablo.ResidueDefinition.crosslink`
         virtual_sites
             Virtual sites expected by the residue. See
             :py:data:`openff.pablo.ResidueDefinition.virtual_sites`
         """
-        if crosslink is None:
-            molecule_crosslink = molecule.properties.get("crosslink")
-            if isinstance(molecule_crosslink, BondDefinition):
-                crosslink = molecule_crosslink
+        molecule_crosslink = molecule.properties.get("crosslink")
+        if isinstance(molecule_crosslink, BondDefinition):
+            crosslink = molecule_crosslink
+        else:
+            crosslink = None
 
-        if linking_bond is None:
-            molecule_linking_bond = molecule.properties.get("crosslink")
-            if isinstance(molecule_linking_bond, BondDefinition):
-                linking_bond = molecule_linking_bond
+        molecule_linking_bond = molecule.properties.get("crosslink")
+        if isinstance(molecule_linking_bond, BondDefinition):
+            linking_bond = molecule_linking_bond
+        else:
+            linking_bond = None
 
         if description is None:
             molecule_description = molecule.properties.get("description")
@@ -660,8 +701,6 @@ class ResidueDefinition:
         cls,
         smiles: str,
         leaving_atoms: Collection[int] = (),
-        linking_bond: BondDefinition | None = None,
-        crosslink: BondDefinition | None = None,
         virtual_sites: Collection[str] = (),
         description: str | None = None,
     ) -> Self:
@@ -675,11 +714,6 @@ class ResidueDefinition:
         leaving_atoms
             SMILES string mapping numbers for atoms that should be marked as
             leaving atoms.
-        linking_bond
-            The bond linking this residue to its neighbours in a polymer. See
-            :py:data:`openff.pablo.ResidueDefinition.linking_bond`
-        crosslink
-            See :py:data:`openff.pablo.ResidueDefinition.crosslink`
         description
             An optional string describing the residue. See
             :py:data:`openff.pablo.ResidueDefinition.description`
@@ -699,9 +733,7 @@ class ResidueDefinition:
 
         return cls.anon_from_molecule(
             molecule=molecule,
-            linking_bond=linking_bond,
             description=smiles if description is None else description,
-            crosslink=crosslink,
             virtual_sites=virtual_sites,
         )
 
@@ -710,8 +742,6 @@ class ResidueDefinition:
         cls,
         smiles: str,
         *,
-        linking_bond: BondDefinition | None = None,
-        crosslink: BondDefinition | None = None,
         virtual_sites: Collection[str] = (),
         description: str | None = None,
     ) -> Self:
@@ -725,11 +755,6 @@ class ResidueDefinition:
         smiles
             The SMILES string. Leaving atoms should be mapped. All other atoms
             must not be.
-        linking_bond
-            The bond linking this residue to its neighbours in a polymer. See
-            :py:data:`openff.pablo.ResidueDefinition.linking_bond`
-        crosslink
-            See :py:data:`openff.pablo.ResidueDefinition.crosslink`
         virtual_sites
             Virtual sites expected by the residue. See
             :py:data:`openff.pablo.ResidueDefinition.virtual_sites`
@@ -747,42 +772,13 @@ class ResidueDefinition:
             neighbours[atom1.molecule_atom_index].add(atom2.molecule_atom_index)
             neighbours[atom2.molecule_atom_index].add(atom1.molecule_atom_index)
 
-        prior_candidates: list[int] = []
-        posterior_candidates: list[int] = []
-        crosslink_candidates: list[int] = []
         for i in molecule.properties["atom_map"]:
             atom = molecule.atom(i)
             atom.metadata["leaving_atom"] = True
-            # Record all the non-leaving atoms the leaving atoms are connected to
-            for j in neighbours[i]:
-                if j in molecule.properties["atom_map"]:
-                    continue
-                if (  # nofmt
-                    linking_bond is not None
-                    and linking_bond.atom1.startswith(atom.symbol)
-                ):
-                    posterior_candidates.append(j)
-                if (  # nofmt
-                    linking_bond is not None
-                    and linking_bond.atom2.startswith(atom.symbol)
-                ):
-                    prior_candidates.append(j)
-                if crosslink is not None and crosslink.atom1.startswith(atom.symbol):
-                    crosslink_candidates.append(j)
-
-        # Set the names of the putative linking atoms to the names in the bonds
-        if linking_bond is not None and len(posterior_candidates) == 1:
-            molecule.atom(unwrap(posterior_candidates)).name = linking_bond.atom1
-        if linking_bond is not None and len(prior_candidates) == 1:
-            molecule.atom(unwrap(prior_candidates)).name = linking_bond.atom2
-        if crosslink is not None and len(crosslink_candidates) == 1:
-            molecule.atom(unwrap(crosslink_candidates)).name = crosslink.atom1
 
         return cls.anon_from_molecule(
             molecule=molecule,
-            linking_bond=linking_bond,
             description=smiles if description is None else description,
-            crosslink=crosslink,
             virtual_sites=virtual_sites,
         )
 
@@ -858,6 +854,7 @@ class ResidueDefinition:
         )
 
     def to_openff_molecule(self) -> Molecule:
+        """Create a ``Molecule`` representing the complete, unlinked residue."""
         molecule = Molecule()
         atoms: dict[str, int] = {}
         for atom in self.atoms:
@@ -923,6 +920,9 @@ class ResidueDefinition:
         return mapping
 
     def atoms_bonded_to(self, atom_name: str) -> Iterator[str]:
+        """
+        Iterator over atoms bonded to the one with the given canonical name.
+        """
         yield from (bond.atom2 for bond in self.bonds_to(atom_name))
 
     def bonds_to(self, atom_name: str) -> Iterator[BondDefinition]:
@@ -957,23 +957,23 @@ class ResidueDefinition:
             yield linking_atom
 
     @cached_property
-    def posterior_bond_leaving_atoms(self) -> set[str]:
+    def _posterior_bond_leaving_atoms(self) -> set[str]:
         return (
             set()
             if self.linking_bond is None
-            else set(self._leaving_fragment_of(self.posterior_bond_linking_atom))
+            else set(self._leaving_fragment_of(self._posterior_bond_linking_atom))
         )
 
     @cached_property
-    def prior_bond_leaving_atoms(self) -> set[str]:
+    def _prior_bond_leaving_atoms(self) -> set[str]:
         return (
             set()
             if self.linking_bond is None
-            else set(self._leaving_fragment_of(self.prior_bond_linking_atom))
+            else set(self._leaving_fragment_of(self._prior_bond_linking_atom))
         )
 
     @cached_property
-    def crosslink_leaving_atoms(self) -> set[str]:
+    def _crosslink_leaving_atoms(self) -> set[str]:
         return (
             set()
             if self.crosslink is None
@@ -981,16 +981,40 @@ class ResidueDefinition:
         )
 
     @property
-    def prior_bond_linking_atom(self) -> str:
+    def _prior_bond_linking_atom(self) -> str:
         if self.linking_bond is None:
             raise PabloError("not a linking residue")
         return self.linking_bond.atom2
 
     @property
-    def posterior_bond_linking_atom(self) -> str:
+    def _posterior_bond_linking_atom(self) -> str:
         if self.linking_bond is None:
             raise PabloError("not a linking residue")
         return self.linking_bond.atom1
+
+    @property
+    def _can_form_prior_bond(self) -> bool:
+        return (
+            self.linking_bond is not None
+            and self._prior_bond_linking_atom in self.canonical_name_to_atom
+            and len(self._prior_bond_leaving_atoms) > 0
+        )
+
+    @property
+    def _can_form_posterior_bond(self) -> bool:
+        return (
+            self.linking_bond is not None
+            and self._posterior_bond_linking_atom in self.canonical_name_to_atom
+            and len(self._posterior_bond_leaving_atoms) > 0
+        )
+
+    @property
+    def _can_form_crosslink(self) -> bool:
+        return (
+            self.crosslink is not None
+            and self.crosslink.atom1 in self.canonical_name_to_atom
+            and len(self._crosslink_leaving_atoms) > 0
+        )
 
     def _is_isomorphic_to(self, other: Self) -> bool:
         """Atom and bond ordering insensitive equality test"""
@@ -1187,59 +1211,59 @@ class ResidueDefinition:
         return (
             (
                 missing_atom_names.issuperset(
-                    self.prior_bond_leaving_atoms,
+                    self._prior_bond_leaving_atoms,
                 )
                 or missing_atom_names.isdisjoint(
-                    self.prior_bond_leaving_atoms,
+                    self._prior_bond_leaving_atoms,
                 )
             )
             and (
                 missing_atom_names.issuperset(
-                    self.posterior_bond_leaving_atoms,
+                    self._posterior_bond_leaving_atoms,
                 )
                 or missing_atom_names.isdisjoint(
-                    self.posterior_bond_leaving_atoms,
+                    self._posterior_bond_leaving_atoms,
                 )
             )
             and (
                 missing_atom_names.issuperset(
-                    self.crosslink_leaving_atoms,
+                    self._crosslink_leaving_atoms,
                 )
                 or missing_atom_names.isdisjoint(
-                    self.crosslink_leaving_atoms,
+                    self._crosslink_leaving_atoms,
                 )
             )
         )
 
-    def _possible_prior_bond_names(self) -> Iterator[tuple[str, str]]:
+    def _possible_prior_bond_names_gen(self) -> Iterator[tuple[str, str]]:
         if (
             self.linking_bond is None
-            or self.prior_bond_linking_atom not in self.canonical_name_to_atom
+            or self._prior_bond_linking_atom not in self.canonical_name_to_atom
         ):
             return
-        linking_atom = self.canonical_name_to_atom[self.prior_bond_linking_atom]
+        linking_atom = self.canonical_name_to_atom[self._prior_bond_linking_atom]
         for linking_name in (linking_atom.name, *linking_atom.synonyms):
-            yield (self.posterior_bond_linking_atom, linking_name)
+            yield (self._posterior_bond_linking_atom, linking_name)
 
     @cached_property
-    def possible_prior_bond_names(self) -> set[tuple[str, str]]:
-        return set(self._possible_prior_bond_names())
+    def _possible_prior_bond_names(self) -> set[tuple[str, str]]:
+        return set(self._possible_prior_bond_names_gen())
 
-    def _possible_posterior_bond_names(self) -> Iterator[tuple[str, str]]:
+    def _possible_posterior_bond_names_gen(self) -> Iterator[tuple[str, str]]:
         if (
             self.linking_bond is None
-            or self.posterior_bond_linking_atom not in self.canonical_name_to_atom
+            or self._posterior_bond_linking_atom not in self.canonical_name_to_atom
         ):
             return
-        linking_atom = self.canonical_name_to_atom[self.posterior_bond_linking_atom]
+        linking_atom = self.canonical_name_to_atom[self._posterior_bond_linking_atom]
         for linking_name in (linking_atom.name, *linking_atom.synonyms):
-            yield (linking_name, self.prior_bond_linking_atom)
+            yield (linking_name, self._prior_bond_linking_atom)
 
     @cached_property
-    def possible_posterior_bond_names(self) -> set[tuple[str, str]]:
-        return set(self._possible_posterior_bond_names())
+    def _possible_posterior_bond_names(self) -> set[tuple[str, str]]:
+        return set(self._possible_posterior_bond_names_gen())
 
-    def _possible_crosslink_bond_names(self) -> Iterator[tuple[str, str]]:
+    def _possible_crosslink_bond_names_gen(self) -> Iterator[tuple[str, str]]:
         if (
             self.crosslink is None
             or self.crosslink.atom1 not in self.canonical_name_to_atom
@@ -1250,15 +1274,15 @@ class ResidueDefinition:
             yield (linking_name, self.crosslink.atom2)
 
     @cached_property
-    def possible_crosslink_bond_names(self) -> set[tuple[str, str]]:
-        return set(self._possible_crosslink_bond_names())
+    def _possible_crosslink_bond_names(self) -> set[tuple[str, str]]:
+        return set(self._possible_crosslink_bond_names_gen())
 
     def _unassigned_leaving_atoms(self) -> set[str]:
         all_leaving_atoms = {atom.name for atom in self.atoms if atom.leaving}
         assigned_leaving_atoms = (
-            self.prior_bond_leaving_atoms
-            | self.posterior_bond_leaving_atoms
-            | self.crosslink_leaving_atoms
+            self._prior_bond_leaving_atoms
+            | self._posterior_bond_leaving_atoms
+            | self._crosslink_leaving_atoms
         )
         return all_leaving_atoms.difference(assigned_leaving_atoms)
 
@@ -1376,7 +1400,7 @@ class ResidueDefinition:
                 crosslink,
             )
         else:
-            restore_leaving_atoms.update(self.crosslink_leaving_atoms)
+            restore_leaving_atoms.update(self._crosslink_leaving_atoms)
 
         if posterior_bond is not None:
             posterior_target = AtomDefinition.with_defaults(
@@ -1391,7 +1415,7 @@ class ResidueDefinition:
                 posterior_bond,
             )
         else:
-            restore_leaving_atoms.update(self.posterior_bond_leaving_atoms)
+            restore_leaving_atoms.update(self._posterior_bond_leaving_atoms)
 
         if prior_bond is not None:
             prior_target = AtomDefinition.with_defaults(
@@ -1406,7 +1430,7 @@ class ResidueDefinition:
                 prior_bond,
             )
         else:
-            restore_leaving_atoms.update(self.prior_bond_leaving_atoms)
+            restore_leaving_atoms.update(self._prior_bond_leaving_atoms)
 
         added_nodes = {atom.name: atom for atom in graph.nodes}
         for leaving_name in restore_leaving_atoms:
@@ -1442,3 +1466,83 @@ class ResidueDefinition:
 
         assert graph.is_connected()
         return graph
+
+    def visualize(self, width: int = -1, height: int = 300) -> "SVG":
+        from IPython.display import SVG
+
+        offmol = self.to_openff_molecule()
+
+        deemphasize_atoms = [i for i, atom in enumerate(self.atoms) if atom.leaving]
+
+        legend_elements: list[str] = []
+
+        if self.is_anonymous:
+            atom_notes = {}
+            legend_elements.append("Anonymous Residue Definition")
+            if len(deemphasize_atoms) != 0:
+                legend_elements.append("(leaving atoms drawn in light grey)")
+        else:
+            atom_notes = {
+                i: f"{'|'.join([atom.name, *atom.synonyms])}{'*' if atom.leaving else ''}"
+                for i, atom in enumerate(self.atoms)
+            }
+            if self.description:
+                legend_elements.append(f"{self.residue_name}: {self.description}")
+            else:
+                legend_elements.append(f"{self.residue_name}")
+
+            if len(deemphasize_atoms) != 0:
+                legend_elements.append("(*leaving atoms, drawn in light grey)")
+
+        bond_notes: dict[tuple[int, int], str] = {}
+        linkages: list[tuple[str, str, str]] = []
+        if self._can_form_posterior_bond:
+            linkages.append(
+                (
+                    "posterior",
+                    self._posterior_bond_linking_atom,
+                    self._prior_bond_linking_atom,
+                ),
+            )
+        if self._can_form_prior_bond:
+            linkages.append(
+                (
+                    "prior",
+                    self._prior_bond_linking_atom,
+                    self._posterior_bond_linking_atom,
+                ),
+            )
+        if self.crosslink is not None and self._can_form_crosslink:
+            linkages.append(("crosslink", self.crosslink.atom1, self.crosslink.atom2))
+        for linkage, linking_atom, partner_atom in linkages:
+            bond = unwrap(
+                bond
+                for bond in self.bonds
+                if (
+                    bond.atom1 == linking_atom
+                    and self.canonical_name_to_atom[bond.atom2].leaving
+                )
+                or (
+                    bond.atom2 == linking_atom
+                    and self.canonical_name_to_atom[bond.atom1].leaving
+                )
+            )
+            atom1_idx = unwrap(
+                i for i, atom in enumerate(offmol.atoms) if atom.name == bond.atom1
+            )
+            atom2_idx = unwrap(
+                i for i, atom in enumerate(offmol.atoms) if atom.name == bond.atom2
+            )
+
+            bond_notes[atom1_idx, atom2_idx] = f"{linkage} to '{partner_atom}'"
+
+        svg_content = draw_molecule(
+            offmol,
+            width=width,
+            height=height,
+            atom_notes=atom_notes,
+            bond_notes=bond_notes,
+            deemphasize_atoms=deemphasize_atoms,
+            legend=" ".join(legend_elements),
+        )
+        return SVG(data=svg_content)

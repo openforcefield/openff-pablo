@@ -360,7 +360,7 @@ def test_subset_matches_residue_succeeds_when_posterior_bond_leaving_atoms_missi
     subset = [
         i
         for i, name in enumerate(cys_data.name)
-        if name not in getattr(cys_def, bond_name + "_leaving_atoms")
+        if name not in getattr(cys_def, f"_{bond_name}_leaving_atoms")
     ]
     assert len(subset) in [12, 13]
     assert cys_data.subset_matches_residue(subset, cys_def)

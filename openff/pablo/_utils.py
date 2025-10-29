@@ -9,18 +9,21 @@ from typing import (
     no_type_check,
     overload,
 )
+from collections.abc import Sequence
 
 import rdkit
 import rdkit.Chem
 import rdkit.Chem.Draw
 import rdkit.Chem.rdDepictor
-import rdkit.Geometry
 from openff.toolkit import Molecule
+from openff.toolkit.topology import Atom
 from openff.toolkit.topology._mm_molecule import _SimpleMolecule
 from openff.toolkit.topology.molecule import MoleculeLike
 from openff.toolkit.utils import UndefinedStereochemistryError
+from openff.toolkit.utils.exceptions import InvalidAtomMetadataError
 from openff.units import unit
 from pint import Quantity
+from rdkit.Chem.rdChemReactions import ReactionFromSmarts
 
 from openff.pablo.exceptions import PabloError
 
@@ -335,15 +338,16 @@ BondIndices = tuple[int, int]
 def draw_molecule(
     molecule: Molecule | rdkit.Chem.rdchem.Mol,
     *,
-    width: int = 500,
-    height: int = 500,
+    width: int = -1,
+    height: int = 300,
     highlight_atoms: list[int] | dict[int, Color] | None = None,
     highlight_bonds: None | (list[BondIndices] | dict[BondIndices, Color]) = None,
     atom_notes: dict[int, str] | None = None,
     bond_notes: dict[BondIndices, str] | None = None,
-    emphasize_atoms: list[int] | None = None,
+    deemphasize_atoms: list[int] | None = None,
     explicit_hydrogens: bool | None = None,
     color_by_element: bool | None = None,
+    legend: str = "",
 ) -> str:
     """Draw a molecule
 
@@ -371,9 +375,10 @@ def draw_molecule(
     bond_notes
         A map from atom index pairs to a string that should be printed near the
         bond.
-    emphasize_atoms
-        A list of atom indices to emphasize by drawing other atoms (and their
-        bonds) in light grey.
+    deemphasize_atoms
+        A list of atom indices to de-emphasize by drawing them and their bonds
+        in light grey. Note that this changes the appearance of highlighted
+        atoms and bonds.
     explicit_hydrogens
         If ``False``, allow uncharged monovalent hydrogens to be hidden. If
         ``True``, make all hydrogens explicit. If ``None``, defer to the
@@ -493,29 +498,27 @@ def draw_molecule(
 
     # Compute 2D coordinates
     rdkit.Chem.rdDepictor.Compute2DCoords(rdmol)
+    rdkit.Chem.rdDepictor.StraightenDepiction(rdmol)
 
     # Construct the drawing object and get a handle to its options
     drawer = rdkit.Chem.Draw.MolDraw2DSVG(width, height)
     draw_options = drawer.drawOptions()
-
-    # Specify the scale to fit all atoms
-    # This is important for emphasize_atoms
-    coords_2d = next(iter(rdmol.GetConformers())).GetPositions()[..., (0, 1)]
-    drawer.SetScale(
-        width,
-        height,
-        rdkit.Geometry.rdGeometry.Point2D(*(coords_2d.min(axis=0) - 1.0)),
-        rdkit.Geometry.rdGeometry.Point2D(*(coords_2d.max(axis=0) + 1.0)),
-    )
+    set_atom_palette(draw_options)
+    draw_options.setBondNoteColour((0.7, 0.7, 0.7))
 
     # Set the colors used for each element according to the emphasize_atoms and
     # color_by_element arguments
-    if emphasize_atoms:
-        draw_options.setAtomPalette(
-            {i: (0.8, 0.8, 0.8) for i in range(rdmol.GetNumAtoms())},
+    if deemphasize_atoms:
+        draw_options.setHighlightColour((255 / 255, 176 / 255, 103 / 255))
+        draw_options.continuousHighlight = False
+        draw_options.circleAtoms = False
+        highlight_atoms += deemphasize_atoms
+        highlight_atom_colors = (
+            {} if highlight_atom_colors is None else highlight_atom_colors
         )
+        highlight_atom_colors.update({i: (0.8, 0.8, 0.8) for i in deemphasize_atoms})
     else:
-        set_atom_palette(draw_options)
+        draw_options.setHighlightColour((255 / 255, 202 / 255, 154 / 255))
 
     # Draw the molecule
     # Note that if emphasize_atoms is used, this will be the un-emphasized parts
@@ -526,23 +529,8 @@ def draw_molecule(
         highlightAtomColors=highlight_atom_colors,
         highlightBonds=highlight_bond_indices,
         highlightBondColors=highlight_bond_colors,
+        legend=legend,
     )
-
-    # Draw an overlapping molecule for the emphasized atoms
-    if emphasize_atoms:
-        # Set the atom palette according to the color_by_element argument
-        set_atom_palette(draw_options)
-
-        # Create a copy of the molecule that removes atoms that aren't emphasized
-        emphasized = rdkit.Chem.rdchem.RWMol(rdmol)
-        emphasized.BeginBatchEdit()
-        for i in set(idx_map) - set(emphasize_atoms):
-            emphasized.RemoveAtom(idx_map[i])
-        emphasized.CommitBatchEdit()
-
-        # Draw the molecule. The scale has been fixed and we're re-using the
-        # same coordinates, so this will overlap the background molecule
-        drawer.DrawMolecule(emphasized)
 
     # Finalize the SVG
     drawer.FinishDrawing()
@@ -550,3 +538,94 @@ def draw_molecule(
     # Return an SVG object that we can view in notebook
     svg_contents = drawer.GetDrawingText()
     return svg_contents
+
+
+def react(
+    reactants: Sequence[Molecule],
+    reaction_smarts: str,
+) -> Iterable[tuple[Molecule, ...]]:
+    # Convert reactants to rdmol, storing metadata as properties
+    # Need to preserve metadata so we can identify leaving atoms and synonyms
+    reactant_rdmols = [reactant.to_rdkit() for reactant in reactants]
+    for reactant_rdmol, reactant_offmol in zip(reactant_rdmols, reactants):
+        for reactant_rdatom, reactant_offatom in zip(
+            reactant_rdmol.GetAtoms(),
+            reactant_offmol.atoms,
+        ):
+            for key, value in reactant_offatom.metadata.items():
+                if isinstance(value, bool):
+                    reactant_rdatom.SetBoolProp(key, value)
+                elif isinstance(value, int):
+                    reactant_rdatom.SetIntProp(key, value)
+                elif isinstance(value, float):
+                    reactant_rdatom.SetDoubleProp(key, value)
+                else:
+                    reactant_rdatom.SetProp(key, str(value))
+
+    # Prepare the reaction
+    rxn = ReactionFromSmarts(reaction_smarts)
+    product_rdmols = rxn.RunReactants(reactant_rdmols)
+
+    # Get map from reaction SMARTS atom mappings to the equivalent OFF atom
+    map_to_offatom: dict[Any, Atom] = {}
+    for reactant_rdmol, reactant_offmol in zip(reactant_rdmols, reactants):
+        assert rxn.IsMoleculeReactant(reactant_rdmol)
+        for reactant_template in rxn.GetReactants():
+            map_to_offatom.update(
+                {
+                    reactant_template.GetAtomWithIdx(query).GetProp(
+                        "molAtomMapNumber",
+                    ): reactant_offmol.atom(match)
+                    for query, match in enumerate(
+                        reactant_rdmol.GetSubstructMatch(reactant_template),
+                    )
+                    if reactant_template.GetAtomWithIdx(query).HasProp(
+                        "molAtomMapNumber",
+                    )
+                },
+            )
+
+    # Process and yield the products
+    for products in product_rdmols:
+        # Skip products that cannot be sanitized
+        try:
+            for product in products:
+                product.UpdatePropertyCache()
+                rdkit.Chem.SanitizeMol(product)
+        except rdkit.Chem.rdchem.MolSanitizeException:
+            continue
+
+        product_offmols = [Molecule.from_rdkit(product) for product in products]
+
+        # Fix metadata of products
+        for product_template in rxn.GetProducts():
+            for product_rdmol, product_offmol in zip(products, product_offmols):
+                # Go over atoms changed in the reaction and fix their metadata (rdkit often loses it)
+                for product_idx, _product_template_idx in enumerate(
+                    product_rdmol.GetSubstructMatch(product_template),
+                ):
+                    product_rdatom = product_rdmol.GetAtomWithIdx(product_idx)
+                    product_offatom = product_offmol.atom(product_idx)
+
+                    if product_rdatom.HasProp("old_mapno"):
+                        rxn_map = product_rdatom.GetProp("old_mapno")
+                        reactant_offatom = map_to_offatom[rxn_map]
+                        product_offatom.metadata.update(reactant_offatom.metadata)
+                        if "leaving_atom" in product_offatom.metadata:
+                            product_offatom.metadata["leaving_atom"] = False
+                        if "substructure_atom" in product_offatom.metadata:
+                            product_offatom.metadata["substructure_atom"] = True
+                        product_offatom.name = reactant_offatom.name
+
+                # Copy the props back to the metadata
+                for product_rdatom, product_offatom in zip(
+                    product_rdmol.GetAtoms(),
+                    product_offmol.atoms,
+                ):
+                    for key, value in product_rdatom.GetPropsAsDict().items():
+                        try:
+                            product_offatom.metadata[key] = value
+                        except InvalidAtomMetadataError:
+                            pass
+
+        yield tuple(product_offmols)

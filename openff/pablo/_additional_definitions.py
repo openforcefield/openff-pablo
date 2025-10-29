@@ -329,36 +329,36 @@ class AdditionalDefMatch(ResidueMatch):
 
         if (  # nofmt
             resdef.linking_bond is None
-            or resdef.prior_bond_leaving_atoms.issubset(matched_atoms)
+            or resdef._prior_bond_leaving_atoms.issubset(matched_atoms)
         ):
             prior_bond = None
-        elif resdef.prior_bond_leaving_atoms.isdisjoint(matched_atoms):
+        elif resdef._prior_bond_leaving_atoms.isdisjoint(matched_atoms):
             prior_bond = (
-                neighbouring_atoms[resdef.prior_bond_linking_atom],
-                matched_atoms[resdef.posterior_bond_linking_atom],
+                neighbouring_atoms[resdef._prior_bond_linking_atom],
+                matched_atoms[resdef._posterior_bond_linking_atom],
             )
         else:
             assert False, "this is not a valid mapping"
 
         if (  # nofmt
             resdef.linking_bond is None
-            or resdef.posterior_bond_leaving_atoms.issubset(matched_atoms)
+            or resdef._posterior_bond_leaving_atoms.issubset(matched_atoms)
         ):
             posterior_bond = None
-        elif resdef.posterior_bond_leaving_atoms.isdisjoint(matched_atoms):
+        elif resdef._posterior_bond_leaving_atoms.isdisjoint(matched_atoms):
             posterior_bond = (
-                matched_atoms[resdef.prior_bond_linking_atom],
-                neighbouring_atoms[resdef.posterior_bond_linking_atom],
+                matched_atoms[resdef._prior_bond_linking_atom],
+                neighbouring_atoms[resdef._posterior_bond_linking_atom],
             )
         else:
             assert False
 
         if (  # nofmt
             resdef.crosslink is None
-            or resdef.crosslink_leaving_atoms.issubset(matched_atoms)
+            or resdef._crosslink_leaving_atoms.issubset(matched_atoms)
         ):
             crosslink = None
-        elif resdef.crosslink_leaving_atoms.isdisjoint(matched_atoms):
+        elif resdef._crosslink_leaving_atoms.isdisjoint(matched_atoms):
             crosslink = (
                 matched_atoms[resdef.crosslink.atom1],
                 neighbouring_atoms[resdef.crosslink.atom2],

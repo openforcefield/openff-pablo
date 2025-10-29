@@ -1,4 +1,4 @@
-{% block title -%}
+{% block title scoped -%}
 
 {%- if fullname.startswith("openff") and fullname.count(".") == 1 -%}
 {%- set title = fullname -%}
@@ -9,7 +9,7 @@
 
 {%- endblock %}
 
-{% block base %}
+{% block base scoped %}
 {%- set doc_functions = [] -%}
 {%- set doc_attributes = [] -%}
 {%- set doc_exceptions = [] -%}
@@ -40,6 +40,7 @@
 
    {% if doc_modules %}
    .. rubric:: Modules
+        :name: {{fullname}}:modules
 
    .. autosummary::
       :caption: Modules
@@ -55,6 +56,7 @@
 
    {% if doc_attributes %}
    .. rubric:: {{ _('Module Attributes') }}
+        :name: {{fullname}}:attributes
 
    .. autosummary::
       :caption: Attributes
@@ -67,6 +69,7 @@
 
    {% if doc_functions %}
    .. rubric:: {{ _('Functions') }}
+        :name: {{fullname}}:functions
 
    .. autosummary::
       :caption: Functions
@@ -80,6 +83,7 @@
 
    {% if doc_classes %}
    .. rubric:: {{ _('Classes') }}
+        :name: {{fullname}}:classes
 
    .. autosummary::
       :caption: Classes
@@ -92,6 +96,7 @@
 
    {% if doc_exceptions %}
    .. rubric:: {{ _('Exceptions') }}
+        :name: {{fullname}}:exceptions
 
    .. autosummary::
       :caption: Exceptions
@@ -105,6 +110,7 @@
 
    {% if doc_others %}
    .. rubric:: {{ _('Other Objects') }}
+        :name: {{fullname}}:others
 
    .. autosummary::
       :caption: Other Objects

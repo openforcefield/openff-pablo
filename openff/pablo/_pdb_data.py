@@ -879,24 +879,26 @@ class PdbData:
                     logging.debug(
                         f"        {pdb_idx, j}: {(i_name, j_name)} {len(prev_matches)=} {len(next_matches)=}",
                     )
-                    logging.debug(f"          {resdef.possible_prior_bond_names=}")
-                    logging.debug(f"          {resdef.possible_posterior_bond_names=}")
-                    logging.debug(f"          {resdef.possible_crosslink_bond_names=}")
+                    logging.debug(f"          {resdef._possible_prior_bond_names=}")
+                    logging.debug(f"          {resdef._possible_posterior_bond_names=}")
+                    logging.debug(
+                        f"          {resdef._possible_crosslink_bond_names_gen=}",
+                    )
                     if (
                         len(prev_matches) > 0
                         and j in prev_matches[0].res_atom_idcs
-                        and (j_name, i_name) in resdef.possible_prior_bond_names
+                        and (j_name, i_name) in resdef._possible_prior_bond_names
                     ):
                         logging.debug("          prior")
                         prior_conects.append((j, pdb_idx))
                     elif (
                         len(next_matches) > 0
                         and j in next_matches[0].res_atom_idcs
-                        and (i_name, j_name) in resdef.possible_posterior_bond_names
+                        and (i_name, j_name) in resdef._possible_posterior_bond_names
                     ):
                         logging.debug("          posterior")
                         posterior_conects.append((pdb_idx, j))
-                    elif (i_name, j_name) in resdef.possible_crosslink_bond_names:
+                    elif (i_name, j_name) in resdef._possible_crosslink_bond_names_gen:
                         logging.debug("          crosslink")
                         crosslink_conects.append((pdb_idx, j))
                     else:
@@ -976,7 +978,7 @@ class PdbData:
         # residue) where the linking atom can be found
         neighbour_supported_posterior_bonds: dict[BondDefinition, int] = {
             next_match.residue_definition.linking_bond: next_match.canonical_atom_name_to_index[
-                next_match.residue_definition.prior_bond_linking_atom
+                next_match.residue_definition._prior_bond_linking_atom
             ]
             for next_match in only_matched(next_matches)
             if isinstance(next_match, ResidueMatch)
@@ -985,7 +987,7 @@ class PdbData:
         }
         neighbour_supported_prior_bonds: dict[BondDefinition, int] = {
             prev_match.residue_definition.linking_bond: prev_match.canonical_atom_name_to_index[
-                prev_match.residue_definition.posterior_bond_linking_atom
+                prev_match.residue_definition._posterior_bond_linking_atom
             ]
             for prev_match in only_matched(prev_matches)
             if isinstance(prev_match, ResidueMatch)
@@ -1145,7 +1147,7 @@ class PdbData:
                 else:
                     bond_idcs = (
                         match.canonical_atom_name_to_index[
-                            match.residue_definition.posterior_bond_linking_atom
+                            match.residue_definition._posterior_bond_linking_atom
                         ],
                         neighbour_supported_posterior_bonds[
                             match.residue_definition.linking_bond

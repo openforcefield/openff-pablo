@@ -97,6 +97,8 @@ def get_context_flat(obj: object, name: str, max_depth: int = 10) -> dict[str, O
         info.add("class")
     if inspect.isfunction(obj):
         info.add("function")
+    if inspect.ismethod(obj) and inspect.isclass(obj.__self__):
+        info.add("classmethod")
 
     context = {name: info}
     for member_name, member in inspect.getmembers(obj):
@@ -133,7 +135,7 @@ autodoc_class_signature = "mixed"
 # Workaround for autodoc_typehints_format not working for attributes
 # see https://github.com/sphinx-doc/sphinx/issues/10290#issuecomment-1079740009
 python_use_unqualified_type_names = True
-autodoc_member_order = "groupwise"  #  Or "bysource"
+autodoc_member_order = "alphabetical"  #  Or "bysource"
 
 napoleon_numpy_docstring = True
 napoleon_google_docstring = False
