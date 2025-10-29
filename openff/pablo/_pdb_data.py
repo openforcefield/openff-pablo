@@ -882,7 +882,7 @@ class PdbData:
                     logging.debug(f"          {resdef._possible_prior_bond_names=}")
                     logging.debug(f"          {resdef._possible_posterior_bond_names=}")
                     logging.debug(
-                        f"          {resdef._possible_crosslink_bond_names_gen=}",
+                        f"          {resdef._possible_crosslink_bond_names=}",
                     )
                     if (
                         len(prev_matches) > 0
@@ -898,7 +898,7 @@ class PdbData:
                     ):
                         logging.debug("          posterior")
                         posterior_conects.append((pdb_idx, j))
-                    elif (i_name, j_name) in resdef._possible_crosslink_bond_names_gen:
+                    elif (i_name, j_name) in resdef._possible_crosslink_bond_names:
                         logging.debug("          crosslink")
                         crosslink_conects.append((pdb_idx, j))
                     else:
