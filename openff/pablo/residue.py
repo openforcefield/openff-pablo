@@ -19,7 +19,14 @@ from openff.toolkit.utils import RDKitToolkitWrapper
 from openff.units import elements, unit
 
 from openff.pablo._graph import Graph
-from openff.pablo._utils import __UNSET__, draw_molecule, flatten, sort_tuple, unwrap
+from openff.pablo._utils import (
+    __UNSET__,
+    draw_molecule,
+    flatten,
+    react,
+    sort_tuple,
+    unwrap,
+)
 from openff.pablo.exceptions import PabloError, ResidueValidationError
 
 if TYPE_CHECKING:
@@ -1582,3 +1589,150 @@ class ResidueDefinition:
             highlight_atoms=highlight_atoms or None,
         )
         return SVG(data=svg_content)
+
+    @staticmethod
+    def react(
+        reactants: Sequence["ResidueDefinition"],
+        reactant_smarts: Sequence[str],
+        product_smarts: Sequence[str],
+        product_residue_names: Sequence[str | None] | None = None,
+        product_descriptions: Sequence[str | None] | None = None,
+        product_linking_bonds: Sequence[BondDefinition | None] | None = None,
+        product_crosslinks: Sequence[BondDefinition | None] | None = None,
+        product_virtual_sites: Sequence[Collection[str]] | None = None,
+    ) -> list[tuple["ResidueDefinition", ...]]:
+        """
+        Perform a SMARTS reaction on some residue definitions
+
+        Parameters
+        ==========
+        reactants
+            The residue definitions involved in the reaction. Names and synonyms
+            for the products are taken from these. Chemical information is also
+            derived from these, but may be modified by the reaction.
+        reactant_smarts
+            Mapped SMARTS patterns identifying atoms in the reactants that will
+            be involved in the reaction. There may be more or fewer of these
+            than reactants to allow for complex and intramolecular reactions.
+        product_smarts
+            Mapped SMARTS patterns describing any altered chemistry in the
+            products. All atom mappings in the reactant smarts must be present
+            in a product SMARTS. Each product SMARTS corresponds to a single
+            product ``ResidueDefinition``.
+        product_residue_names
+            The residue names of the products. One for each product SMARTS. May
+            be ``None`` or omitted, in which case the product is anonymous ---
+            note that this means atom names in the reactants are discarded. If
+            there are fewer residue names than product SMARTS, any unnamed
+            products are made anonymous.
+        product_descriptions
+            The descriptions of the products. If there are fewer descriptions
+            than product SMARTS, the given descriptions are assigned to the
+            first products.
+        product_linking_bonds
+            The linking bonds of the products. If there are fewer linking bonds
+            than product SMARTS, the given linking bonds are assigned to the
+            first products. Must be ``None`` or omitted if the product is
+            anonymous.
+        product_crosslinks
+            The crosslinks of the products. If there are fewer crosslinks
+            than product SMARTS, the given crosslinks are assigned to the
+            first products. Must be ``None`` or omitted if the product is
+            anonymous.
+        product_virtual_sites
+            The virtual sites of the products. If there are fewer virtual sites
+            than product SMARTS, the given virtual sites are assigned to the
+            first products.
+        """
+
+        def validate_product_arg[T, U](
+            argname: str,
+            argvalue: Sequence[T | U] | None,
+            nonevalue: U,
+            product_value_forbidden: Sequence[bool] | None = None,
+        ) -> Sequence[T | U]:
+            if argvalue is None:
+                argvalue = [nonevalue] * len(product_smarts)
+            elif len(argvalue) < len(product_smarts):
+                argvalue = list(argvalue) + [nonevalue] * (
+                    len(product_smarts) - len(argvalue)
+                )
+            elif len(argvalue) > len(product_smarts):
+                raise PabloError(
+                    f"too many {argname}: expected at most {len(product_smarts)}",
+                )
+
+            if product_value_forbidden is not None:
+                for i, (forbidden, value) in enumerate(
+                    zip(product_value_forbidden, argvalue),
+                ):
+                    if forbidden and value is not nonevalue:
+                        raise PabloError(
+                            f"{argname}[{i}] is {value} but must be {nonevalue}"
+                            + " for anonymous product",
+                        )
+
+            return argvalue
+
+        product_residue_names = validate_product_arg(
+            "product_residue_names",
+            product_residue_names,
+            None,
+        )
+        product_is_anon = [name is None for name in product_residue_names]
+        product_descriptions = validate_product_arg(
+            "product_descriptions",
+            product_descriptions,
+            None,
+        )
+        product_linking_bonds = validate_product_arg(
+            "product_linking_bonds",
+            product_linking_bonds,
+            None,
+            product_value_forbidden=product_is_anon,
+        )
+        product_crosslinks = validate_product_arg(
+            "product_crosslinks",
+            product_crosslinks,
+            None,
+            product_value_forbidden=product_is_anon,
+        )
+        product_virtual_sites = validate_product_arg(
+            "product_virtual_sites",
+            product_virtual_sites,
+            (),
+        )
+
+        reactant_offmols = [resdef.to_openff_molecule() for resdef in reactants]
+        reaction = ".".join(reactant_smarts) + ">>" + ".".join(product_smarts)
+
+        all_products = list(react(reactant_offmols, reaction))
+        for products in all_products:
+            if len(products) != len(product_smarts):
+                raise PabloError(
+                    f"expected {len(product_smarts)} products, got {len(products)}:"
+                    + " each product_smarts should include only one fragment",
+                )
+
+        return [
+            tuple(
+                (
+                    ResidueDefinition.from_molecule(
+                        offmol,
+                        residue_name=product_residue_names[i],
+                        description=product_descriptions[i],
+                        linking_bond=product_linking_bonds[i],
+                        crosslink=product_crosslinks[i],
+                        virtual_sites=product_virtual_sites[i],
+                    )
+                    if product_residue_names[i] is not None
+                    else ResidueDefinition.anon_from_molecule(
+                        offmol,
+                        description=product_descriptions[i],
+                        virtual_sites=product_virtual_sites[i],
+                    )
+                )
+                for i, offmol in enumerate(products)
+            )
+            for products in all_products
+        ]

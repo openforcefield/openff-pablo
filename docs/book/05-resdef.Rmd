@@ -154,31 +154,38 @@ glycine_resdefs = glycine.vary_protonation(
 
 ### By SMARTS reaction
 
+A powerful way to create a new residue definition is to react two existing definitions together. the [`ResidueDefinition.react`] method takes any number of reactant residue definitions and some SMARTS patterns mapping atoms in the reactants to how they should appear in the products, and then produces the product residue definitions:
+
 ```{python}
 serine = STD_CCD_CACHE["SER"][0]
-offmol = serine.to_openff_molecule()
 
 phosphate = Molecule.from_smiles("[OH]P(=O)([O-])[O-]")
 phosphate.generate_unique_atom_names()
-
-product, _water = next(react( # react is a private function here as an example
-    [offmol, phosphate],
-    (
-        "[CH2:1]-[O:2]-[H:3]" # Serine sidechain
-        + ".[H:4]-[O:5]-[P:6]" # Phosphate hydroxyl
-        + ">>"
-        + "[C:1]-[O:2]-[P:6]" # Phosphorylated serine sidechain
-        + ".[H:3][O:5][H:4]" # Water
-    ),
-))
-
-phosphoserine = ResidueDefinition.from_molecule(
-    product,
-    residue_name="PSER",
-    linking_bond=serine.linking_bond,
+phosphate_resdef = ResidueDefinition.from_molecule(
+    phosphate,
+    residue_name="PHOS",
 )
+
+phosphoserine = ResidueDefinition.react(
+    reactants=[serine, phosphate_resdef],
+    reactant_smarts=[
+        "[CH2:1][O:2][H:3]", # Serine sidechain
+        "[H:4][O:5][P:6]", # Phosphate hydroxyl
+    ],
+    product_smarts=[
+        "[C:1][O:2][P:6]", # Phosphorylated serine sidechain
+        "[H:3][O:5][H:4]", # Water
+    ],
+    product_residue_names = ["PSER"],
+    product_linking_bonds = [serine.linking_bond],
+)[0][0]
+
 phosphoserine.visualize()
 ```
+
+The products can be given new names and other attribute values with the corresponding arguments. If there are more products than provided values, only the first products will be assigned the values; the latter products will be made anonymous. `react` returns a list of tuples; the elements of the tuples are the individual products, and the tuples represent ways that the reaction can occur. Very often, such as in the above example, only the first product of the first realization is required.
+
+Reactions can be used to create new residue definitions for a custom library, or to easily produce definitions of patterns that Pablo doesn't yet recognize for `additional_definitions`.
 
 [`ResidueDefinition`]: openff.pablo.ResidueDefinition
 [`AtomDefinition`]: openff.pablo.residue.AtomDefinition
@@ -209,3 +216,4 @@ phosphoserine.visualize()
 [`Molecule`]: openff.toolkit.topology.Molecule
 [`CcdCache.with_varied_protonation`]: openff.pablo.ccd.CcdCache.with_varied_protonation
 [`ResidueDefinition.vary_protonation`]: openff.pablo.ResidueDefinition.vary_protonation
+[`ResidueDefinition.react`]: openff.pablo.ResidueDefinition.react
