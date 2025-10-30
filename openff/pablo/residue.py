@@ -1716,21 +1716,19 @@ class ResidueDefinition:
 
         return [
             tuple(
-                (
-                    ResidueDefinition.from_molecule(
-                        offmol,
-                        residue_name=product_residue_names[i],
-                        description=product_descriptions[i],
-                        linking_bond=product_linking_bonds[i],
-                        crosslink=product_crosslinks[i],
-                        virtual_sites=product_virtual_sites[i],
-                    )
-                    if product_residue_names[i] is not None
-                    else ResidueDefinition.anon_from_molecule(
-                        offmol,
-                        description=product_descriptions[i],
-                        virtual_sites=product_virtual_sites[i],
-                    )
+                ResidueDefinition.from_molecule(
+                    offmol,
+                    residue_name=product_residue_names[i],
+                    description=product_descriptions[i],
+                    linking_bond=product_linking_bonds[i],
+                    crosslink=product_crosslinks[i],
+                    virtual_sites=product_virtual_sites[i],
+                )
+                if product_residue_names[i] is not None
+                else ResidueDefinition.anon_from_molecule(
+                    offmol,
+                    description=product_descriptions[i],
+                    virtual_sites=product_virtual_sites[i],
                 )
                 for i, offmol in enumerate(products)
             )

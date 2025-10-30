@@ -83,7 +83,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         A list of residue names to download when initializing the class.
     patches
         Functions to call on ``ResidueDefinitions`` downloaded from the CCD
-        before they are returned or added to the inner `dict``. An iterable of
+        before they are returned or added to the inner ``dict``. An iterable of
         maps from residue names each to a single callable. Each map is applied
         to residues with the given name in the order they are iterated over. Any
         patches corresponding to key ``"*"`` will be applied to all residues
