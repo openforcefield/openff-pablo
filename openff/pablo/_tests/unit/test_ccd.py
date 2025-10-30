@@ -99,13 +99,13 @@ def test_ccdcache_with(hooh_def: ResidueDefinition, hoh_def: ResidueDefinition):
     assert new_ccdcache is not STD_CCD_CACHE
     assert "HOOH" in new_ccdcache
     assert "HOOH" not in STD_CCD_CACHE
-    assert new_ccdcache["HOOH"] == [hooh_def]
+    assert new_ccdcache["HOOH"] == (hooh_def,)
 
     assert "HOH" in STD_CCD_CACHE
     assert STD_CCD_CACHE["HOH"] != hoh_def
     new_ccdcache = STD_CCD_CACHE.with_({"HOH": [hoh_def]})
     assert new_ccdcache is not STD_CCD_CACHE
-    assert new_ccdcache["HOH"] == [*STD_CCD_CACHE["HOH"], hoh_def]
+    assert new_ccdcache["HOH"] == (*STD_CCD_CACHE["HOH"], hoh_def)
 
 
 def test_ccdcache_with_replaced(hoh_def: ResidueDefinition):
@@ -113,7 +113,7 @@ def test_ccdcache_with_replaced(hoh_def: ResidueDefinition):
     assert STD_CCD_CACHE["HOH"] != hoh_def
     new_ccdcache = STD_CCD_CACHE.with_replaced({"HOH": [hoh_def]})
     assert new_ccdcache is not STD_CCD_CACHE
-    assert new_ccdcache["HOH"] == [hoh_def]
+    assert new_ccdcache["HOH"] == (hoh_def,)
 
 
 @pytest.mark.slow
@@ -230,3 +230,35 @@ def test_water():
     assert sol_vsites[0] == sol
     assert sol_vsites[1] == sol.replace(virtual_sites=["EPW"])
     assert sol_vsites[2] == sol.replace(virtual_sites=["EP1", "EP2"])
+
+
+@pytest.mark.disable_socket
+def test_with_varied_protonation_gly_backbones(
+    gly_def_neutral: ResidueDefinition,
+    gly_def_zwitterionic: ResidueDefinition,
+):
+    with TemporaryDirectory() as tmpdir:
+        ccd_cache = CcdCache(
+            [],
+            cache_path=tmpdir,
+            extra_definitions={"GLY": [gly_def_neutral, gly_def_zwitterionic]},
+        ).with_varied_protonation(
+            "GLY",
+            acidic=["HXT", "H3"],
+            basic=[("N", "H3"), ("OXT", "HXT")],
+        )
+
+    assert sorted(
+        sorted(resdef.description.split()) for resdef in ccd_cache["GLY"]
+    ) == sorted(
+        [
+            sorted(["GLYCINE", "NEUTRAL"]),
+            sorted(["GLYCINE", "NEUTRAL", "-HXT"]),
+            sorted(["GLYCINE", "NEUTRAL", "+H3"]),
+            sorted(["GLYCINE", "NEUTRAL", "+H3", "-HXT"]),
+            sorted(["GLYCINE", "ZWITTERION"]),
+            sorted(["GLYCINE", "ZWITTERION", "+HXT"]),
+            sorted(["GLYCINE", "ZWITTERION", "-H3"]),
+            sorted(["GLYCINE", "ZWITTERION", "-H3", "+HXT"]),
+        ],
+    )

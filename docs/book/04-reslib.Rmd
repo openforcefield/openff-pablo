@@ -1,7 +1,9 @@
 (chapter:reslib)=
 # The residue library
 
-Unlike all other PDB loading tools we know about, Pablo exposes its library of known residues to the user for inspection, modification, and even replacement at runtime. This can be done with the [`residue_library`] argument to `topology_from_pdb`. `residue_library` takes a mapping from residue IDs to a list of residue definitions (see [](#chapter:resdef)). All of these definitions are matched against any residue with that ID, and all that do match must agree on their chemistry --- Pablo would rather raise an error than provide ambiguous chemistry. Pablo does permit alternate resonance forms --- matches agree chemically if they have identical elements, connectivity, and net formal charge.
+Unlike all other PDB loading tools we know about, Pablo exposes its library of known residues to the user for inspection, modification, and even replacement at runtime. This can be done with the [`residue_library`] argument to `topology_from_pdb`. `residue_library` takes a mapping from residue IDs to a list of residue definitions (see [](#chapter:resdef)). All of these definitions are matched against any residue with that ID, and all that do match must have consistent chemistry --- Pablo would rather raise an error than provide ambiguous chemistry.
+
+The fact that a residue library admits multiple residue definitions for each name allows alternate protonation states and resonance forms to be included in a residue library. Matches are considered chemically consistent if they have identical elements, connectivity, and net formal charge. Only a few residues have alternative protonation states in default library, so the user will often need to augment it --- thankfully, this is [easy](#protonation-states).
 
 ## The default residue library: `STD_CCD_CACHE`
 
@@ -65,18 +67,19 @@ topology = topology_from_pdb(
 
 ### Protonation states
 
-The CCD format does not provide alternate protonation states for all residues, and for those it does many are chemical nonsense and represent fragments that may be visible crystallographically rather than something you'd want to simulate. As a result, all alternate protonation states must be specified either by Pablo or by the user. The [`ResidueDefinition.vary_protonation`] function makes this simple:
+The CCD format does not provide alternate protonation states for all residues, and for those it does many are chemical nonsense and represent fragments that may be visible crystallographically rather than something you'd want to simulate. As a result, all alternate protonation states must be specified either by Pablo or by the user. The [`CcdCache.with_varied_protonation`] function makes this simple:
 
 ```{python}
-my_residue_library = STD_CCD_CACHE.with_(
-    STD_CCD_CACHE["ABU"][0].vary_protonation(
-        acidic=["HXT"], # Atom name of abstractable proton
-        basic=[("N", "H3")], # Atom to protonate, name of new proton
-    )[1:]
+my_residue_library = STD_CCD_CACHE.with_varied_protonation(
+    "ABU",
+    acidic=["HXT"], # Atom name of abstractable proton
+    basic=[("N", "H3")], # Atom to protonate, name of new proton
 )
+[resdef.description for resdef in my_residue_library["ABU"]]
 ```
 
-`vary_protonation` returns all combinations of the specified proton abstractions and additions, including the original residue. The original residue is always first, so we can safely avoid duplicates by just adding all new definitions but the first, as above.
+`with_varied_protonation` adds all combinations of the specified proton abstractions and additions to all existing residues in the cache, skipping any
+combinations with clashing names or that try to modify or remove atoms that don't exist.
 
 ### Virtual sites
 
@@ -170,7 +173,7 @@ You can also define a completely custom instance of `CcdCache`; this is describe
 [`ResidueDefinition`]: openff.pablo.ResidueDefinition
 [`STD_CCD_CACHE`]: openff.pablo.STD_CCD_CACHE
 [`CcdCache`]: openff.pablo.ccd.CcdCache
-[`ResidueDefinition.vary_protonation`]: openff.pablo.ResidueDefinition.vary_protonation
+[`CcdCache.with_varied_protonation`]: openff.pablo.ccd.CcdCache.with_varied_protonation
 [`with_`]: openff.pablo.ccd.CcdCache.with_
 [`with_replaced`]: openff.pablo.ccd.CcdCache.with_replaced
 [`with_virtual_sites`]: openff.pablo.ccd.CcdCache.with_virtual_sites

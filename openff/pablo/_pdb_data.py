@@ -647,7 +647,7 @@ class PdbData:
 
     def get_name_based_matches(
         self,
-        residue_library: Mapping[str, Iterable[ResidueDefinition]],
+        residue_library: Mapping[str, Collection[ResidueDefinition]],
     ) -> Iterator[list[PossibleResidueMatch]]:
         """
         Get possible matches for residues based on their names.
@@ -1529,7 +1529,7 @@ class PdbData:
 
     def match_residues(
         self,
-        residue_library: Mapping[str, Iterable[ResidueDefinition]],
+        residue_library: Mapping[str, Collection[ResidueDefinition]],
         additional_definitions: Iterable[ResidueDefinition],
     ) -> list[list[PossibleResidueMatch]]:
         """
@@ -1613,7 +1613,7 @@ class PdbData:
 
     def get_successful_matches(
         self,
-        residue_library: Mapping[str, Iterable[ResidueDefinition]],
+        residue_library: Mapping[str, Collection[ResidueDefinition]],
         additional_definitions: Sequence[ResidueDefinition],
     ) -> list[SuccessfulMatch]:
         """

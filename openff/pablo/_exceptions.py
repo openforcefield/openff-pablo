@@ -11,6 +11,7 @@ __all__ = [
     "ResidueValidationError",
     "PdbResidueMatchError",
     "UnknownOrAmbiguousSerialInConectError",
+    "MissingAtomError",
     "create_pdb_residue_match_error",
 ]
 
@@ -30,6 +31,7 @@ from openff.pablo._matching import (
 )
 from openff.pablo._utils import flatten
 from openff.pablo.exceptions import (
+    MissingAtomError,
     PabloError,
     PdbResidueMatchError,
     ResidueValidationError,

@@ -25,7 +25,7 @@ __all__ = [
 ]
 
 
-class CcdCache(Mapping[str, list[ResidueDefinition]]):
+class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
     """
     Caches, patches, and presents the CCD as a Python ``Mapping``.
 
@@ -149,14 +149,14 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         for resname, resdefs in extra_definitions.items():
             self._add_definitions(resdefs, resname)
 
-    def __getitem__(self, key: str) -> list[ResidueDefinition]:
+    def __getitem__(self, key: str) -> tuple[ResidueDefinition, ...]:
         res_name = key.upper()
         if res_name in ["UNK", "UNL"] and res_name not in self._definitions:
             # These residue names are reserved for unknown ligands/peptide residues
             raise KeyError(res_name, "reserved residue name")
         # Check the loaded definitions
         try:
-            return self._definitions[res_name]
+            return tuple(self._definitions[res_name])
         except KeyError:
             pass
 
@@ -169,7 +169,7 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         # since this CcdCache was created - say, in a separate process, or
         # another CcdCache - but this is done by _add_definition_from_ccd()
         try:
-            return self._add_definition_from_ccd(res_name)
+            return tuple(self._add_definition_from_ccd(res_name))
         except HTTPError:
             raise KeyError(res_name, "unknown and absent from CCD")
         except URLError:
@@ -628,6 +628,70 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
                 add_vsites_to_water,
             )
         )
+
+    def with_varied_protonation(
+        self,
+        residue_name: str,
+        *,
+        acidic: Iterable[str] = (),
+        basic: Iterable[tuple[str, str]] = (),
+    ) -> Self:
+        """
+        Get a copy of ``self`` with all combinations of some protonation states.
+
+        Note that all combinations of protonations and deprotonations are
+        generated; this means that if ``acidic`` has length ``n`` and ``basic``
+        has length ``m``, ``2**(n+m)`` variants will be generated for each
+        existing variant.
+
+        If no variants at all are generated, ``PabloError`` is raised. Otherwise,
+        whatever variants make sense are created for each existing variant.
+
+        This method will download the given residue name from the CCD if it is
+        not already in the cache.
+
+        Parameters
+        ==========
+        residue_name
+            The name of the residue to generate alternate protonation states
+            for.
+        acidic
+            Existing hydrogen atoms that can be removed to form a new
+            protonation state. Each element specifies an atom name to remove,
+            decrementing the formal charge on the neighbouring heavy atom.
+            Multiply bonded, unbonded, missing, or non-hydrogen atoms are
+            skipped unless no variants at all are generated.
+        basic
+            Existing non-hydrogen atoms that can be protonated to form a new
+            protonation state, as well as the canonical name of the new
+            hydrogen. Each tuple specifies an atom name to protonate (increment
+            the formal charge and form a bond) and the name of the added proton.
+            Unknown heavy atoms and new atom names that clash with existing
+            names raise are skipped unless no variants at all are generated.
+        """
+        original_resdefs = self[residue_name]
+        if len(original_resdefs) == 0:
+            raise PabloError("cannot (de)protonate unknown residue {residue_name}")
+
+        new_resdefs: list[ResidueDefinition] = []
+        for resdef in original_resdefs:
+            resdef_variants = resdef.vary_protonation(
+                acidic=acidic,
+                basic=basic,
+                skip_errors=True,
+            )
+            # Only add the new variants so we can keep count of how many we've
+            # come up with
+            for i, variant in enumerate(resdef_variants[1:]):
+                # Filter out duplicate variants
+                if not any(
+                    variant._is_isomorphic_to(other) for other in resdef_variants[:i]
+                ):
+                    new_resdefs.append(variant)
+        if len(new_resdefs) == 0:
+            raise PabloError("no new protonation variants added")
+
+        return self.with_({residue_name: new_resdefs})
 
 
 # TODO: Fill in this data

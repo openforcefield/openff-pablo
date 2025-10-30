@@ -120,6 +120,41 @@ glycine.visualize()
 Pablo can read and write most residue information from a `Molecule`; see the [`from_molecule`] API docs for details on how this is stored on the `Molecule` side. This means `Molecule` objects can be used to modify residue definitions:
 
 ```{python}
+# Rename atom based on SMARTS string
+riboflavin = STD_CCD_CACHE["RBF"][0]
+offmol = riboflavin.to_openff_molecule()
+# match the nitrogen in the flavin ring that bonds to the ribose sidechain
+matches = offmol.chemical_environment_matches("[N&R:1]-[CH2&!R]")
+# Rename the atom
+offmol.atom(matches[0][0]).name = "Nxx"
+
+ResidueDefinition.from_molecule(offmol).visualize(highlight=["Nxx"])
+```
+
+### From an SDF file
+
+SDF files do not have a universal concept of atom names, so only anonymous definitions can be created:
+
+```{python}
+ResidueDefinition.anon_from_sdf("l-mirtazapine.sdf").visualize()
+```
+
+### By protonating or deprotonating
+
+In addition to the [`CcdCache.with_varied_protonation`] method that lets you modify a residue library directly, the [`ResidueDefinition.vary_protonation`] method generates all requested protonation states in one go:
+
+```{python}
+glycine = STD_CCD_CACHE["GLY"][0]
+glycine_resdefs = glycine.vary_protonation(
+    acidic=["HXT"], # Atom name of abstractable proton
+    basic=[("N", "H3")], # Atom to protonate, name of new proton
+)
+[resdef.description for resdef in glycine_resdefs]
+```
+
+### By SMARTS reaction
+
+```{python}
 serine = STD_CCD_CACHE["SER"][0]
 offmol = serine.to_openff_molecule()
 
@@ -144,11 +179,6 @@ phosphoserine = ResidueDefinition.from_molecule(
 )
 phosphoserine.visualize()
 ```
-
-
-### From an SDF file
-
-### By protonating or deprotonating
 
 [`ResidueDefinition`]: openff.pablo.ResidueDefinition
 [`AtomDefinition`]: openff.pablo.residue.AtomDefinition
@@ -177,3 +207,5 @@ phosphoserine.visualize()
 [`from_smiles`]: openff.pablo.ResidueDefinition.from_smiles
 [`from_molecule`]: openff.pablo.ResidueDefinition.from_molecule
 [`Molecule`]: openff.toolkit.topology.Molecule
+[`CcdCache.with_varied_protonation`]: openff.pablo.ccd.CcdCache.with_varied_protonation
+[`ResidueDefinition.vary_protonation`]: openff.pablo.ResidueDefinition.vary_protonation

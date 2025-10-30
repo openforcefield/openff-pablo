@@ -1027,13 +1027,16 @@ class ResidueDefinition:
             ],
         )
 
-    def deprotonated_at(self, name: str) -> Self:
+    def deprotonated_at(
+        self,
+        name: str,
+    ) -> Self:
         """Return a copy of ``self`` with proton ``name`` abstracted.
 
         The hydrogen with canonical name ``name`` is removed, and the formal
         charge of the atom bonded to it is decremented. If the named atom is not
         hydrogen, is missing, or is bonded to a number of other atoms other than
-        1, ``ValueError`` is raised.
+        1, ``PabloError`` is raised.
         """
         try:
             atom = self.canonical_name_to_atom[name]
@@ -1078,7 +1081,7 @@ class ResidueDefinition:
         incremented, a new hydrogen atom named ``proton_name`` is added, and a
         bond is created between the two named atoms.  If the heavy atom is
         missing or the new proton name clashes with an existing name or synonym,
-        ``ValueError`` is raised. The new atom has the same value for the
+        ``PabloError`` is raised. The new atom has the same value for the
         ``leaving`` attribute as the heavy atom. The synonym clash check may be
         suppressed with the ``ignore_synonym_clashes`` argument, but the
         canonical names are always checked.
@@ -1131,6 +1134,7 @@ class ResidueDefinition:
         # Each tuple specifies an atom name to protonate (increment the formal
         # charge and form a bond) and the name of the added proton
         ignore_synonym_clashes: bool = False,
+        skip_errors: bool = False,
     ) -> list[Self]:
         """
         Compute all combinations of the specified protonation variants
@@ -1148,32 +1152,52 @@ class ResidueDefinition:
         acidic
             Each element specifies an atom name to remove, decrementing the
             formal charge on the neighbouring heavy atom. Multiply bonded,
-            unbonded, missing or non-hydrogen atoms raise ``PabloError``.
+            unbonded, missing or non-hydrogen atoms raise ``PabloError`` unless
+            ``skip_errors`` is ``True``.
         basic
             Each tuple specifies an atom name to protonate (increment the formal
             charge and form a bond) and the name of the added proton. Missing
             heavy atoms or new atom names that clash with existing names raise
-            ``ValueError``.
+            ``PabloError`` unless ``skip_errors`` is ``True``.
         ignore_synonym_clashes
             If set to ``True``, protons added by the ``basic`` argument may have
             names that clash with the synonyms of other atoms. This can be
             useful in the early stages of a multi-step residue definition
             patching process. Added protons may never have names that clash
             with the canonical names of other atoms.
+        skip_errors
+            If set to ``True``, missing, clashing, or improperly bonded atoms
+            are skipped rather than raising ``PabloError``.
         """
         variants = [self]
         for proton_to_remove in acidic:
             for variant in list(variants):
-                variants.append(variant.deprotonated_at(proton_to_remove))
+                try:
+                    variants.append(
+                        variant.deprotonated_at(
+                            proton_to_remove,
+                        ),
+                    )
+                except PabloError as err:
+                    if skip_errors:
+                        continue
+                    else:
+                        raise err from None
         for atom_to_protonate, name_of_proton in basic:
             for variant in list(variants):
-                variants.append(
-                    variant.protonated_at(
-                        atom_to_protonate,
-                        name_of_proton,
-                        ignore_synonym_clashes=ignore_synonym_clashes,
-                    ),
-                )
+                try:
+                    variants.append(
+                        variant.protonated_at(
+                            atom_to_protonate,
+                            name_of_proton,
+                            ignore_synonym_clashes=ignore_synonym_clashes,
+                        ),
+                    )
+                except PabloError as err:
+                    if skip_errors:
+                        continue
+                    else:
+                        raise err from None
         return variants
 
     def with_synonyms(self, synonyms: Mapping[str, Sequence[str]]) -> Self:
@@ -1469,12 +1493,19 @@ class ResidueDefinition:
 
     def visualize(
         self,
+        *,
         width: int = -1,
         height: int = 300,
+        highlight: Iterable[str] = (),
     ) -> "IPython.core.display.SVG":
         from IPython.display import SVG
 
         offmol = self.to_openff_molecule()
+
+        highlight = set(highlight)
+        highlight_atoms = [
+            i for i, atom in enumerate(offmol.atoms) if atom.name in highlight
+        ]
 
         deemphasize_atoms = [i for i, atom in enumerate(self.atoms) if atom.leaving]
 
@@ -1546,7 +1577,8 @@ class ResidueDefinition:
             height=height,
             atom_notes=atom_notes,
             bond_notes=bond_notes,
-            deemphasize_atoms=deemphasize_atoms,
+            deemphasize_atoms=deemphasize_atoms or None,
             legend=" ".join(legend_elements),
+            highlight_atoms=highlight_atoms or None,
         )
         return SVG(data=svg_content)

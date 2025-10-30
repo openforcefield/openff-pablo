@@ -1,6 +1,6 @@
 import logging
 import warnings
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from io import TextIOBase
 from os import PathLike
 from pathlib import Path
@@ -30,9 +30,9 @@ def topology_from_pdb(
     *,
     residue_library: Mapping[
         str,
-        Iterable[ResidueDefinition],
+        Collection[ResidueDefinition],
     ] = STD_CCD_CACHE,
-    additional_definitions: Iterable[ResidueDefinition] = [],
+    additional_definitions: Collection[ResidueDefinition] = [],
     format: Literal["PDB", "CIF", None] = None,
     use_canonical_names: bool = False,
 ) -> Topology:

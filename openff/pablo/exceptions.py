@@ -7,6 +7,7 @@ __all__ = [
     "ResidueValidationError",
     "PdbResidueMatchError",
     "UnknownOrAmbiguousSerialInConectError",
+    "MissingAtomError",
 ]
 
 
@@ -15,6 +16,12 @@ from collections.abc import Collection
 
 class PabloError(ValueError):
     """A generic Pablo error. Base class of all Pablo errors."""
+
+    pass
+
+
+class MissingAtomError(PabloError):
+    """A required atom is missing from a ``ResidueDefinition``."""
 
     pass
 
