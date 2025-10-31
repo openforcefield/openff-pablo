@@ -14,7 +14,7 @@ The catch is that it *requires connectivity to already be defined*. Unlike the r
 
 This is why `additional_definitions` is always checked *after* as many residues as possible are matched from the residue library; those residue matches may be essential for defining the connectivity of parts of an `additional_definition`.
 
-Definitions in `additional_definitions` are often specified as anonymous definitions, as this generally simplifies definition creation and most of the other information is not used.
+Definitions in [`additional_definitions`] are often specified as anonymous definitions, as this generally simplifies definition creation and most of the other information is not used.
 
 `additional_definitions` has one more catch: it can only *add information* to *unknown* atoms and bonds, and can never *disambiguate* matches from the residue library. This is a check against getting the wrong chemistry by accident!
 

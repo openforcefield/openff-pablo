@@ -403,7 +403,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         | Sequence[ResidueDefinition],
     ) -> Self:
         """
-        Get a new ``CcdCache`` with additional definitions.
+        Get a copy of this ``CcdCache`` with additional definitions added.
 
         Definitions may be supplied as a mapping from residue names to sequences
         of residue definitions, or as a sequence of residue definitions. In the
@@ -473,7 +473,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         | Sequence[ResidueDefinition],
     ) -> Self:
         """
-        Get a new ``CcdCache`` with replaced definitions of some residue names.
+        Get a copy of this ``CcdCache`` with some definitions replaced.
 
         Similar to ``with_``, but does not retain existing definitions for the
         specified residue names. All residue names that are keys of a
@@ -509,7 +509,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         residue_names: Iterable[str],
     ) -> Self:
         """
-        Get a new ``CcdCache`` with some residue names removed.
+        Get a copy of this ``CcdCache`` lacking any definitions with some names.
 
         All definitions for each of the given residue names will not be present
         in the new cache. Note that residues that are in the CCD will still be
@@ -562,7 +562,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         virtual_sites: Iterable[str],
     ) -> Self:
         """
-        Add a new residue definition requiring the given virtual site names.
+        Copy ``self``, adding new residue definitions requiring some virtual sites.
 
         The new definition is added to a copy of the ``CcdCache``, and the copy
         is returned. The original ``CcdCache`` is left unmodified.
@@ -585,7 +585,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
 
     def with_vsite_water(self) -> Self:
         """
-        Add new residue definitions for common multisite water models.
+        Copy ``self``, adding new definitions for common multisite water models.
 
         The new definitions are added to a copy of the ``CcdCache``, and the
         copy is returned. The original ``CcdCache`` is left unmodified.

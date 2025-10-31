@@ -45,9 +45,9 @@ A [`crosslink`] can be between any two residues, but the bond must be specified 
 
 ### Anonymous definitions
 
-There is a special kind of residue definition called an "anonymous definition". These definitions are not specific to any residue name and so their `name` attribute is `None`. The canonical names of their atoms act only as identifiers and are not expected to be found in the PDB file. As they have no residue name, they cannot be matched during residue-by-residue matching, and can only be provided to the [`additional_definitions`] argument.
+There is a special kind of residue definition called an "anonymous definition". These definitions are not specific to any residue name and so their [`residue_name`] attribute is `None`. The canonical names of their atoms act only as identifiers and are not expected to be found in the PDB file. As they have no residue name, they cannot be matched during residue-by-residue matching, and can only be provided to the [`additional_definitions`] argument.
 
-Because they have no real atom names, anonymous definitions do not use the `crosslink` and `linking_bond` attributes. They can, however, still have leaving atoms; during `additional_definitions` matching, leaving atoms are not matched, but bonds between non-leaving atoms and leaving atoms are. This allows anonymous definitions to match substructures instead of whole molecules.
+Because they have no real atom names, anonymous definitions do not use the [`crosslink`] and [`linking_bond`] attributes. They can, however, still have leaving atoms; during `additional_definitions` matching, leaving atoms are not matched, but bonds between non-leaving atoms and leaving atoms are. This allows anonymous definitions to match substructures instead of whole molecules.
 
 ## Creating a residue definition
 
@@ -183,9 +183,9 @@ phosphoserine = ResidueDefinition.react(
 phosphoserine.visualize()
 ```
 
-The products can be given new names and other attribute values with the corresponding arguments. If there are more products than provided values, only the first products will be assigned the values; the latter products will be made anonymous. `react` returns a list of tuples; the elements of the tuples are the individual products, and the tuples represent ways that the reaction can occur. Very often, such as in the above example, only the first product of the first realization is required.
+The products can be given new names and other attribute values with the corresponding arguments. If there are more products than provided values, only the first products will be assigned the values; the latter products will be made anonymous. [`react`] returns a list of tuples; the elements of the tuples are the individual products, and the tuples represent ways that the reaction can occur. Very often, such as in the above example, only the first product of the first realization is required.
 
-Reactions can be used to create new residue definitions for a custom library, or to easily produce definitions of patterns that Pablo doesn't yet recognize for `additional_definitions`.
+Reactions can be used to create new residue definitions for a custom library, or to easily produce definitions of patterns that Pablo doesn't yet recognize for [`additional_definitions`].
 
 [`ResidueDefinition`]: openff.pablo.ResidueDefinition
 [`AtomDefinition`]: openff.pablo.residue.AtomDefinition
@@ -217,3 +217,4 @@ Reactions can be used to create new residue definitions for a custom library, or
 [`CcdCache.with_varied_protonation`]: openff.pablo.ccd.CcdCache.with_varied_protonation
 [`ResidueDefinition.vary_protonation`]: openff.pablo.ResidueDefinition.vary_protonation
 [`ResidueDefinition.react`]: openff.pablo.ResidueDefinition.react
+[`react`]: openff.pablo.ResidueDefinition.react
