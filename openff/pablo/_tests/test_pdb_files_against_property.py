@@ -1107,24 +1107,24 @@ def test_complex_pdb_1flr():
 # TODO: Debug this
 @pytest.mark.xfail
 @pytest.mark.slow
-def test_sindhikara_using_sdf():
+def test_7yv1_using_sdf():
     ligand = ResidueDefinition.anon_from_sdf(
-        get_test_data_path("sindhikara/7yv1_ligand.sdf"),
+        get_test_data_path("7yv1/7yv1_ligand.sdf"),
     )
 
     _topology = topology_from_pdb(
-        file=get_test_data_path("sindhikara/7yv1_prepped.pdb"),
+        file=get_test_data_path("7yv1/7yv1_prepped.pdb"),
         additional_definitions=[ligand],
     )
 
 
-def test_sindhikara_peptide_using_sdf():
+def test_7yv1_peptide_using_sdf():
     ligand = ResidueDefinition.anon_from_sdf(
-        get_test_data_path("sindhikara/7yv1_ligand.sdf"),
+        get_test_data_path("7yv1/7yv1_ligand.sdf"),
     )
 
     _topology = topology_from_pdb(
-        file=get_test_data_path("sindhikara/7yv1_prepped_cyclicpeptide.pdb"),
+        file=get_test_data_path("7yv1/7yv1_prepped_cyclicpeptide.pdb"),
         additional_definitions=[ligand],
     )
 
