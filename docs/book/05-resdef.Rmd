@@ -1,6 +1,19 @@
 (chapter:resdef)=
 # Creating custom residue definitions
 
+```{python echo=FALSE, results='hide'}
+from openff.pablo.residue import (
+    ResidueDefinition,
+    AtomDefinition,
+    BondDefinition,
+)
+from openff.pablo import STD_CCD_CACHE
+import openff.pablo.chem
+from openff.pablo._utils import react
+import os
+os.chdir('structures/')
+```
+
 Sometimes you need to create a custom residue definition. This might be when you want to augment the CCD cache with a residue of your own, or when creating your own residue library. All residue definitions are instances of the [`ResidueDefinition`] class. That class has a large number of `from_*()` methods that can be used to easily and quickly generate residue definitions.
 
 For ligands and single-residue molecules, the reference docs for that class might be all you need. Unfortunately, preparing residue definitions that can actually link to each other in a polymer requires a little bit more understanding.
@@ -14,7 +27,7 @@ A typical residue definition consists of the following information:
 1. [`ResidueDefinition.atoms`]: A canonical name, possible synonyms, and chemical information for each atom in the residue.
 2. [`ResidueDefinition.bonds`]: The bonds in the residue, specified as chemical information plus two canonical atom names that the bond is between.
 3. [`ResidueDefinition.residue_name`]: A residue name, which is the identifier used in a PDB file to refer to the residue and should be 1-4 characters long.
-4. [`ResidueDefinition.description`]: A short description of the residue, usually consisting of little more than its IUPAC name.
+4. [`ResidueDefinition.description`]: A short, cosmetic description of the residue, usually consisting of little more than its IUPAC name.
 5. [`ResidueDefinition.linking_bond`] and [`ResidueDefinition.crosslink`]: Bonds that may be formed between this residue and another, specified like the interior bonds but with one atom name referring to an atom in another residue, alongside at least one atom marked [`leaving`] which is removed when the bond is formed.
 6. [`ResidueDefinition.virtual_sites`]: A collection of virtual site names, all of which must be present for the residue to match but are discarded and leave no trace in the final `Topology`.
 
@@ -29,13 +42,13 @@ It's usually not required to specify bonds by hand, as the constructor methods p
 Each bond in the residue is defined by a [`BondDefinition`] object. Bonds are specified as two atom names, plus some chemical information. These atom names always refer to the canonical names of the corresponding atoms, and never to
 synonyms; the canonical names act as the atom's unique identifier within the residue definition.
 
-The only essential chemical information in a bond definition is the bond order, an integer from 1 to 4 specifying the number of pairs of electrons involved in the bond - 1 for a single bond, 2 for a double bond, and so on. Bond aromaticity and stereochemistry may be defined, and is defined for residue definitions loaded from the CCD, but is not used by Pablo.
+The only essential chemical information in a bond definition is the bond order, an integer from 1 to 4 specifying the number of pairs of electrons involved in the bond - 1 for a single bond, 2 for a double bond, and so on. Bond aromaticity and stereochemistry may be defined but is not used by Pablo. Instead, stereochemistry is inferred from the PDB file's coordinates, and aromaticity is perceived according to the OpenFF Toolkit's preferred aromaticity model.
 
 ### Links and crosslinks
 
 While bonds within a residue are enumerated in the [`bonds`] attribute, bonds between residues are specified with the [`linking_bond`] and [`crosslink`] attributes. Both are specified as [`BondDefinition`] instances, but in this case one atom refers to an atom within the residue, and the other to another residue. A residue can have up to one linking bond, and up to one crosslink.
 
-The presence of a link or crosslink for a given residue in a PDB file is inferred from the absence of a leaving fragment that can be removed from the residue definition and replaced by the linking bond to preserve the valence of the linking atom. A leaving fragment must be present in the residue definition and absent from the residue in the PDB file for the link to form. Leaving fragments are just an atom bonded to the atom in the link or crosslink, plus any leaving atoms bonded to an atom in the fragment.
+The presence of a link or crosslink for a given residue in a PDB file is inferred from the absence of a "leaving fragment" that can be removed from the residue definition and replaced by the linking bond to preserve the valence of the linking atom. Leaving fragments consist of the leaving atom bonded to the atom in the link or crosslink, plus any leaving atoms bonded to an atom already in the leaving fragment. A leaving fragment must be present in the residue definition and absent from the residue in the PDB file for the link to form.
 
 A typical polymer bond is specified as a [`linking_bond`]. These specify the bonds between adjacent residues in the same chain, though the actual matching code uses a heuristic to determine whether they should be candidates for bonding. If you'd like Pablo to infer a linking bond between non-adjacent residues, the easiest way to ensure it is to name the atoms according to the `linking_bond` attribute and link them with a CONECT record. Both residue definitions must have linking bonds that agree with each other for the bond to form.
 
@@ -45,24 +58,15 @@ A [`crosslink`] can be between any two residues, but the bond must be specified 
 
 ### Anonymous definitions
 
-There is a special kind of residue definition called an "anonymous definition". These definitions are not specific to any residue name and so their [`residue_name`] attribute is `None`. The canonical names of their atoms act only as identifiers and are not expected to be found in the PDB file. As they have no residue name, they cannot be matched during residue-by-residue matching, and can only be provided to the [`additional_definitions`] argument.
+Pablo usually identifies residues by their residue and atom names, and so a typical residue definition includes those names. However, sometimes no standard names exist, or you want to use software that doesn't produce a consistent naming convention. In these cases, Pablo supports and assists in the creation of "anonymous" definitions, which are intended for use with the [`additional_definitions`] argument.
+
+Anonymous definitions are a special sort of residue definition that is not specific to any residue name, and so their [`residue_name`] attribute is `None`. The canonical names of their atoms act only as internal identifiers and are not expected to be found in the PDB file. As they have no residue name, they cannot be matched during residue-by-residue matching, and can only be provided to the [`additional_definitions`] argument.
 
 Because they have no real atom names, anonymous definitions do not use the [`crosslink`] and [`linking_bond`] attributes. They can, however, still have leaving atoms; during `additional_definitions` matching, leaving atoms are not matched, but bonds between non-leaving atoms and leaving atoms are. This allows anonymous definitions to match substructures instead of whole molecules.
 
 ## Creating a residue definition
 
 The usual way to create a custom residue definition is by using one of the [constructor methods], or by modifying an existing one with the [instance methods]. We plan to continue adding more of these as we get user reports of objects they'd like to be able to make definitions out of, so please get in touch if you have an idea and stay tuned!
-
-```{python echo=FALSE, results='hide'}
-from openff.pablo.residue import (
-    ResidueDefinition,
-    AtomDefinition,
-    BondDefinition,
-)
-from openff.pablo import STD_CCD_CACHE
-import openff.pablo.chem
-from openff.pablo._utils import react
-```
 
 ### From a SMILES string
 

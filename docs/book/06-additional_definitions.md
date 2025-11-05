@@ -7,7 +7,7 @@ The [`additional_definitions`] argument of the `topology_from_pdb` function is t
 2. When atom names are unknown, missing, or inconsistent
 3. When the `crosslink` and `linking_bond` attributes don't adequately describe the connectivity of residues
 
-The catch is that it *requires connectivity to already be defined*. Unlike the residue library, `additional_definitions` can only add chemical information to existing bonds; it cannot create bonds. It also requires atom elements and formal charges to be correctly specified in the PDB file. To make this as flexible as possible, `additional definitions` can get bond information from two places:
+The catch is that it *requires connectivity to already be defined*. Unlike the residue library, `additional_definitions` can only add chemical information to existing bonds; it cannot create bonds. It also requires atom elements to be correctly specified in the PDB file. To make this as flexible as possible, `additional definitions` can get bond information from two places:
 
 1. From `CONECT` records in the PDB file, which specify which atoms are bonded but not the chemical properties of the bond, and
 2. from residue definitions that have already matched from the residue library. Here, the chemical properties of the bond are specified, and so the additional definition must match those properties.

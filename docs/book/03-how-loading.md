@@ -10,8 +10,8 @@ Loading a PDB file with Pablo follows four steps:
 
 Chemical information is therefore built up by combining information in the PDB file with information in the residue library. To load a PDB file, at least one of the following conditions must be met for each atom record:
 
-1. The atom is part of a residue that has the same residue name and atom names as a residue definition in the residue library (chemical info assigned in step 2)
-2. The atom is part of a residue that has the same residue name, elements, and connectivity (described through `CONECT` records) as a residue definition in the residue library
+1. The atom is part of a residue that has the same residue name and *atom names* as a residue definition in the residue library (chemical info assigned in step 2)
+2. The atom is part of a residue that has the same residue name, *elements*, and connectivity (described through `CONECT` records) as a residue definition in the residue library. This allows standard residues whose atoms can be uniquely identified from their `CONECT` records to work even if they have nonstandard names.
 3. The atom is covered by a residue definition in `additional_definitions`, and all bonds in that definition are specified either via CONECT records or by matches found in the residue library. In this case, the atom and residue names  of atoms covered only by additional definitions are not consulted.
 
 In all cases, all sources of chemical information must agree, so that there is no ambiguity about what chemical is intended. Two sources of chemical information agree if they would generate molecules with identical connectivity, elements, and net formal charge. Note that this means that the resonance form produced is arbitrary and depends on the order of residue definitions in the library.

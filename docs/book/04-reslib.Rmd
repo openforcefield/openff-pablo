@@ -1,9 +1,14 @@
 (chapter:reslib)=
 # The residue library
 
+```{python echo=FALSE, results='hide'}
+import os
+os.chdir('structures/')
+```
+
 Unlike all other PDB loading tools we know about, Pablo exposes its library of known residues to the user for inspection, modification, and even replacement at runtime. This can be done with the [`residue_library`] argument to [`topology_from_pdb`]. `residue_library` takes a mapping from residue IDs to a list of residue definitions (see [](#chapter:resdef)). All of these definitions are matched against any residue with that ID, and all that do match must have consistent chemistry --- Pablo would rather raise an error than provide ambiguous chemistry.
 
-The fact that a residue library admits multiple residue definitions for each name allows alternate protonation states and resonance forms to be included in a residue library. Matches are considered chemically consistent if they have identical elements, connectivity, and net formal charge. Only a few residues have alternative protonation states in default library, so the user will often need to augment it --- thankfully, this is [easy](#protonation-states).
+The fact that a residue library admits multiple residue definitions for each name allows alternate protonation states and even resonance forms to be included in a residue library. Matches are considered chemically consistent if they have identical elements, connectivity, and net formal charge, so if multiple resonance forms match and are chemically consistent than the first one is used. Only a few residues have alternative protonation states in the default library, so the user will often need to augment it --- thankfully, this is [easy](#protonation-states).
 
 ## The default residue library: `STD_CCD_CACHE`
 
@@ -23,12 +28,12 @@ You can read the entire interface in the [`CcdCache`] reference docs, but we sum
 from openff.pablo import STD_CCD_CACHE, ResidueDefinition
 
 my_residue_library = STD_CCD_CACHE.with_([
-    # Create a custom hydrogen peroxide definition
+    # Create a custom ammonia definition
     ResidueDefinition.from_smiles(
-        "[H:1][O:2][O:3][H:4]",
-        atom_names={1: "H1", 2: "O1", 3: "O2", 4: "H2"},
-        residue_name="HOOH",
-        description="HYDROGEN PEROXIDE",
+        "[H:2][N:1]([H:3])[H:4]",
+        atom_names={1: "N", 2: "H1", 3: "H2", 4: "H3"},
+        residue_name="AMMN",
+        description="AMMONIA",
     )
 ])
 ```
@@ -40,16 +45,16 @@ We'll see how to make custom definitions in the next chapter! Like the other `Cc
 from openff.pablo import STD_CCD_CACHE, topology_from_pdb, ResidueDefinition
 
 topology = topology_from_pdb(
-    "HOOH_tip5p.pdb",
+    "nh3_tip5p.pdb",
     residue_library=(
         STD_CCD_CACHE
-            # Add hydrogen peroxide with resid HOOH
+            # Add ammonia with resid AMMO
             .with_([
                 ResidueDefinition.from_smiles(
-                    "[H:1][O:2][O:3][H:4]",
-                    atom_names={1: "H1", 2: "O1", 3: "O2", 4: "H2"},
-                    residue_name="HOOH",
-                    description="HYDROGEN PEROXIDE",
+                    "[H:2][N:1]([H:3])[H:4]",
+                    atom_names={1: "N", 2: "H1", 3: "H2", 4: "H3"},
+                    residue_name="AMMN",
+                    description="AMMONIA",
                 ),
             ])
             # Require 5-point water
@@ -118,7 +123,7 @@ my_residue_library = STD_CCD_CACHE.with_replaced([
 ])
 ```
 
-`with_synonyms` with raise an error if these synonyms introduce any ambiguity.
+`with_synonyms` will raise an error if these synonyms introduce any ambiguity.
 
 ### Arbitrary patches
 
@@ -127,7 +132,7 @@ Arbitrary transformations can be made with the [`with_patch`] method:
 ```{python}
 my_residue_library = STD_CCD_CACHE.with_patch(
     "ALA",
-    lambda resdef: [resdef, resdef.replace(description="L-ALANINE (hi world)")],
+    lambda resdef: [resdef, resdef.with_synonyms({"N": ["NH"]})],
 )
 ```
 
