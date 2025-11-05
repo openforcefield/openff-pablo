@@ -5,6 +5,7 @@ from functools import cached_property
 from typing import ClassVar, Protocol, TypeAlias
 
 from openff.pablo._utils import sort_tuple
+from openff.pablo.exceptions import PabloError
 
 from .residue import AtomDefinition, BondDefinition, ResidueDefinition
 
@@ -125,16 +126,16 @@ class ResidueMatch(MatchProtocol):
             or self.atom(atom1_idx).name != self.residue_definition.crosslink.atom1
             or atom2_idx in self.res_atom_idcs
         ):
-            raise ValueError("bad crosslink index(es)")
+            raise PabloError("bad crosslink index(es)")
         object.__setattr__(self, "crosslink_idcs", (atom1_idx, atom2_idx))
 
     def set_prior_bond(self, atom1_idx: int, atom2_idx: int) -> None:
         if self.residue_definition.linking_bond is None:
-            raise ValueError("cannot set prior bond without linking_bond")
+            raise PabloError("cannot set prior bond without linking_bond")
         if atom1_idx in self.res_atom_idcs:
-            raise ValueError("atom1 in prior bond should be in another residue")
+            raise PabloError("atom1 in prior bond should be in another residue")
         if atom2_idx not in self.res_atom_idcs:
-            raise ValueError("atom2 in prior bond should be in this residue")
+            raise PabloError("atom2 in prior bond should be in this residue")
 
         object.__setattr__(
             self,
@@ -144,11 +145,11 @@ class ResidueMatch(MatchProtocol):
 
     def set_posterior_bond(self, atom1_idx: int, atom2_idx: int) -> None:
         if self.residue_definition.linking_bond is None:
-            raise ValueError("cannot set posterior bond without linking_bond")
+            raise PabloError("cannot set posterior bond without linking_bond")
         if atom1_idx not in self.res_atom_idcs:
-            raise ValueError("atom1 in posterior bond should be in this residue")
+            raise PabloError("atom1 in posterior bond should be in this residue")
         if atom2_idx in self.res_atom_idcs:
-            raise ValueError("atom2 in posterior bond should be in another residue")
+            raise PabloError("atom2 in posterior bond should be in another residue")
 
         object.__setattr__(
             self,
@@ -182,8 +183,8 @@ class ResidueMatch(MatchProtocol):
         if self.residue_definition.linking_bond is None:
             return False
 
-        linking_atom = self.residue_definition.prior_bond_linking_atom
-        expected_leaving_atoms = self.residue_definition.prior_bond_leaving_atoms
+        linking_atom = self.residue_definition._prior_bond_linking_atom
+        expected_leaving_atoms = self.residue_definition._prior_bond_leaving_atoms
 
         return (
             linking_atom in self.canonical_atom_name_to_index
@@ -196,8 +197,8 @@ class ResidueMatch(MatchProtocol):
         if self.residue_definition.linking_bond is None:
             return False
 
-        linking_atom = self.residue_definition.posterior_bond_linking_atom
-        expected_leaving_atoms = self.residue_definition.posterior_bond_leaving_atoms
+        linking_atom = self.residue_definition._posterior_bond_linking_atom
+        expected_leaving_atoms = self.residue_definition._posterior_bond_leaving_atoms
 
         return (
             linking_atom in self.canonical_atom_name_to_index
@@ -211,7 +212,7 @@ class ResidueMatch(MatchProtocol):
             return False
 
         linking_atom = self.residue_definition.crosslink.atom1
-        expected_leaving_atoms = self.residue_definition.crosslink_leaving_atoms
+        expected_leaving_atoms = self.residue_definition._crosslink_leaving_atoms
 
         return (
             linking_atom in self.canonical_atom_name_to_index
@@ -385,10 +386,10 @@ def unwrap_successful(iterable: Iterable[PossibleResidueMatch]) -> SuccessfulMat
     try:
         value = next(iterator)
     except StopIteration:
-        raise ValueError("container has no successful elements")
+        raise PabloError("container has no successful elements")
 
     for redundancy in iterator:
         if not value.agrees_with(redundancy):
-            raise ValueError("container has multiple disagreeing successful elements")
+            raise PabloError("container has multiple disagreeing successful elements")
 
     return value

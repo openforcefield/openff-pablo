@@ -2,32 +2,32 @@ name: pablo-docs
 channels:
   - conda-forge
 dependencies:
-  # Base depends
-  - python>=3.12,<3.13
+  # Base depends (runtime and imports)
   - pip
+  - python>=3.12,<3.13
+  - openff-toolkit-base>=0.17.0
+  - rdkit
+  - openmm
+  - pyxdg
+  - rustworkx
+  - gemmi
 
-  # Documentation
+  # Documentation depends
   - myst-parser
   - sphinx==6.1.2
   - sphinx-notfound-page
   - autodoc-pydantic
   - sphinx-click
+  - myst-nb
+  - jupytext
+  - nglview==3.0.8
 
-  # Imports
-  - openff-units
-  - openff-toolkit>=0.17.0
-  - polars
-  - openmm
-  - mdtraj
-  - numpy
-  - nglview
-  - typer>=0.14
-  - mdanalysis
-  - rdkit
-  - pyxdg
-  - rustworkx
-  - gemmi
+  # Dev tools
+  - sphinx-autobuild
 
   #  Pip-only installs
   - pip:
+      # Documentation depends
       - git+https://github.com/openforcefield/openff-sphinx-theme.git@main
+      - sphinx-hoverxref
+      - sphinx-paramlinks

@@ -1,84 +1,75 @@
-OpenFF Pablo
-==============================
+# OpenFF Pablo
+
 [//]: # (Badges)
 
-| **Latest release** | [![Last release tag](https://img.shields.io/github/release-pre/openforcefield/openff-pablo.svg)](https://github.com/openforcefield/openff-pablo/releases) ![GitHub commits since latest release (by date) for a branch](https://img.shields.io/github/commits-since/openforcefield/openff-pablo/latest)  [![Documentation Status](https://readthedocs.org/projects/openff-pablo/badge/?version=latest)](https://openff-pablo.readthedocs.io/en/latest/?badge=latest)                                                                                                                                                                                                                        |
+| **Latest release** | [![Last release tag](https://img.shields.io/github/release-pre/openforcefield/openff-pablo.svg)](https://github.com/openforcefield/openff-pablo/releases/latest)  [![Documentation Status (Stable)](https://img.shields.io/readthedocs/openff-pablo/stable?logo=readthedocs&logoColor=white&label=docs%20-%20stable)](https://openff-pablo.readthedocs.io/en/stable/)                                                                                                                                                                                                                        |
 | :----------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**         | [![GH Actions Status](https://github.com/openforcefield/openff-pablo/actions/workflows/gh-ci.yaml/badge.svg)](https://github.com/openforcefield/openff-pablo/actions?query=branch%3Amain+workflow%3Agh-ci) [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/openforcefield/openff-pablo/main.svg)](https://results.pre-commit.ci/latest/github/openforcefield/openff-pablo/main) |
+| **`main` Branch**         | [![GH Actions Status](https://img.shields.io/github/actions/workflow/status/openforcefield/openff-pablo/gh-ci.yaml?branch=main&logo=github&logoColor=white&label=CI%20-%20main)](https://github.com/openforcefield/openff-pablo/actions?query=branch%3Amain+workflow%3Agh-ci) [![Documentation Status (Latest)](https://img.shields.io/readthedocs/openff-pablo/latest?logo=readthedocs&logoColor=white&label=docs%20-%20latest)](https://openff-pablo.readthedocs.io/en/latest/) ![GitHub commits since latest release (by date) for a branch](https://img.shields.io/github/commits-since/openforcefield/openff-pablo/latest?include_prereleases&sort=semver)     |
 
-New, independent implementation of `Topology.from_pdb`
+New implementation of OpenFF's `Topology.from_pdb`
 
 OpenFF Pablo is bound by a [Code of Conduct](https://github.com/openforcefield/openff-pablo/blob/main/CODE_OF_CONDUCT.md).
 
-### Installation
+## Installation
 
-To build OpenFF Pablo from source,
-we highly recommend using virtual environments.
-If possible, we strongly recommend that you use
-[Anaconda](https://docs.conda.io/en/latest/) as your package manager.
-Below we provide instructions both for `conda` and
-for `pip`.
+This is a pre-release of Pablo and is not yet published in any package manager.
+You can install it by managing your own Conda environment and installing it manually.
 
-#### With conda
+Here we describe dependency and environment management with Micromamba, but other Conda-compatible package managers such as Conda and Mamba work the same way - just change the name of the executable.
 
-Ensure that you have [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html) installed.
+Install Pablo and its dependencies into the current environment:
 
-Create a virtual environment and activate it:
-
+```sh
+# Install dependencies and pip into current environment
+micromamba install -c conda-forge pip 'python>=3.12' 'openff-toolkit-base>=0.17.1' rustworkx rdkit openmm pyxdg gemmi
+# Install Pablo's main branch into current environment via pip
+pip install git+https://github.com/openforcefield/openff-pablo.git@main
 ```
-conda create --name pablo
-conda activate pablo
+
+### Development build
+
+Clone the repository:
+
+```sh
+git clone https://github.com/openforcefield/openff-pablo
+```
+
+Create a virtual environment:
+
+```sh
+micromamba create --name pablo-dev
 ```
 
 Install the development and documentation dependencies:
 
-```
-conda env update --name pablo --file devtools/conda-envs/test_env.yaml
-conda env update --name pablo --file docs/requirements.yaml
-```
-
-Build this package from source:
-
-```
-pip install -e .
+```sh
+micromamba env update -n pablo-dev --file openff-pablo/devtools/conda-envs/test_env.yaml
+micromamba env update -n pablo-dev --file openff-pablo/devtools/conda-envs/docs_env.yaml
 ```
 
-If you want to update your dependencies (which can be risky!), run:
+Install Pablo in editable mode:
 
-```
-conda update --all
-```
-
-And when you are finished, you can exit the virtual environment with:
-
-```
-conda deactivate
+```sh
+micromamba run -n pablo-dev pip install -e openff-pablo
 ```
 
-#### With pip
+Then activate the environment to run commands in it:
 
-To build the package from source, run:
-
-```
-pip install -e .
+```sh
+micromamba activate pablo-dev
 ```
 
-If you want to create a development environment, install
-the dependencies required for tests and docs with:
+Or use `micromamba run -n pablo-dev`. If you want to update your dependencies, rebuild the environment from scratch.
 
-```
-pip install -e ".[test,doc]"
-```
+## Copyright
 
-### Copyright
+The OpenFF Pablo source code is hosted at <https://github.com/openforcefield/openff-pablo>
+and is available to all under the MIT license (see the file [LICENSE](https://github.com/openforcefield/openff-pablo/blob/main/LICENSE)).
 
-The OpenFF Pablo source code is hosted at https://github.com/openforcefield/openff-pablo
-and is available under the MIT license (see the file [LICENSE](https://github.com/openforcefield/openff-pablo/blob/main/LICENSE)).
-
-Copyright (c) 2025, Josh Mitchell
+Copyright (c) 2025, Open Force Field Initiative
 
 
-#### Acknowledgements
+## Acknowledgements
 
 Project based on the
 [OpenFF Cookiecutter](https://github.com/lilyminium/cookiecutter-openff) version 0.1.

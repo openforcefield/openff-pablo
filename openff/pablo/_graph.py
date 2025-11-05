@@ -3,6 +3,9 @@ from typing import Literal
 
 import rustworkx as rx
 
+from openff.pablo._utils import unwrap
+from openff.pablo.exceptions import PabloError
+
 __all__ = ["Graph"]
 
 
@@ -47,10 +50,13 @@ class Graph[NodeT: Hashable, EdgeT: Hashable]:
         for neighbour_idx in neighbour_idcs:
             yield self._graph.get_node_data(neighbour_idx)
 
+    def _add_edge_between_indices(self, node_a_idx: int, node_b_idx: int, edge: EdgeT):
+        self._edge_idcs[edge] = self._graph.add_edge(node_a_idx, node_b_idx, edge)
+
     def add_edge(self, node_a: NodeT, node_b: NodeT, edge: EdgeT):
         node_a_idx = self._node_idcs[node_a]
         node_b_idx = self._node_idcs[node_b]
-        self._edge_idcs[edge] = self._graph.add_edge(node_a_idx, node_b_idx, edge)
+        self._add_edge_between_indices(node_a_idx, node_b_idx, edge)
 
     def add_edges_from(self, obj_list: Iterable[tuple[NodeT, NodeT, EdgeT]]):
         for params in obj_list:
@@ -60,7 +66,7 @@ class Graph[NodeT: Hashable, EdgeT: Hashable]:
         if node in self._node_idcs:
             if skip_existing:
                 return
-            raise ValueError("Cannot add existing node")
+            raise PabloError("Cannot add existing node")
         self._node_idcs[node] = self._graph.add_node(node)
 
     def add_nodes_from(self, nodes: Iterable[NodeT], *, skip_existing: bool = False):
@@ -145,6 +151,39 @@ class Graph[NodeT: Hashable, EdgeT: Hashable]:
 
     def is_connected(self) -> bool:
         return rx.is_connected(self._graph)
+
+    def desymmetrize_leaf_nodes(self) -> "Graph[tuple[NodeT, int], EdgeT]":
+        new_graph = Graph[tuple[NodeT, int], EdgeT]()
+
+        old_to_new: dict[int, int] = {}
+        leaf_nodes: dict[int, list[int]] = {}
+        for node_idx in self._graph.node_indices():
+            n_edges = self._graph.degree(node_idx)
+            if n_edges != 1:
+                node = (self._graph[node_idx], 0)
+                new_graph.add_node(node)
+                old_to_new[node_idx] = new_graph._node_idcs[node]
+                continue
+            # node_idx is a leaf node
+            parent = unwrap(self._graph.neighbors(node_idx))
+            leaf_nodes.setdefault(parent, []).append(node_idx)
+
+        for sibling_leaf_nodes in leaf_nodes.values():
+            for i, node_idx in enumerate(sibling_leaf_nodes):
+                node = (self._graph[node_idx], i)
+                new_graph.add_node(node)
+                old_to_new[node_idx] = new_graph._node_idcs[node]
+
+        for (
+            old_node_a_idx,
+            old_node_b_idx,
+            edge,
+        ) in self._graph.edge_index_map().values():
+            node_a_idx = old_to_new[old_node_a_idx]
+            node_b_idx = old_to_new[old_node_b_idx]
+            new_graph._add_edge_between_indices(node_a_idx, node_b_idx, edge)
+
+        return new_graph
 
 
 def _vf2_mapping[

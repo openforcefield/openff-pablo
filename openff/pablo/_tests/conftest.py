@@ -306,7 +306,7 @@ def gly_def_neutral() -> ResidueDefinition:
         bonds=bonds,
         crosslink=None,
         linking_bond=PEPTIDE_BOND,
-        description="GLYCINE",
+        description="GLYCINE NEUTRAL",
         residue_name="GLY",
         virtual_sites=(),
     )
@@ -344,7 +344,7 @@ def gly_def_zwitterionic() -> ResidueDefinition:
         bonds=bonds,
         crosslink=None,
         linking_bond=PEPTIDE_BOND,
-        description="GLYCINE",
+        description="GLYCINE ZWITTERION",
         residue_name="GLY",
         virtual_sites=(),
     )

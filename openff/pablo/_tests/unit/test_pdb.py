@@ -33,7 +33,7 @@ def test_conect_to_vsite():
     }
 
     with StringIO("\n".join(atom_records)) as f:
-        topology_from_pdb(f, residue_database=resdb)
+        topology_from_pdb(f, residue_library=resdb)
 
         f.write(f"\n{conect_record}\n")
         f.seek(0)
@@ -46,4 +46,4 @@ def test_conect_to_vsite():
                 ],
             ),
         ):
-            topology_from_pdb(f, residue_database=resdb)
+            topology_from_pdb(f, residue_library=resdb)

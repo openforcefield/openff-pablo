@@ -1,5 +1,4 @@
 import dataclasses
-import functools
 import itertools
 import logging
 import warnings
@@ -7,7 +6,7 @@ from collections import defaultdict
 from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
-from io import TextIOBase
+from io import IOBase, TextIOBase
 from os import PathLike
 from pathlib import Path
 from typing import IO, Any, DefaultDict, Literal, Protocol, Self
@@ -21,10 +20,13 @@ from openff.pablo._cif import (
     cif_strs,
     parse_cif,
 )
+from openff.pablo._exceptions import (
+    PabloError,
+    UnknownOrAmbiguousSerialInConectError,
+    create_pdb_residue_match_error,
+)
 from openff.pablo._graph import Graph
-from openff.pablo._rdkit import EditableRdMol, RdAtom, RdMol
-
-from ._matching import (
+from openff.pablo._matching import (
     MismatchProtocol,
     NoResidueDefinitions,
     PossibleResidueMatch,
@@ -34,7 +36,8 @@ from ._matching import (
     SuccessfulMatch,
     only_matched,
 )
-from ._utils import (
+from openff.pablo._rdkit import EditableRdMol, RdAtom, RdMol
+from openff.pablo._utils import (
     __UNSET__,
     charge_int_or_none,
     dec_hex,
@@ -44,11 +47,7 @@ from ._utils import (
     unwrap,
     unwrap_or_none,
 )
-from .exceptions import (
-    PdbResidueMatchError,
-    UnknownOrAmbiguousSerialInConectError,
-)
-from .residue import AtomDefinition, BondDefinition, ResidueDefinition
+from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
 
 __all__ = [
     "PdbData",
@@ -134,7 +133,7 @@ class PdbData:
     @classmethod
     def from_file_object(
         cls,
-        file: IO[str] | TextIOBase,
+        file: IO[str] | TextIOBase | IO[bytes] | IOBase,
         format: Literal["PDB", "CIF"] = "PDB",
     ) -> Self:
         """
@@ -147,16 +146,20 @@ class PdbData:
         format
             Which format to interpet the file as
         """
+        lines = [
+            (line if isinstance(line, str) else line.decode())
+            for line in file.readlines()
+        ]
         if format.upper() == "PDB":
-            return cls.parse_pdb(file.readlines())
+            return cls.parse_pdb(lines)
         elif format.upper() == "CIF":
-            return cls.parse_cif(file.readlines())
+            return cls.parse_cif(lines)
         else:
-            raise ValueError(f"format must be one of 'PDB' or 'CIF', not {format!r}")
+            raise PabloError(f"format must be one of 'PDB' or 'CIF', not {format!r}")
 
     @classmethod
     def parse_cif(cls, lines: Iterable[str]) -> Self:
-        if isinstance(lines, str):
+        if isinstance(lines, (str)):
             lines = [lines]
         block = unwrap(parse_cif("\n".join(lines)))
 
@@ -221,7 +224,7 @@ class PdbData:
             if this_res_seq != res_seq or this_chain_id != chain_id:
                 this_serial = data.serial[i]
                 this_line_no = data.line_no[i]
-                raise ValueError(
+                raise PabloError(
                     "Could not identify residue name"
                     + f" for atom serial {this_serial} (l{this_line_no})",
                 )
@@ -231,7 +234,7 @@ class PdbData:
         return data
 
     @classmethod
-    def parse_pdb(cls, lines: Iterable[str], strict: bool = False) -> Self:
+    def parse_pdb(cls, lines: Sequence[str], strict: bool = False) -> Self:
         """
         Parse PDB file lines into a new ``PdbData`` object.
 
@@ -280,7 +283,7 @@ class PdbData:
         """The number of ATOM/HETATM records in the first model"""
         try:
             first_model = self.model[0]
-        except KeyError:
+        except IndexError:
             return 0
         return sum(1 for model in self.model if model == first_model)
 
@@ -365,7 +368,7 @@ class PdbData:
             Updated connectivity information as a list of sets
         """
         for line in lines:
-            if line.startswith("CONECT "):
+            if line.startswith("CONECT"):
                 # a is the serial of the first atom in the conect, we need its indices
                 a = line[6:11].strip()
                 a_idcs = serial_to_index.get(a, [])
@@ -480,7 +483,7 @@ class PdbData:
         # Raise an error if the match would be empty - this way the
         # return value's truthiness always reflects whether there was a match
         if len(res_atom_idcs) == 0:
-            raise ValueError("cannot match empty res_atom_idcs")
+            raise PabloError("cannot match empty res_atom_idcs")
 
         logging.debug(f"  Attempting match against {residue_definition.description}")
 
@@ -644,7 +647,7 @@ class PdbData:
 
     def get_name_based_matches(
         self,
-        residue_database: Mapping[str, Iterable[ResidueDefinition]],
+        residue_library: Mapping[str, Collection[ResidueDefinition]],
     ) -> Iterator[list[PossibleResidueMatch]]:
         """
         Get possible matches for residues based on their names.
@@ -654,7 +657,7 @@ class PdbData:
 
         Parameters
         ----------
-        residue_database
+        residue_library
             A mapping from residue names to their possible definitions
         """
         for res_atom_idcs in self.residue_indices:
@@ -671,7 +674,7 @@ class PdbData:
                     res_atom_idcs,
                     residue_definition,
                 )
-                for residue_definition in residue_database.get(res_name, [])
+                for residue_definition in residue_library.get(res_name, [])
             ]
             if len(matches) > 0:
                 yield matches
@@ -811,7 +814,10 @@ class PdbData:
                     node_matcher=lambda b, c: (
                         self.element[c] == b.symbol
                         and (
-                            (self.name[c] in (b.name, *b.synonyms))
+                            (
+                                self.name[c] in (b.name, *b.synonyms)
+                                and not resdef.is_anonymous
+                            )
                             or (self.charge[c] is None and not self.strict)
                             or ((self.charge[c] or 0) == b.charge)
                         )
@@ -873,24 +879,26 @@ class PdbData:
                     logging.debug(
                         f"        {pdb_idx, j}: {(i_name, j_name)} {len(prev_matches)=} {len(next_matches)=}",
                     )
-                    logging.debug(f"          {resdef.possible_prior_bond_names=}")
-                    logging.debug(f"          {resdef.possible_posterior_bond_names=}")
-                    logging.debug(f"          {resdef.possible_crosslink_bond_names=}")
+                    logging.debug(f"          {resdef._possible_prior_bond_names=}")
+                    logging.debug(f"          {resdef._possible_posterior_bond_names=}")
+                    logging.debug(
+                        f"          {resdef._possible_crosslink_bond_names=}",
+                    )
                     if (
                         len(prev_matches) > 0
                         and j in prev_matches[0].res_atom_idcs
-                        and (j_name, i_name) in resdef.possible_prior_bond_names
+                        and (j_name, i_name) in resdef._possible_prior_bond_names
                     ):
                         logging.debug("          prior")
                         prior_conects.append((j, pdb_idx))
                     elif (
                         len(next_matches) > 0
                         and j in next_matches[0].res_atom_idcs
-                        and (i_name, j_name) in resdef.possible_posterior_bond_names
+                        and (i_name, j_name) in resdef._possible_posterior_bond_names
                     ):
                         logging.debug("          posterior")
                         posterior_conects.append((pdb_idx, j))
-                    elif (i_name, j_name) in resdef.possible_crosslink_bond_names:
+                    elif (i_name, j_name) in resdef._possible_crosslink_bond_names:
                         logging.debug("          crosslink")
                         crosslink_conects.append((pdb_idx, j))
                     else:
@@ -970,7 +978,7 @@ class PdbData:
         # residue) where the linking atom can be found
         neighbour_supported_posterior_bonds: dict[BondDefinition, int] = {
             next_match.residue_definition.linking_bond: next_match.canonical_atom_name_to_index[
-                next_match.residue_definition.prior_bond_linking_atom
+                next_match.residue_definition._prior_bond_linking_atom
             ]
             for next_match in only_matched(next_matches)
             if isinstance(next_match, ResidueMatch)
@@ -979,7 +987,7 @@ class PdbData:
         }
         neighbour_supported_prior_bonds: dict[BondDefinition, int] = {
             prev_match.residue_definition.linking_bond: prev_match.canonical_atom_name_to_index[
-                prev_match.residue_definition.posterior_bond_linking_atom
+                prev_match.residue_definition._posterior_bond_linking_atom
             ]
             for prev_match in only_matched(prev_matches)
             if isinstance(prev_match, ResidueMatch)
@@ -1139,7 +1147,7 @@ class PdbData:
                 else:
                     bond_idcs = (
                         match.canonical_atom_name_to_index[
-                            match.residue_definition.posterior_bond_linking_atom
+                            match.residue_definition._posterior_bond_linking_atom
                         ],
                         neighbour_supported_posterior_bonds[
                             match.residue_definition.linking_bond
@@ -1521,7 +1529,7 @@ class PdbData:
 
     def match_residues(
         self,
-        residue_database: Mapping[str, Iterable[ResidueDefinition]],
+        residue_library: Mapping[str, Collection[ResidueDefinition]],
         additional_definitions: Iterable[ResidueDefinition],
     ) -> list[list[PossibleResidueMatch]]:
         """
@@ -1557,7 +1565,7 @@ class PdbData:
 
         Parameters
         ----------
-        residue_database
+        residue_library
             A mapping from residue names to their possible definitions
         additional_definitions
             Additional substructure definitions to match against the graph of
@@ -1570,7 +1578,7 @@ class PdbData:
             element for each residue in the PDB file, while each inner list contains all
             possible matches (both successful and unsuccessful) for that residue.
         """
-        matches = list(self.get_name_based_matches(residue_database))
+        matches = list(self.get_name_based_matches(residue_library))
 
         class Filter(Protocol):
             def __call__(
@@ -1580,10 +1588,10 @@ class PdbData:
             ) -> Iterator[PossibleResidueMatch]: ...
 
         match_filters: list[Filter] = [
-            functools.partial(
-                self.match_additional_definitions,
-                additional_definitions=additional_definitions,
-            ),
+            # functools.partial(
+            #     self.match_additional_definitions,
+            #     additional_definitions=additional_definitions,
+            # ),
             self.rescue_partial_matches_with_conect_records,
             self.identify_polymer_linkages,
             self.filter_on_crosslinks,
@@ -1605,7 +1613,7 @@ class PdbData:
 
     def get_successful_matches(
         self,
-        residue_database: Mapping[str, Iterable[ResidueDefinition]],
+        residue_library: Mapping[str, Collection[ResidueDefinition]],
         additional_definitions: Sequence[ResidueDefinition],
     ) -> list[SuccessfulMatch]:
         """
@@ -1613,7 +1621,7 @@ class PdbData:
 
         Parameters
         ----------
-        residue_database
+        residue_library
             A mapping from residue names to their possible definitions
         additional_definitions
             Additional substructure definitions to match against the graph of
@@ -1632,7 +1640,7 @@ class PdbData:
         check_additional_definitions: None | bool = None
         unmatched_atoms: set[int] = set()
         for possible_residue_matches in self.match_residues(
-            residue_database,
+            residue_library,
             additional_definitions,
         ):
             logging.debug(
@@ -1686,6 +1694,7 @@ class PdbData:
             return residues
 
         if check_additional_definitions:
+            logging.debug(f"Checking additional definitions {additional_definitions}")
             additional_matches = apply_additional_definitions(
                 self,
                 residues,
@@ -1697,13 +1706,10 @@ class PdbData:
                 for i in match.res_atom_idcs
                 if match.index_to_atomdef[i].symbol != ""
             }
-            logging.debug(
-                f"{unmatched_atoms=} (n={len(unmatched_atoms)})",
-            )
             if len(unmatched_atoms) == 0:
                 return residues + additional_matches
             else:
-                raise PdbResidueMatchError(
+                raise create_pdb_residue_match_error(
                     data=self,
                     errors=errors,
                     additional_definitions=additional_definitions,
@@ -1711,7 +1717,7 @@ class PdbData:
                     unmatched_pdb_idcs=unmatched_atoms,
                 )
 
-        raise PdbResidueMatchError(
+        raise create_pdb_residue_match_error(
             data=self,
             errors=errors,
             additional_definitions=additional_definitions,
@@ -1725,13 +1731,16 @@ class PdbData:
     ) -> RdMol:
         rdmol = EditableRdMol()
         pdb_idcs = {i for i in range(self.n_atoms) if self.alt_loc[i] in {"", " ", "A"}}
-        bonds: dict[tuple[int, int], int] = {}
+        bonds: dict[tuple[int, int], BondDefinition] = {}
         """{(pdb_idx_1, pdb_idx_2): bond_order, ...}"""
         atoms: dict[int, tuple[AtomDefinition, SuccessfulMatch]] = {}
         """{pdb_idx: (atom_definition, match), ...}"""
 
         logging.debug("Begin collating chemical information from matches")
         for match in matches:
+            logging.debug(
+                f"  collating {match.residue_definition.description} with {match.canonical_atom_name_to_index}",
+            )
             for vsite in match.vsite_idcs:
                 pdb_idcs.remove(vsite)
 
@@ -1747,8 +1756,8 @@ class PdbData:
                 if atom1 is not None and atom2 is not None:
                     idcs = sort_tuple((atom1, atom2))
                     if idcs in bonds:
-                        assert bonds[idcs] == bond.order
-                    bonds[idcs] = bond.order
+                        assert bonds[idcs].order == bond.order
+                    bonds[idcs] = bond
             for idcs, bond in (
                 (match.posterior_bond_idcs, match.residue_definition.linking_bond),
                 (match.prior_bond_idcs, match.residue_definition.linking_bond),
@@ -1758,12 +1767,12 @@ class PdbData:
                     assert bond is not None
                     idcs = sort_tuple(idcs)
                     if idcs in bonds:
-                        assert bonds[idcs] == bond.order
-                    bonds[idcs] = bond.order
+                        assert bonds[idcs].order == bond.order
+                    bonds[idcs] = bond
 
         # We should now have added every atom in the PDB file's first model
         if len(pdb_idcs) != 0:
-            raise ValueError(
+            raise PabloError(
                 f"Unidentified atoms: {pdb_idcs} (lines {', '.join(str(self.line_no[i]) for i in pdb_idcs)})",
             )
 
@@ -1781,6 +1790,7 @@ class PdbData:
                     "_name": atom.name if use_canonical_names else self.name[i],
                     "canonical_name": atom.name,
                     "matched_residue_description": match.residue_definition.description,
+                    "matched_stereo": atom.stereo or "",
                 },
             )
 
@@ -1793,8 +1803,9 @@ class PdbData:
         logging.debug("Begin adding bonds to RDMol")
 
         # Add the bonds to the rdmol
-        for (atom1, atom2), order in bonds.items():
-            rdmol.add_bond(idx_pdb_to_rdmol[atom1], idx_pdb_to_rdmol[atom2], order)
+        for (atom1, atom2), bond in bonds.items():
+            logging.debug(f"{atom1, atom2, bond.order}")
+            rdmol.add_bond(idx_pdb_to_rdmol[atom1], idx_pdb_to_rdmol[atom2], bond.order)
 
         logging.debug("Sanitizing...")
         # Sanitize and apply edits

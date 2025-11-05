@@ -1,0 +1,222 @@
+(chapter:resdef)=
+# Creating custom residue definitions
+
+```{python echo=FALSE, results='hide'}
+from openff.pablo.residue import (
+    ResidueDefinition,
+    AtomDefinition,
+    BondDefinition,
+)
+from openff.pablo import STD_CCD_CACHE
+import openff.pablo.chem
+from openff.pablo._utils import react
+import os
+os.chdir('structures/')
+```
+
+Sometimes you need to create a custom residue definition. This might be when you want to augment the CCD cache with a residue of your own, or when creating your own residue library. All residue definitions are instances of the [`ResidueDefinition`] class. That class has a large number of `from_*()` methods that can be used to easily and quickly generate residue definitions.
+
+This chapter will first go over the basics of how a `ResidueDefinition` encodes what information, and then will summarize the important ways to create one. Usually, the easiest way to construct a residue definition is with one of the constructor methods
+
+## What's in a residue definition
+
+A typical residue definition consists of the following information:
+
+1. [`ResidueDefinition.atoms`]: A canonical name, possible synonyms, and chemical information for each atom in the residue.
+2. [`ResidueDefinition.bonds`]: The bonds in the residue, specified as chemical information plus two canonical atom names that the bond is between.
+3. [`ResidueDefinition.residue_name`]: A residue name, which is the identifier used in a PDB file to refer to the residue and should be 1-4 characters long.
+4. [`ResidueDefinition.description`]: A short, cosmetic description of the residue, usually consisting of little more than its IUPAC name.
+5. [`ResidueDefinition.linking_bond`] and [`ResidueDefinition.crosslink`]: Bonds that may be formed between this residue and another, specified like the interior bonds but with one atom name referring to an atom in another residue, alongside at least one atom marked [`leaving`] which is removed when the bond is formed.
+6. [`ResidueDefinition.virtual_sites`]: A collection of virtual site names, all of which must be present for the residue to match but are discarded and leave no trace in the final `Topology`.
+
+This information is stored in the attributes of the [`ResidueDefinition`], [`AtomDefinition`] and [`BondDefinition`] classes.
+
+Usually, the easiest way to construct a residue definition is to use one of the [constructor methods], which we'll detail in the next section. As a result, this section won't cover every attribute in detail --- instead, we'll focus on a high-level, operational overview. But the details are in the class docstrings and can be viewed in the [API docs](openff.pablo.residue)!
+
+### Bonds
+
+It's usually not required to specify bonds by hand, as the constructor methods produce them automatically, and the most common linking bonds and crosslinks are specified in the [`openff.pablo.chem`] module. But there are some concepts that are shared between bonds, links, and crosslinks, so we'll briefly explain them here.
+
+Each bond in the residue is defined by a [`BondDefinition`] object. Bonds are specified as two atom names, plus some chemical information. These atom names always refer to the canonical names of the corresponding atoms, and never to
+synonyms; the canonical names act as the atom's unique identifier within the residue definition.
+
+The only essential chemical information in a bond definition is the bond order, an integer from 1 to 4 specifying the number of pairs of electrons involved in the bond - 1 for a single bond, 2 for a double bond, and so on. Bond aromaticity and stereochemistry may be defined but is not used by Pablo. Instead, stereochemistry is inferred from the PDB file's coordinates, and aromaticity is perceived according to the OpenFF Toolkit's preferred aromaticity model.
+
+### Links and crosslinks
+
+While bonds within a residue are enumerated in the [`bonds`] attribute, bonds between residues are specified with the [`linking_bond`] and [`crosslink`] attributes. Both are specified as [`BondDefinition`] instances, but in this case one atom refers to an atom within the residue, and the other to another residue. A residue can have up to one linking bond, and up to one crosslink.
+
+The presence of a link or crosslink for a given residue in a PDB file is inferred from the absence of a "leaving fragment" that can be removed from the residue definition and replaced by the linking bond to preserve the valence of the linking atom. Leaving fragments consist of the leaving atom bonded to the atom in the link or crosslink, plus any leaving atoms bonded to an atom already in the leaving fragment. A leaving fragment must be present in the residue definition and absent from the residue in the PDB file for the link to form.
+
+A typical polymer bond is specified as a [`linking_bond`]. These specify the bonds between adjacent residues in the same chain, though the actual matching code uses a heuristic to determine whether they should be candidates for bonding. If you'd like Pablo to infer a linking bond between non-adjacent residues, the easiest way to ensure it is to name the atoms according to the `linking_bond` attribute and link them with a CONECT record. Both residue definitions must have linking bonds that agree with each other for the bond to form.
+
+Each residue in a PDB file can have up to two linking bonds: A "posterior bond" where the first atom is in the current residue and the second atom is in the next residue, and a "prior bond" where the first atom is in the previous residue and the second atom is in the current residue.
+
+A [`crosslink`] can be between any two residues, but the bond must be specified by a CONECT record. The first atom is always in the current residue, and the second is in the other residue; this means that for asymmetric crosslinks, the `crosslink` attributes have a reversed atom order from one residue definition to the other.
+
+### Anonymous definitions
+
+Pablo usually identifies residues by their residue and atom names, and so a typical residue definition includes those names. However, sometimes no standard names exist, or you want to use software that doesn't produce a consistent naming convention. In these cases, Pablo supports and assists in the creation of "anonymous" definitions, which are intended for use with the [`additional_definitions`] argument.
+
+Anonymous definitions are a special sort of residue definition that is not specific to any residue name, and so their [`residue_name`] attribute is `None`. The canonical names of their atoms act only as internal identifiers and are not expected to be found in the PDB file. As they have no residue name, they cannot be matched during residue-by-residue matching, and can only be provided to the [`additional_definitions`] argument.
+
+Because they have no real atom names, anonymous definitions do not use the [`crosslink`] and [`linking_bond`] attributes. They can, however, still have leaving atoms; during `additional_definitions` matching, leaving atoms are not matched, but bonds between non-leaving atoms and leaving atoms are. This allows anonymous definitions to match substructures instead of whole molecules.
+
+## Creating a residue definition
+
+The usual way to create a custom residue definition is by using one of the [constructor methods], or by modifying an existing one with the [instance methods]. We plan to continue adding more of these as we get user reports of objects they'd like to be able to make definitions out of, so please get in touch if you have an idea and stay tuned!
+
+### From a SMILES string
+
+Anonymous whole-molecule residue definitions can be constructed easily just by specifying a SMILES string to the [`anon_from_smiles`] constructor:
+
+```{python}
+paracetamol = ResidueDefinition.anon_from_smiles("CC(=O)Nc1ccc(cc1)O")
+paracetamol.visualize()
+```
+
+If you want to match a substructure rather than the entire molecule, leaving atoms can be specified just by mapping them with the [`anon_from_smiles_marked_leaving`] constructor:
+
+```{python}
+phosphorylation = ResidueDefinition.anon_from_smiles_marked_leaving(
+    "[H:1]OP(=O)([O-])[O-]",
+) #  Will match PO4 in CH3PO4, NH2PO4, CH3CH2PO4, etc.
+phosphorylation.visualize()
+```
+
+You can also define a full fledged residue definition by providing an explicit hydrogen, fully mapped SMILES string to [`from_smiles`], and using the mappings to name and specify properties for the atoms. For example, the cysteine residue could be:
+
+```{python}
+cysteine = ResidueDefinition.from_smiles(
+    mapped_smiles = "[H:9][N:1]([H:10])[C@:2]([C:5]([H:12])([H:13])[S:6][H:14])([H:11])[C:3](=[O:4])[O:7][H:8]",
+    atom_names = {
+        1: "N", 2: "CA", 3: "C", 4: "O", 5: "CB", 6: "SG", 7: "OXT", 8: "HXT",
+        9: "H", 10: "H2", 11: "HA", 12: "HB1", 13: "HB2", 14: "HG"
+    },
+    residue_name = "CYS",
+    description = "CYSTEINE",
+    linking_bond = openff.pablo.chem.PEPTIDE_BOND,
+    crosslink = openff.pablo.chem.DISULFIDE_BOND,
+    leaving_atoms = [7, 8, 10, 14],
+)
+cysteine.visualize()
+```
+
+### From an OpenFF Molecule
+
+Residue definitions can be constructed directly from an OpenFF [`Molecule`] object via [`from_molecule`]:
+
+```{python}
+from openff.toolkit import Molecule
+
+offmol = Molecule.from_inchi(
+    "InChI=1S/C2H5NO2/c3-1-2(4)5/h1,3H2,(H,4,5)",
+)
+offmol.perceive_residues()
+offmol.generate_unique_atom_names()
+
+glycine = ResidueDefinition.from_molecule(offmol)
+glycine.visualize()
+```
+
+Pablo can read and write most residue information from a `Molecule`; see the [`from_molecule`] API docs for details on how this is stored on the `Molecule` side. This means `Molecule` objects can be used to modify residue definitions:
+
+```{python}
+# Rename atom based on SMARTS string
+riboflavin = STD_CCD_CACHE["RBF"][0]
+offmol = riboflavin.to_openff_molecule()
+# match the nitrogen in the flavin ring that bonds to the ribose sidechain
+matches = offmol.chemical_environment_matches("[N&R:1]-[CH2&!R]")
+# Rename the atom
+offmol.atom(matches[0][0]).name = "Nxx"
+
+ResidueDefinition.from_molecule(offmol).visualize(highlight=["Nxx"])
+```
+
+### From an SDF file
+
+SDF files do not have a universal concept of atom names, so only anonymous definitions can be created:
+
+```{python}
+ResidueDefinition.anon_from_sdf("l-mirtazapine.sdf").visualize()
+```
+
+### By protonating or deprotonating
+
+In addition to the [`CcdCache.with_varied_protonation`] method that lets you modify a residue library directly, the [`ResidueDefinition.vary_protonation`] method generates all requested protonation states in one go:
+
+```{python}
+glycine = STD_CCD_CACHE["GLY"][0]
+glycine_resdefs = glycine.vary_protonation(
+    acidic=["HXT"], # Atom name of abstractable proton
+    basic=[("N", "H3")], # Atom to protonate, name of new proton
+)
+[resdef.description for resdef in glycine_resdefs]
+```
+
+### By SMARTS reaction
+
+A powerful way to create a new residue definition is to react two existing definitions together. the [`ResidueDefinition.react`] method takes any number of reactant residue definitions and some SMARTS patterns mapping atoms in the reactants to how they should appear in the products, and then produces the product residue definitions:
+
+```{python}
+serine = STD_CCD_CACHE["SER"][0]
+
+phosphate = Molecule.from_smiles("[OH]P(=O)([O-])[O-]")
+phosphate.generate_unique_atom_names()
+phosphate_resdef = ResidueDefinition.from_molecule(
+    phosphate,
+    residue_name="PHOS",
+)
+
+phosphoserine = ResidueDefinition.react(
+    reactants=[serine, phosphate_resdef],
+    reactant_smarts=[
+        "[CH2:1][O:2][H:3]", # Serine sidechain
+        "[H:4][O:5][P:6]", # Phosphate hydroxyl
+    ],
+    product_smarts=[
+        "[C:1][O:2][P:6]", # Phosphorylated serine sidechain
+        "[H:3][O:5][H:4]", # Water
+    ],
+    product_residue_names = ["PSER"],
+    product_linking_bonds = [serine.linking_bond],
+)[0][0]
+
+phosphoserine.visualize()
+```
+
+The products can be given new names and other attribute values with the corresponding arguments. If there are more products than provided values, only the first products will be assigned the values; the latter products will be made anonymous. [`react`] returns a list of tuples; the elements of the tuples are the individual products, and the tuples represent ways that the reaction can occur. Very often, such as in the above example, only the first product of the first realization is required.
+
+Reactions can be used to create new residue definitions for a custom library, or to easily produce definitions of patterns that Pablo doesn't yet recognize for [`additional_definitions`].
+
+[`ResidueDefinition`]: openff.pablo.ResidueDefinition
+[`AtomDefinition`]: openff.pablo.residue.AtomDefinition
+[`BondDefinition`]: openff.pablo.residue.BondDefinition
+[constructor methods]: openff.pablo.ResidueDefinition:constructors
+[instance methods]: openff.pablo.ResidueDefinition:methods
+[`leaving`]: openff.pablo.residue.AtomDefinition.leaving
+[`ResidueDefinition.atoms`]: openff.pablo.ResidueDefinition.atoms
+[`ResidueDefinition.bonds`]: openff.pablo.ResidueDefinition.bonds
+[`ResidueDefinition.residue_name`]: openff.pablo.ResidueDefinition.residue_name
+[`ResidueDefinition.description`]: openff.pablo.ResidueDefinition.description
+[`ResidueDefinition.linking_bond`]: openff.pablo.ResidueDefinition.linking_bond
+[`ResidueDefinition.crosslink`]: openff.pablo.ResidueDefinition.crosslink
+[`ResidueDefinition.virtual_sites`]: openff.pablo.ResidueDefinition.virtual_sites
+[`atoms`]: openff.pablo.ResidueDefinition.atoms
+[`bonds`]: openff.pablo.ResidueDefinition.bonds
+[`residue_name`]: openff.pablo.ResidueDefinition.residue_name
+[`description`]: openff.pablo.ResidueDefinition.description
+[`linking_bond`]: openff.pablo.ResidueDefinition.linking_bond
+[`crosslink`]: openff.pablo.ResidueDefinition.crosslink
+[`virtual_sites`]: openff.pablo.ResidueDefinition.virtual_sites
+[`openff.pablo.chem`]: openff.pablo.chem
+[`additional_definitions`]: openff.pablo.topology_from_pdb.params.additional_definitions
+[`anon_from_smiles`]: openff.pablo.ResidueDefinition.anon_from_smiles
+[`anon_from_smiles_marked_leaving`]: openff.pablo.ResidueDefinition.anon_from_smiles_marked_leaving
+[`from_smiles`]: openff.pablo.ResidueDefinition.from_smiles
+[`from_molecule`]: openff.pablo.ResidueDefinition.from_molecule
+[`Molecule`]: openff.toolkit.topology.Molecule
+[`CcdCache.with_varied_protonation`]: openff.pablo.ccd.CcdCache.with_varied_protonation
+[`ResidueDefinition.vary_protonation`]: openff.pablo.ResidueDefinition.vary_protonation
+[`ResidueDefinition.react`]: openff.pablo.ResidueDefinition.react
+[`react`]: openff.pablo.ResidueDefinition.react

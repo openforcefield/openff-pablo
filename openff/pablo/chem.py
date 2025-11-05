@@ -17,6 +17,12 @@ DISULFIDE_BOND = BondDefinition(
     aromatic=False,
     stereo=None,
 )
+"""
+A single, non-aromatic bond between two atoms named ``SG``.
+
+Disulfide bonds are single bonds between thiol groups commonly formed as
+crosslinks in proteins between Cysteine residues.
+"""
 
 PEPTIDE_BOND = BondDefinition(
     atom1="C",
@@ -25,6 +31,13 @@ PEPTIDE_BOND = BondDefinition(
     aromatic=False,
     stereo=None,
 )
+"""
+A single, non-aromatic bond between an atom named ``C`` and one named ``N``.
+
+Peptide bonds are single bonds between amine and carboxylic acid groups that
+constitute the polymer bonds between amino acid residues in proteins and
+peptides.
+"""
 
 PHOSPHODIESTER_BOND = BondDefinition(
     atom1="O3'",
@@ -33,3 +46,9 @@ PHOSPHODIESTER_BOND = BondDefinition(
     aromatic=False,
     stereo=None,
 )
+"""
+A single, non-aromatic bond between an atom named ``O3'`` and one named ``P``.
+
+Phosphodiester bonds are single bonds between sugars and phosphates that
+constitute the polymer bonds between nucleotide residues in nucleic acids.
+"""

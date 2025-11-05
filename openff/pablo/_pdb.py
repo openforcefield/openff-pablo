@@ -1,6 +1,6 @@
 import logging
 import warnings
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from io import TextIOBase
 from os import PathLike
 from pathlib import Path
@@ -11,14 +11,14 @@ from openff.toolkit import Molecule, Topology
 from openff.units import unit
 
 from openff.pablo._matching import SuccessfulMatch
-
-from ._pdb_data import PdbData
-from ._utils import (
+from openff.pablo._pdb_data import PdbData
+from openff.pablo._std_ccd_cache import STD_CCD_CACHE
+from openff.pablo._utils import (
     cryst_to_box_vectors,
     sort_tuple,
 )
-from .ccd import CCD_RESIDUE_DEFINITION_CACHE
-from .residue import ResidueDefinition
+from openff.pablo.exceptions import PabloError
+from openff.pablo.residue import ResidueDefinition
 
 __all__ = [
     "topology_from_pdb",
@@ -28,56 +28,59 @@ __all__ = [
 def topology_from_pdb(
     file: PathLike[str] | str | IO[str] | TextIOBase,
     *,
-    residue_database: Mapping[
+    residue_library: Mapping[
         str,
-        Iterable[ResidueDefinition],
-    ] = CCD_RESIDUE_DEFINITION_CACHE,
-    additional_definitions: Iterable[ResidueDefinition] = [],
+        Collection[ResidueDefinition],
+    ] = STD_CCD_CACHE,
+    additional_definitions: Collection[ResidueDefinition] = [],
     format: Literal["PDB", "CIF", None] = None,
     use_canonical_names: bool = False,
-    ignore_unknown_CONECT_records: bool = False,
-    set_stereochemistry_from_3d: bool = True,
 ) -> Topology:
     """
     Load a PDB file into an OpenFF ``Topology``.
 
     This function requires all hydrogens (and all other atoms) to be present in
     the PDB file, and that atom and residue names are consistent with the
-    ``residue_database``. In return, it provides full chemical information on
+    ``residue_library``. In return, it provides full chemical information on
     the entire PDB file.
 
     To load a PDB file with molecules including any residue not found in the
     CCD, or with residues that differ from that specified under a particular
-    residue name, provide your own ``residue_database``. Any mapping from a
-    residue name to a list of :py:data:`ResidueDefinition
-    <openff.pdbscan.pdb.residue.ResidueDefinition>` objects may be used,
-    but the :py:mod:`ccd <openff.pdbscan.pdb.ccd>` module  provides tools for
-    augmenting the CCD.
+    residue name, provide your own ``residue_library``. Any mapping from a
+    residue name to a list of :py:data:`ResidueDefinition <openff.pablo.ResidueDefinition>`
+    objects may be used, but the :py:mod:`ccd <openff.pablo.ccd>` module
+    provides tools for augmenting the CCD.
 
     Alternatively, to load a single-residue molecule that is not present in the
     CCD, name that molecule ``"UNL"`` (or any name not present in the
-    ``residue_database``), specify its CONECT records, and provide the
-    appropriate molecule to the ``unknown_molecules`` argument.
+    ``residue_library``), specify its CONECT records, and provide the
+    appropriate molecule to the ``additional_definitions`` argument.
+
+    Note that chemical information is derived from matching the residue
+    definitions provided to this function to the atom names, residue names,
+    elements, formal charges, and CONECT records in the PDB file. In partiular,
+    the presence, absence, or electronic properties of a bond are never inferred
+    from atomic coordinates. However, the stereochemistry of atoms and bonds are
+    computed from their atomic coordinates, even when that information is
+    present in a residue definition.
 
     Parameters
     ----------
     file
         The path to the PDB file or the PDB file as a file-like object.
-    unknown_molecules
-        A list of molecules to match residues not found in the
-        ``residue_database`` against. Unlike ``residue_database``, this requires
-        that CONECT records be present and performs a match between the chemical
-        graphs rather than using residue and atom names to detect chemistry.
-    residue_database
-        The database of residues to identify the atoms in the PDB file by. By
+    residue_library
+        The library of residues to identify the atoms in the PDB file by. By
         default, a patched version of the CCD. Chemistry is identified by atom
         and residue names. If multiple residue definitions match a particular
         residue, the first one encountered is applied.
-    additional_substructures
+    additional_definitions
         Additional residue definitions to match against all residues that found
-        no matches in the ``residue_database``. These definitions can match
-        whether or not the residue name matches. To use this argument with
-        OpenFF ``Molecule`` objects or SMILES strings, see the
+        no matches in the ``residue_library``. These definitions can match
+        whether or not the residue name matches. Unlike ``residue_library``,
+        this requires that CONECT records be present for any bonds not covered
+        by the library and performs a match between the chemical graphs rather
+        than using residue and atom names to detect chemistry. To use this
+        argument with OpenFF ``Molecule`` objects or SMILES strings, see the
         ``ResidueDefinition.from_*`` class methods.
     format
         The file format the file is encoded in. `"PDB"` expects a standard PDB
@@ -86,24 +89,14 @@ def topology_from_pdb(
         extension, or an unknown filename extension as PDB.
     use_canonical_names
         If ``True``, atom names in the PDB file will be replaced by the
-        canonical name for the same atom from the residue database.
-    ignore_unknown_CONECT_records
-        CONECT records do not include chemical information such as bond order
-        and cannot be used on their own to add bonds beyond those specified
-        through the residue database and unknown molecules. By default, any
-        CONECT records not reflected in the final topology raise an error.
-        If this argument is ``True``, this error is suppressed.
-    set_stereochemistry_from_3d
-        If ``True``, stereochemistry will be set according to the structure of
-        the PDB file. This takes considerable time. If ``False``, leave stereo
-        as set in the ``ResidueDefinition``.
+        canonical name for the same atom from the residue library.
 
     Notes
     -----
 
-    This function uses a residue database to load a PDB file from its atom and
+    This function uses a residue library to load a PDB file from its atom and
     residue names without guessing bonds. Bonds will be added by comparing atom
-    and residue names to the residues defined in the ``residue_database``
+    and residue names to the residues defined in the ``residue_library``
     argument, which by default uses a patched version of the RCSB Chemical
     Component Dictionary (CCD). This is the dictionary of residue and atom names
     that the RCSB PDB is referenced against. The CCD is very large and cannot be
@@ -115,11 +108,12 @@ def topology_from_pdb(
     another molecule. This can happen, for example, if a PDB file with 3 chains
     A, B and C has a disulfide bond between A and C. In this case, chains A and
     C form a single molecule, but the atoms from B should be in the middle. This
-    atom ordering cannot be represented in :py:class:`openff.toolkit.Topology`
-    unless all 3 chains are included in a single
-    :py:class:`openff.toolkit.Molecule`, which would then represent two distinct
-    chemical molecules. When this occurs, atoms from the latter chain(s) appear
-    immediately after the first, and atoms from other molecules appear later.
+    atom ordering cannot be represented in :py:class:`openff.toolkit.Topology
+    <openff.toolkit.topology.Topology>` unless all 3 chains are included in a
+    single :py:class:`openff.toolkit.Molecule <openff.toolkit.topology.Molecule>`,
+    which would then represent two distinct chemical molecules. When this
+    occurs, atoms from the latter chain(s) appear immediately after the first,
+    and atoms from other molecules appear later.
 
     The following metadata are specified for all atoms produced by this function
     and can be accessed via ``topology.atom(i).metadata[key]``:
@@ -142,22 +136,20 @@ def topology_from_pdb(
     ``"pdb_index"``
         The atom's index in the PDB file. Sometimes called rank. Not to be
         confused with ``"atom_serial"``, which is the number given to the atom
-        in the second column of the PDB file. Guaranteed to be unique and to
-        match the index of the atom within the topology.
+        in the second column of the PDB file. Guaranteed to be unique. Care is
+        taken to make this match the index of the atom within the topology as
+        closely as possible, but this is not possible when virtual sites are
+        present or when the PDB atom order cannot be represented in a
+        ``Topology``.
     ``"used_synonym"``
         The name of the atom that was found in the PDB file. By default,
-        `atom.name` is set to this. This value is not set for atoms matched via
-        ``unknown_molecules``.
+        `atom.name` is set to this.
     ``"canonical_name"``
-        The canonical name of the atom in the residue database. `atom.name` can
-        be set to this with the `use_canonical_names` argument. This value is
-        not set for atoms matched via ``unknown_molecules``.
+        The canonical name of the atom in the residue library. `atom.name` can
+        be set to this with the `use_canonical_names` argument.
     ``"atom_serial"``
         The serial number of the atom, found in the second column of the PDB
         file, as a string. Not guaranteed to be unique.
-    ``"matched_residue_description"``
-        The residue description found in the residue database. This value is not
-        set for atoms matched via ``unknown_molecules``.
     ``"b_factor"``
         The temperature b-factor for the atom.
     ``"occupancy"``
@@ -166,6 +158,13 @@ def topology_from_pdb(
         The alternate location code for the atom.
     ``"pdb_line_no"``
         The line number in the PDB file that contained this atom record.
+    ``"matched_residue_description"``
+        The residue description found in the residue library.
+    ``"matched_stereo"``
+        The stereochemistry defined for this atom in the residue definition.
+        This may differ from the stereochemistry assigned to the atom, which is
+        computed from the atomic coordinates. One of the strings ``"R"``,
+        ``"S"``, or ``""``.
     """
     if hasattr(file, "readlines"):
         if format is None and hasattr(file, "filename"):
@@ -177,7 +176,7 @@ def topology_from_pdb(
         data = PdbData.from_file(file, format=format)  # type: ignore
 
     matches = data.get_successful_matches(
-        residue_database,
+        residue_library,
         list(additional_definitions),
     )
 
@@ -185,11 +184,9 @@ def topology_from_pdb(
         matches=matches,
         data=data,
         use_canonical_names=use_canonical_names,
-        set_stereochemistry_from_3d=set_stereochemistry_from_3d,
     )
 
-    if not ignore_unknown_CONECT_records:
-        _check_all_conects(topology, data)
+    _check_all_conects(topology, data)
 
     return topology
 
@@ -199,7 +196,6 @@ def _build_topology(
     data: PdbData,
     *,
     use_canonical_names: bool,
-    set_stereochemistry_from_3d: bool,
 ) -> Topology:
     rdmol = data.matches_to_rdmol(matches, use_canonical_names=use_canonical_names)
 
@@ -211,9 +207,12 @@ def _build_topology(
 
     molecules: list[Molecule] = []
     for rdmol in rdmol.split_molecule_fragments():
-        if set_stereochemistry_from_3d:
-            rdmol = rdmol.edit().assign_stereochemistry_from_3d_and().freeze()
-        offmol = rdmol.to_openff_molecule()
+        offmol = (
+            rdmol.edit()
+            .assign_stereochemistry_from_3d_and()
+            .freeze()
+            .to_openff_molecule()
+        )
         offmol.add_default_hierarchy_schemes()
         molecules.append(offmol)
 
@@ -251,7 +250,7 @@ def _check_all_conects(topology: Topology, data: PdbData):
         for j in js:
             conect_bonds.add(sort_tuple((i, j)))
     if not conect_bonds.issubset(all_bonds):
-        raise ValueError(
+        raise PabloError(
             "CONECT records without chemical information not supported",
             sorted(
                 {

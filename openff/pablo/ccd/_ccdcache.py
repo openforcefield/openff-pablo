@@ -10,6 +10,7 @@ import xdg.BaseDirectory as xdg_base_dir
 from openmm.app.internal.pdbx.reader.PdbxReader import PdbxReader
 
 from openff.pablo._utils import flatten
+from openff.pablo.exceptions import PabloError
 
 from ..chem import PEPTIDE_BOND, PHOSPHODIESTER_BOND
 from ..residue import (
@@ -24,7 +25,7 @@ __all__ = [
 ]
 
 
-class CcdCache(Mapping[str, list[ResidueDefinition]]):
+class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
     """
     Caches, patches, and presents the CCD as a Python ``Mapping``.
 
@@ -82,7 +83,7 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         A list of residue names to download when initializing the class.
     patches
         Functions to call on ``ResidueDefinitions`` downloaded from the CCD
-        before they are returned or added to the inner `dict``. An iterable of
+        before they are returned or added to the inner ``dict``. An iterable of
         maps from residue names each to a single callable. Each map is applied
         to residues with the given name in the order they are iterated over. Any
         patches corresponding to key ``"*"`` will be applied to all residues
@@ -148,14 +149,14 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         for resname, resdefs in extra_definitions.items():
             self._add_definitions(resdefs, resname)
 
-    def __getitem__(self, key: str) -> list[ResidueDefinition]:
+    def __getitem__(self, key: str) -> tuple[ResidueDefinition, ...]:
         res_name = key.upper()
         if res_name in ["UNK", "UNL"] and res_name not in self._definitions:
             # These residue names are reserved for unknown ligands/peptide residues
             raise KeyError(res_name, "reserved residue name")
         # Check the loaded definitions
         try:
-            return self._definitions[res_name]
+            return tuple(self._definitions[res_name])
         except KeyError:
             pass
 
@@ -168,7 +169,7 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         # since this CcdCache was created - say, in a separate process, or
         # another CcdCache - but this is done by _add_definition_from_ccd()
         try:
-            return self._add_definition_from_ccd(res_name)
+            return tuple(self._add_definition_from_ccd(res_name))
         except HTTPError:
             raise KeyError(res_name, "unknown and absent from CCD")
         except URLError:
@@ -218,7 +219,7 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         definition = self._res_def_from_ccd_str(s)
         if res_name is None:
             if definition.residue_name is None:
-                raise ValueError(
+                raise PabloError(
                     "Anonymous residue definitions cannot be added to a CcdCache",
                 )
             res_name = definition.residue_name.upper()
@@ -238,11 +239,11 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
 
         for definition in definitions:
             if definition.residue_name is None:
-                raise ValueError(
+                raise PabloError(
                     "Anonymous residue definitions cannot be added to a CcdCache",
                 )
             if res_name != definition.residue_name.upper():
-                raise ValueError(
+                raise PabloError(
                     f"ResidueDefinition {definition.residue_name}"
                     + f" ({definition.description}) must have residue name {res_name}",
                 )
@@ -402,7 +403,7 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         | Sequence[ResidueDefinition],
     ) -> Self:
         """
-        Get a new ``CcdCache`` with additional definitions.
+        Get a copy of this ``CcdCache`` with additional definitions added.
 
         Definitions may be supplied as a mapping from residue names to sequences
         of residue definitions, or as a sequence of residue definitions. In the
@@ -414,12 +415,12 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         Examples
         ========
 
-        Add a custom definition to the ``CCD_RESIDUE_DEFINITION_CACHE``. We use
+        Add a custom definition to the ``STD_CCD_CACHE``. We use
         a 4-letter residue code as they are supported by Pablo's PDB reader and
         do not clash with the CCD's definitions.
 
-        >>> from openff.pablo import CCD_RESIDUE_DEFINITION_CACHE, ResidueDefinition
-        >>> my_ccd_cache = CCD_RESIDUE_DEFINITION_CACHE.with_([
+        >>> from openff.pablo import STD_CCD_CACHE, ResidueDefinition
+        >>> my_ccd_cache = STD_CCD_CACHE.with_([
         ...     ResidueDefinition.from_smiles(
         ...         "[H:1][O:2][O:3][H:4]",
         ...         {1: "H1", 2: "O1", 3: "O2", 4: "H2"},
@@ -430,20 +431,20 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         Add protonation variants of a residue by specifying acidic and basic
         atoms.
 
-        >>> from openff.pablo import CCD_RESIDUE_DEFINITION_CACHE, ResidueDefinition
+        >>> from openff.pablo import STD_CCD_CACHE, ResidueDefinition
         >>>
         >>> # Get the GABA (γ-amino butanoic acid) residue definition from CCD
-        >>> gaba_resdef = CCD_RESIDUE_DEFINITION_CACHE["ABU"][0]
+        >>> gaba_resdef = STD_CCD_CACHE["ABU"][0]
         >>>
         >>> # Generate the variants and add them to a new cache
-        >>> my_ccd_cache = CCD_RESIDUE_DEFINITION_CACHE.with_({
+        >>> my_ccd_cache = STD_CCD_CACHE.with_({
         ...     "ABU": gaba_resdef.vary_protonation(
         ...         acidic=["HXT"], # Atom name of abstractable proton
         ...         basic=[("N", "H3")], # Atom to protonate, name of new proton
         ...     )[1:], # Skip the first entry, which is already in the cache
         ... })
         >>> # Should have added three variants - positive, negative, zwitterion
-        >>> len(my_ccd_cache["ABU"]) - len(CCD_RESIDUE_DEFINITION_CACHE["ABU"])
+        >>> len(my_ccd_cache["ABU"]) - len(STD_CCD_CACHE["ABU"])
         3
 
         See Also
@@ -455,7 +456,7 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
             definitions_map: dict[str, list[ResidueDefinition]] = {}
             for resdef in definitions:
                 if resdef.residue_name is None:
-                    raise ValueError(
+                    raise PabloError(
                         "Anonymous residue definitions cannot be added to a CcdCache",
                     )
                 definitions_map.setdefault(resdef.residue_name, []).append(resdef)
@@ -468,14 +469,16 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
 
     def with_replaced(
         self,
-        definitions: Mapping[str, Sequence[ResidueDefinition]],
+        definitions: Mapping[str, Sequence[ResidueDefinition]]
+        | Sequence[ResidueDefinition],
     ) -> Self:
         """
-        Get a new ``CcdCache`` with replaced definitions of some residue names.
+        Get a copy of this ``CcdCache`` with some definitions replaced.
 
         Similar to ``with_``, but does not retain existing definitions for the
-        specified residue names. All residue names that are keys of
-        ``definitions`` are removed from the new ``CcdCache`` before adding the
+        specified residue names. All residue names that are keys of a
+        ``definitions`` mapping or are residue names in a ``definitions``
+        sequence are removed from the new ``CcdCache`` before adding the
         new definitions.
 
         Note that patches are not applied to the new definitions.
@@ -485,6 +488,16 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         with_, without
 
         """
+        if not isinstance(definitions, Mapping):
+            definitions_map: dict[str, list[ResidueDefinition]] = {}
+            for resdef in definitions:
+                if resdef.residue_name is None:
+                    raise PabloError(
+                        "Anonymous residue definitions cannot be added to a CcdCache",
+                    )
+                definitions_map.setdefault(resdef.residue_name, []).append(resdef)
+            definitions = definitions_map
+
         new = deepcopy(self)
         for resname, resdefs in definitions.items():
             del new._definitions[resname]
@@ -496,7 +509,7 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         residue_names: Iterable[str],
     ) -> Self:
         """
-        Get a new ``CcdCache`` with some residue names removed.
+        Get a copy of this ``CcdCache`` lacking any definitions with some names.
 
         All definitions for each of the given residue names will not be present
         in the new cache. Note that residues that are in the CCD will still be
@@ -518,18 +531,52 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         residue_name: str,
         patch: Callable[[ResidueDefinition], list[ResidueDefinition]],
     ) -> Self:
-        self._patches.append({residue_name: patch})
-        if residue_name in self._definitions:
-            self._definitions[residue_name] = list(
-                flatten(patch(resdef) for resdef in self._definitions[residue_name]),
+        """
+        Add a patch to the residues loaded via a copy of this ``CcdCache``.
+
+        The patch is added to a copy of the ``CcdCache``, and the copy is
+        returned. The original ``CcdCache`` is left unmodified.
+
+        The patch function is called on each residue definition stored under the
+        given residue name. The returned residue definitions are concatenated
+        and replace the originals. Patches can therefore add, modify, split, or
+        replace residue definitions depending on whether they include the
+        original definition in the output.
+
+        The patch is applied to all definitions in the cache when this function
+        is applied, as well as any definitions downloaded from the CCD in the
+        future. It is not applied to definitions added by the other
+        ``CcdCache.with_*()`` methods.
+        """
+        new = deepcopy(self)
+        new._patches.append({residue_name: patch})
+        if residue_name in new._definitions:
+            new._definitions[residue_name] = list(
+                flatten(patch(resdef) for resdef in new._definitions[residue_name]),
             )
-        return self
+        return new
 
     def with_virtual_sites(
         self,
         residue_name: str,
         virtual_sites: Iterable[str],
     ) -> Self:
+        """
+        Copy ``self``, adding new residue definitions requiring some virtual sites.
+
+        The new definition is added to a copy of the ``CcdCache``, and the copy
+        is returned. The original ``CcdCache`` is left unmodified.
+
+        A new residue definition is added for each definition currently stored
+        in the cache under the given name. The new definition requires that all
+        the given virtual site names be present in order for it to match, and it
+        discards the corresponding ATOM/HETATM records.
+
+        This method works by adding a patch. It will affect any residue
+        definition already added to the cache under the given name, or any
+        definition downloaded in the future, but not any definition added in the
+        future by the ``with_`` or ``with_replaced`` methods.
+        """
         virtual_sites = tuple(virtual_sites)
         return self.with_patch(
             residue_name,
@@ -537,6 +584,24 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
         )
 
     def with_vsite_water(self) -> Self:
+        """
+        Copy ``self``, adding new definitions for common multisite water models.
+
+        The new definitions are added to a copy of the ``CcdCache``, and the
+        copy is returned. The original ``CcdCache`` is left unmodified.
+
+        The new definitions require that all the virtual site names be
+        present in order for them to match, and they discard the corresponding
+        ATOM/HETATM records. The name for the 4-point model virtual site is
+        ``EPW``, and for the 5-point model ``EP1`` and ``EP2``.
+
+        This method works by adding a patch. It will affect any 3-atom residue
+        definitions already added to the cache under the names ``HOH``, ``WAT``,
+        or ``SOL``, or any so-named definition downloaded in the future, but not
+        any  definition added in the future by the ``with_`` or ``with_replaced``
+        methods.
+        """
+
         def add_vsites_to_water(resdef: ResidueDefinition) -> list[ResidueDefinition]:
             if resdef.n_expected_atoms == 3 and {
                 atom.name for atom in resdef.atoms
@@ -563,6 +628,70 @@ class CcdCache(Mapping[str, list[ResidueDefinition]]):
                 add_vsites_to_water,
             )
         )
+
+    def with_varied_protonation(
+        self,
+        residue_name: str,
+        *,
+        acidic: Iterable[str] = (),
+        basic: Iterable[tuple[str, str]] = (),
+    ) -> Self:
+        """
+        Get a copy of ``self`` with all combinations of some protonation states.
+
+        Note that all combinations of protonations and deprotonations are
+        generated; this means that if ``acidic`` has length ``n`` and ``basic``
+        has length ``m``, ``2**(n+m)`` variants will be generated for each
+        existing variant.
+
+        If no variants at all are generated, ``PabloError`` is raised. Otherwise,
+        whatever variants make sense are created for each existing variant.
+
+        This method will download the given residue name from the CCD if it is
+        not already in the cache.
+
+        Parameters
+        ==========
+        residue_name
+            The name of the residue to generate alternate protonation states
+            for.
+        acidic
+            Existing hydrogen atoms that can be removed to form a new
+            protonation state. Each element specifies an atom name to remove,
+            decrementing the formal charge on the neighbouring heavy atom.
+            Multiply bonded, unbonded, missing, or non-hydrogen atoms are
+            skipped unless no variants at all are generated.
+        basic
+            Existing non-hydrogen atoms that can be protonated to form a new
+            protonation state, as well as the canonical name of the new
+            hydrogen. Each tuple specifies an atom name to protonate (increment
+            the formal charge and form a bond) and the name of the added proton.
+            Unknown heavy atoms and new atom names that clash with existing
+            names raise are skipped unless no variants at all are generated.
+        """
+        original_resdefs = self[residue_name]
+        if len(original_resdefs) == 0:
+            raise PabloError("cannot (de)protonate unknown residue {residue_name}")
+
+        new_resdefs: list[ResidueDefinition] = []
+        for resdef in original_resdefs:
+            resdef_variants = resdef.vary_protonation(
+                acidic=acidic,
+                basic=basic,
+                skip_errors=True,
+            )
+            # Only add the new variants so we can keep count of how many we've
+            # come up with
+            for i, variant in enumerate(resdef_variants[1:]):
+                # Filter out duplicate variants
+                if not any(
+                    variant._is_isomorphic_to(other) for other in resdef_variants[:i]
+                ):
+                    new_resdefs.append(variant)
+        if len(new_resdefs) == 0:
+            raise PabloError("no new protonation variants added")
+
+        return self.with_({residue_name: new_resdefs})
 
 
 # TODO: Fill in this data

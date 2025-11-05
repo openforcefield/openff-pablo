@@ -11,7 +11,9 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
+
 # In case the project was not installed
+import importlib.util
 import os
 import sys
 
@@ -21,11 +23,7 @@ import openff.pablo
 # -- Project information -----------------------------------------------------
 
 project = "OpenFF Pablo"
-copyright = (
-    "2025, Josh Mitchell."
-    + " Project structure based on the OpenFF Cookiecutter"
-    + " version 0.1"
-)
+copyright = "2025, Open Force Field Initiative."
 author = "Josh Mitchell"
 
 # The short X.Y version
@@ -52,10 +50,20 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
-    "myst_parser",
+    # "myst_parser",
+    "myst_nb",
     "openff_sphinx_theme",
     "sphinxcontrib.autodoc_pydantic",
     "sphinx_click",
+    "hoverxref.extension",
+    "sphinx_paramlinks",
+]
+
+# Warn when reference target is not found
+nitpicky = True
+nitpick_ignore = [
+    # Ignore __UNSET__, as it is deliberately private and undocumented.
+    ("py:class", "openff.pablo._utils.__UNSET__"),
 ]
 
 # API docs settings
@@ -63,7 +71,50 @@ autosummary_generate = True
 # Document imported items iff they're in __all__
 autosummary_imported_members = False
 autosummary_ignore_module_all = False
+
 # Autosummary template configuration
+type ObjInfo = set[str]
+
+
+def get_context_flat(obj: object, name: str, max_depth: int = 10) -> dict[str, ObjInfo]:
+    import functools
+    import inspect
+    from typing import Self
+
+    if name.count(".") > max_depth:
+        return {}
+
+    info = set()
+    if isinstance(obj, property) or isinstance(obj, functools.cached_property):
+        info.add("property")
+    if (
+        inspect.ismethod(obj)
+        and inspect.isclass(obj.__self__)
+        and inspect.signature(obj).return_annotation is Self
+    ):
+        info.add("constructor")
+    if inspect.isclass(obj):
+        info.add("class")
+    if inspect.isfunction(obj):
+        info.add("function")
+    if inspect.ismethod(obj) and inspect.isclass(obj.__self__):
+        info.add("classmethod")
+
+    context = {name: info}
+    for member_name, member in inspect.getmembers(obj):
+        if member_name.startswith("_"):
+            continue
+        member_dict = get_context_flat(
+            member,
+            f"{name}.{member_name}",
+            max_depth=max_depth - 1,
+        )
+        context.update(member_dict)
+
+    return context
+
+
+package_context = get_context_flat(openff.pablo, "openff.pablo")
 autosummary_context = {
     # Modules to exclude from API docs
     "exclude_modules": [
@@ -72,6 +123,7 @@ autosummary_context = {
     "show_inheritance": True,
     "show_inherited_members": False,
     "show_undoc_members": True,
+    "package": package_context,
 }
 
 autodoc_preserve_defaults = True
@@ -83,6 +135,7 @@ autodoc_class_signature = "mixed"
 # Workaround for autodoc_typehints_format not working for attributes
 # see https://github.com/sphinx-doc/sphinx/issues/10290#issuecomment-1079740009
 python_use_unqualified_type_names = True
+autodoc_member_order = "alphabetical"  #  Or "bysource"
 
 napoleon_numpy_docstring = True
 napoleon_google_docstring = False
@@ -108,9 +161,9 @@ autodoc_pydantic_settings_show_config_member = False
 autodoc_pydantic_field_doc_policy = "both"
 autodoc_pydantic_field_list_validators = False
 
-_python_doc_base = "https://docs.python.org/3.7"
+_python_doc_base = "https://docs.python.org/3.12"
 intersphinx_mapping = {
-    "python": ("https://docs.python.org/3.7", None),
+    "python": ("https://docs.python.org/3.12", None),
     "numpy": ("https://numpy.org/doc/stable", None),
     "scipy": ("https://docs.scipy.org/doc/scipy/reference", None),
     "scikit.learn": ("https://scikit-learn.org/stable", None),
@@ -118,6 +171,7 @@ intersphinx_mapping = {
     "rdkit": ("https://www.rdkit.org/docs", None),
     "openeye": ("https://docs.eyesopen.com/toolkits/python/", None),
     "mdtraj": ("https://www.mdtraj.org/1.9.5/", None),
+    "ipython": ("https://ipython.readthedocs.io/en/stable/", None),
     "openff.toolkit": (
         "https://docs.openforcefield.org/projects/toolkit/en/stable/",
         None,
@@ -177,13 +231,19 @@ myst_enable_extensions = [
     "deflist",
 ]
 myst_heading_anchors = 3
+nb_render_markdown_format = "myst"
+nb_custom_formats = {".Rmd": ["jupytext.reads", {"fmt": "Rmd"}]}
+nb_execution_timeout = 90
+
+hoverxref_role_types = {"term": "tooltip"}
+hoverxref_roles = list(hoverxref_role_types.keys())
+
+paramlinks_hyperlink_param = "link_symbol"
 
 # sphinx-notfound-page
 # https://github.com/readthedocs/sphinx-notfound-page
 # Renders a 404 page with absolute links
-from importlib.util import find_spec as find_import_spec
-
-if find_import_spec("notfound"):
+if importlib.util.find_spec("notfound"):
     extensions.append("notfound.extension")
 
     notfound_urls_prefix = "/projects/pablo/en/stable/"
@@ -265,7 +325,7 @@ html_theme_options = {
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
 
-html_css_files = []
+html_css_files = ["css/paramref.css", "css/ipython3.css"]
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
