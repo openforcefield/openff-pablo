@@ -22,4 +22,4 @@ In all cases, all sources of chemical information must agree, so that there is n
 
 ## PDBx/mmCIF files
 
-Pablo has basic support for PDBx/mmCIF files. This works by reading a subset of data entries in the file that are equivalent to the columns of a PDB file's `ATOM/HETATM` records and passing that data through the same matching and topology construction pipeline used for PDB files. This ignores most of the chemical information in the PDBx/mmCIF file. If you have a use-case for the PDBx/mmCIF format that isn't covered by the existing functionality, please let us know --- if there's demand, we'll implement it!
+Pablo has basic support for PDBx/mmCIF files. This works by reading a subset of data entries in the file that are equivalent to the columns of a PDB file's `ATOM/HETATM` records and passing that data through the same matching and topology construction pipeline used for PDB files. This ignores most of the chemical information in the PDBx/mmCIF file. If you have a use-case for the PDBx/mmCIF format that isn't covered by the existing functionality, please let us know so we can consider implementing it!
