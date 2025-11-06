@@ -22,8 +22,8 @@ Install Pablo and its dependencies into the current environment:
 ```sh
 # Install dependencies and pip into current environment
 micromamba install -c conda-forge pip 'python>=3.12' 'openff-toolkit-base>=0.17.1' rustworkx rdkit openmm pyxdg gemmi
-# Install Pablo's main branch into current environment via pip
-pip install git+https://github.com/openforcefield/openff-pablo.git@main
+# Install Pablo's latest release into current environment via pip
+pip install git+https://github.com/openforcefield/openff-pablo.git@v0.2.0
 ```
 
 ### Development build
