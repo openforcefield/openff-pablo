@@ -170,6 +170,10 @@ class PdbData:
 
         n_atom_sites = len(block["_atom_site.id"])
 
+        model_strs = block.get("_atom_site.pdbx_PDB_model_num")
+        occupancy_strs = block.get("_atom_site.occupancy")
+        temp_factor_strs = block.get("_atom_site.B_iso_or_equiv")
+
         data = cls(
             strict=True,
             cryst1_a=unwrap_or_none(cif_opt_floats(block["_cell.length_a"])),
@@ -178,7 +182,11 @@ class PdbData:
             cryst1_alpha=unwrap_or_none(cif_opt_floats(block["_cell.angle_alpha"])),
             cryst1_beta=unwrap_or_none(cif_opt_floats(block["_cell.angle_beta"])),
             cryst1_gamma=unwrap_or_none(cif_opt_floats(block["_cell.angle_gamma"])),
-            model=cif_opt_ints(block["_atom_site.pdbx_PDB_model_num"]),
+            model=(
+                [None] * n_atom_sites
+                if model_strs is None
+                else cif_opt_ints(model_strs)
+            ),
             serial=cif_strs(block["_atom_site.id"]),
             name=cif_strs(block["_atom_site.label_atom_id"]),
             alt_loc=cif_strs(block["_atom_site.label_alt_id"]),
@@ -188,8 +196,16 @@ class PdbData:
             x=cif_floats(block["_atom_site.Cartn_x"]),
             y=cif_floats(block["_atom_site.Cartn_y"]),
             z=cif_floats(block["_atom_site.Cartn_z"]),
-            occupancy=cif_floats(block["_atom_site.occupancy"]),
-            temp_factor=cif_floats(block["_atom_site.B_iso_or_equiv"]),
+            occupancy=(
+                [1.0] * n_atom_sites
+                if occupancy_strs is None
+                else cif_floats(occupancy_strs)
+            ),
+            temp_factor=(
+                [0.0] * n_atom_sites
+                if temp_factor_strs is None
+                else cif_floats(temp_factor_strs)
+            ),
             element=cif_strs(block["_atom_site.type_symbol"]),
             charge=cif_opt_ints(block["_atom_site.pdbx_formal_charge"]),
             line_no=cif_ints(block["_atom_site.id.__pablo__line_no"]),
@@ -197,39 +213,43 @@ class PdbData:
             terminated=[False] * n_atom_sites,
             conects=[set()] * n_atom_sites,
         )
-        # TODO: CONECT record equivalent
 
-        residues = [
-            (res_seq, res_name, chain_id)
-            for res_seq, res_name, chain_id in zip(
-                block["_pdbx_poly_seq_scheme.seq_id"],
-                block["_pdbx_poly_seq_scheme.mon_id"],
-                block["_pdbx_poly_seq_scheme.asym_id"],
-            )
-        ]
-        model_residues = list(residues)
-        res_seq, res_name, chain_id = model_residues.pop(0)
-        prev_model: type[__UNSET__] | int | None = __UNSET__
-        for i, (this_res_seq, this_chain_id, this_model) in enumerate(
-            zip(data.res_seq, data.chain_id, data.model, strict=True),
-        ):
-            # Reset model_residues on new model
-            if prev_model is not __UNSET__ and prev_model != this_model:
-                model_residues = list(residues)
-                res_seq, res_name, chain_id = model_residues.pop(0)
-            # Pop the next residue off the stack when the residue changes
-            if this_res_seq != res_seq or this_chain_id != chain_id:
-                res_seq, res_name, chain_id = model_residues.pop(0)
-            # Raise an error if we skip a residue
-            if this_res_seq != res_seq or this_chain_id != chain_id:
-                this_serial = data.serial[i]
-                this_line_no = data.line_no[i]
-                raise PabloError(
-                    "Could not identify residue name"
-                    + f" for atom serial {this_serial} (l{this_line_no})",
+        if "_atom_site.label_comp_id" in block:
+            data.res_name = cif_strs(block["_atom_site.label_comp_id"])
+        else:
+            residues = [
+                (res_seq, res_name, chain_id)
+                for res_seq, res_name, chain_id in zip(
+                    block["_pdbx_poly_seq_scheme.seq_id"],
+                    block["_pdbx_poly_seq_scheme.mon_id"],
+                    block["_pdbx_poly_seq_scheme.asym_id"],
                 )
-            data.res_name.append(res_name)
-            prev_model = this_model
+            ]
+            model_residues = list(residues)
+            res_seq, res_name, chain_id = model_residues.pop(0)
+            prev_model: type[__UNSET__] | int | None = __UNSET__
+            for i, (this_res_seq, this_chain_id, this_model) in enumerate(
+                zip(data.res_seq, data.chain_id, data.model, strict=True),
+            ):
+                # Reset model_residues on new model
+                if prev_model is not __UNSET__ and prev_model != this_model:
+                    model_residues = list(residues)
+                    res_seq, res_name, chain_id = model_residues.pop(0)
+                # Pop the next residue off the stack when the residue changes
+                if this_res_seq != res_seq or this_chain_id != chain_id:
+                    res_seq, res_name, chain_id = model_residues.pop(0)
+                # Raise an error if we skip a residue
+                if this_res_seq != res_seq or this_chain_id != chain_id:
+                    this_serial = data.serial[i]
+                    this_line_no = data.line_no[i]
+                    raise PabloError(
+                        "Could not identify residue name"
+                        + f" for atom serial {this_serial} (l{this_line_no})",
+                    )
+                data.res_name.append(res_name)
+                prev_model = this_model
+
+        # TODO: CONECT record equivalent
 
         return data
 
