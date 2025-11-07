@@ -601,7 +601,7 @@ class PdbData:
                 ),
             )
             reason = (
-                "The following atoms had unknown names: "
+                "Unknown atom names: "
                 + ", ".join(self.name[i] for i in unmatched_indices)
                 + f" (expected {expected}"
                 + (
@@ -613,7 +613,6 @@ class PdbData:
                         else ""
                     )
                     if len(expected_atoms) != len(unmatched_indices)
-                    and all("H" in atom.name for atom in expected_atoms)
                     else ""
                 )
                 + ")"
@@ -669,11 +668,18 @@ class PdbData:
         # is either entirely present or entirely absent
         missing_atom_names = {atom.name for atom in missing_atoms}
         if any(not atom.leaving for atom in missing_atoms):
-            reason = "Missing atom(s) are not leaving atoms"
-            reason += (
-                f" {tuple({atom.name for atom in missing_atoms if not atom.leaving})}"
+            reason = "Expected atoms are missing: "
+            reason += ", ".join(
+                {atom.name for atom in missing_atoms if not atom.leaving},
             )
-            reason += f" (unmatched atoms: {', '.join(self.name[i] for i in res_atom_idcs_without_vsites if i not in index_to_atomdef)})"
+            unmatched_indices = [
+                i for i in res_atom_idcs_without_vsites if i not in index_to_atomdef
+            ]
+            if len(unmatched_indices) > 0:
+                # This should be unreachable, but just in case
+                reason += f" (unmatched atoms: {', '.join(self.name[i] for i in unmatched_indices)})"
+            else:
+                reason += " (all present atoms were matched)"
             logging.debug("    Match failed: " + reason)
             return match.reject(reason)
         elif residue_definition._missing_atoms_are_valid_leaving_atoms(
@@ -682,7 +688,7 @@ class PdbData:
             logging.debug("    Match succeeded!")
             return match
         else:
-            reason = "Missing atoms do not specify link"
+            reason = "Expected atoms are missing:"
             logging.debug("    Match failed: " + reason)
             return match.reject(reason)
 
@@ -1108,7 +1114,7 @@ class PdbData:
                     )
 
                 if len(prior_conect_partners) == 1:
-                    logging.debug("    Prior linking bond found in CONECT records")
+                    logging.debug("    Unique prior bond found in CONECT records")
                     ((_, prior_bond_partner_atom_idx),) = prior_conect_partners
                     match.set_prior_bond(
                         prior_bond_partner_atom_idx,
@@ -1118,12 +1124,12 @@ class PdbData:
                     match.residue_definition.linking_bond
                     not in neighbour_supported_prior_bonds
                 ):
-                    reason = "Prior bond expected but not supported by neighbours"
+                    reason = "Bond to previous residue expected but not supported by neighbor"
                     logging.debug(f"    Match failed: {reason}")
                     yield match.reject(reason)
                     continue
                 elif prev_residue_terminated:
-                    reason = "Prior bond expected but cannot form polymer bond across TER record"
+                    reason = "Bond to previous residue expected but cannot form polymer bond across TER record"
                     logging.debug(f"    Match failed: {reason}")
                     yield match.reject(reason)
                     continue
@@ -1138,13 +1144,17 @@ class PdbData:
                         match.prior_bond_idcs is not None
                         and match.prior_bond_idcs != bond_idcs
                     ):
-                        reason = "Multiple inconsistent prior bonds identified"
+                        reason = (
+                            "Multiple inconsistent bonds to previous residue identified"
+                        )
                         logging.debug(f"    Match failed: {reason}")
                         yield match.reject(reason)
                         continue
                     match.set_prior_bond(*bond_idcs)
             elif not neighbours_support_molecule_start:
-                reason = "Prior bond not expected but required by neighbours"
+                reason = (
+                    "Bond to previous residue not expected but required by neighbor"
+                )
                 logging.debug(f"    Match failed: {reason}")
                 yield match.reject(reason)
                 continue
@@ -1175,7 +1185,7 @@ class PdbData:
 
                 if len(posterior_conect_partners) == 1:
                     logging.debug(
-                        "    Unique posterior linking bond found in CONECT records",
+                        "    Unique posterior bond found in CONECT records",
                     )
                     ((_, posterior_bond_partner_atom_idx),) = posterior_conect_partners
                     match.set_posterior_bond(
@@ -1186,12 +1196,14 @@ class PdbData:
                     match.residue_definition.linking_bond
                     not in neighbour_supported_posterior_bonds
                 ):
-                    reason = "Posterior bond expected but not supported by neighbours"
+                    reason = (
+                        "Bond to next residue expected but not supported by neighbor"
+                    )
                     logging.debug(f"    Match failed: {reason}")
                     yield match.reject(reason)
                     continue
                 elif this_residue_terminated:
-                    reason = "Posterior bond expected but cannot form polymer bond across TER record"
+                    reason = "Bond to next residue expected but cannot form polymer bond across TER record"
                     logging.debug(f"    Match failed: {reason}")
                     yield match.reject(reason)
                     continue
@@ -1208,13 +1220,15 @@ class PdbData:
                         match.posterior_bond_idcs is not None
                         and match.posterior_bond_idcs != bond_idcs
                     ):
-                        reason = "Multiple inconsistent posterior bonds identified"
+                        reason = (
+                            "Multiple inconsistent bonds to next residue identified"
+                        )
                         logging.debug(f"    Match failed: {reason}")
                         yield match.reject(reason)
                         continue
                     match.set_posterior_bond(*bond_idcs)
             elif not neighbours_support_molecule_end:
-                reason = "Posterior bond not expected but required by neighbours"
+                reason = "Bond to next residue not expected but required by neighbor"
                 logging.debug(f"    Match failed: {reason}")
                 yield match.reject(reason)
                 continue
