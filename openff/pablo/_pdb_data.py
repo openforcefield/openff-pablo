@@ -572,7 +572,7 @@ class PdbData:
                 reason=reason,
             )
 
-        # Get the map from the canonical names to the indices
+        # Get the map from the indices to the canonical names
         index_to_atomdef = {
             i: residue_definition.name_to_atom.get(self.name[i], None)
             for i in res_atom_idcs
@@ -581,13 +581,44 @@ class PdbData:
             matched_atoms = {
                 atom.name for atom in index_to_atomdef.values() if atom is not None
             }
+            unmatched_indices = [
+                i for i, atom in index_to_atomdef.items() if atom is None
+            ]
+            expected_atoms = [
+                atom
+                for atom in residue_definition.atoms
+                if atom.name not in matched_atoms
+            ]
+            expected = "; ".join(
+                sorted(
+                    (
+                        atom.name
+                        + (" or synonyms " if atom.synonyms else "")
+                        + ", ".join(atom.synonyms)
+                        for atom in expected_atoms
+                    ),
+                    key=len,
+                ),
+            )
             reason = (
                 "The following atoms had unknown names: "
-                + ", ".join(
-                    self.name[i] for i, atom in index_to_atomdef.items() if atom is None
+                + ", ".join(self.name[i] for i in unmatched_indices)
+                + f" (expected {expected}"
+                + (
+                    "; different number of atoms were expected than were"
+                    + " unmatched"
+                    + (
+                        " - check protonation state"
+                        if all("H" in atom.name for atom in expected_atoms)
+                        else ""
+                    )
+                    if len(expected_atoms) != len(unmatched_indices)
+                    and all("H" in atom.name for atom in expected_atoms)
+                    else ""
                 )
-                + f" (expected {'; '.join(sorted((atom.name + (' or synonyms ' if atom.synonyms else '') + ', '.join(atom.synonyms) for atom in residue_definition.atoms if atom.name not in matched_atoms), key=len))})"
+                + ")"
             )
+
             logging.debug("    Match failed: " + reason)
             return ResidueMismatch(
                 residue_definition=residue_definition,
@@ -642,6 +673,7 @@ class PdbData:
             reason += (
                 f" {tuple({atom.name for atom in missing_atoms if not atom.leaving})}"
             )
+            reason += f" (unmatched atoms: {', '.join(self.name[i] for i in res_atom_idcs_without_vsites if i not in index_to_atomdef)})"
             logging.debug("    Match failed: " + reason)
             return match.reject(reason)
         elif residue_definition._missing_atoms_are_valid_leaving_atoms(
@@ -684,10 +716,9 @@ class PdbData:
             prototype_index = res_atom_idcs[0]
             res_name = self.res_name[prototype_index]
             logging.info(f"Beginning name-based match of {res_name} {res_atom_idcs}")
-            if len(res_atom_idcs) <= 3:
-                logging.debug(
-                    f"  Atom names are ({', '.join(self.name[i] for i in res_atom_idcs)})",
-                )
+            logging.debug(
+                f"  Atom names are ({', '.join(self.name[i] for i in res_atom_idcs)})",
+            )
 
             matches = [
                 self.subset_matches_residue(
