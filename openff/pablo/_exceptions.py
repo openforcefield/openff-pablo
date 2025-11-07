@@ -131,10 +131,7 @@ def create_pdb_residue_match_error(
         else:
             msg.append(f"  {resid} ({src}): No matching residue definitions:")
 
-        for err in sorted(
-            residue_errors,
-            key=lambda x: (str(type(x)), x.sort_key()),
-        ):
+        for err in sorted(residue_errors, key=lambda x: str(type(x))):
             if isinstance(err, NoResidueDefinitions):
                 continue
             elif isinstance(err, ResidueMatch):
