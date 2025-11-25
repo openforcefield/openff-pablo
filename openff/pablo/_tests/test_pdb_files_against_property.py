@@ -768,7 +768,7 @@ def test_can_load_arg_alternate_resonance_form_with_conects():
 def test_misplaced_ter_with_custom_resdef_gives_clear_error():
     with pytest.raises(
         ValueError,
-        match="failed to match: Posterior bond expected but cannot form polymer bond across TER record",
+        match="didn't match: Bond to next residue expected but cannot form polymer bond across TER record",
     ):
         topology_from_pdb(
             get_test_data_path("capped_ser_extrater.pdb"),
@@ -814,10 +814,10 @@ def test_unmatched_residues_give_clear_error(
                 str(path),
                 "could not be identified from the provided chemical library:",
                 "  A:CYS#221 (l1-11): No matching residue definitions:",
-                "    ╰ CYSTEINE failed to match: found CONECT record that could not be matched with a bond",
+                "    ╰─ CYSTEINE didn't match: found CONECT record that could not be matched with a bond",
                 "",
                 "  A:CYS#222 (l12-23): No matching residue definitions:",
-                "    ╰ CYSTEINE failed to match: found CONECT record that could not be matched with a bond",
+                "    ╰─ CYSTEINE didn't match: found CONECT record that could not be matched with a bond",
             ],
         )
 

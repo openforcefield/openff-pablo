@@ -34,9 +34,6 @@ class PossibleMatchProtocol(Protocol):
     def prototype_index(self) -> int:
         return max(self.index_to_atomdef)
 
-    def sort_key(self) -> tuple[str, ...]:
-        return (self.description,)
-
 
 @dataclass(frozen=True)
 class MatchProtocol(PossibleMatchProtocol):
@@ -82,13 +79,6 @@ class ResidueMismatch(MismatchProtocol):
     @property
     def description(self) -> str:
         return f"{self.residue_definition.description} failed to match: {self.reason}"
-
-    def sort_key(self) -> tuple[str, ...]:
-        return (
-            self.reason,
-            f"{len(self.residue_definition.description):0>10}",
-            self.residue_definition.description,
-        )
 
 
 @dataclass(frozen=True)

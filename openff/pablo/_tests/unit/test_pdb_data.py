@@ -635,7 +635,7 @@ def test_filter_on_polymer_linkages_rejects_unsupported_prior_bond(
     assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
     assert (
         filtered_matches[0].reason
-        == "Prior bond expected but not supported by neighbours"
+        == "Bond to previous residue expected but not supported by neighbor"
     )
 
 
@@ -681,7 +681,7 @@ def test_filter_on_polymer_linkages_rejects_prior_bond_across_ter(
     assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
     assert (
         filtered_matches[0].reason
-        == "Prior bond expected but cannot form polymer bond across TER record"
+        == "Bond to previous residue expected but cannot form polymer bond across TER record"
     )
 
 
@@ -773,7 +773,7 @@ def test_filter_on_polymer_linkages_rejects_no_prior_bond_without_molecule_start
     assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
     assert (
         filtered_matches[0].reason
-        == "Prior bond not expected but required by neighbours"
+        == "Bond to previous residue not expected but required by neighbor"
     )
 
 
@@ -818,7 +818,7 @@ def test_filter_on_polymer_linkages_rejects_unsupported_posterior_bond(
     assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
     assert (
         filtered_matches[0].reason
-        == "Posterior bond expected but not supported by neighbours"
+        == "Bond to next residue expected but not supported by neighbor"
     )
 
 
@@ -864,7 +864,7 @@ def test_filter_on_polymer_linkages_rejects_posterior_bond_across_ter(
     assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
     assert (
         filtered_matches[0].reason
-        == "Posterior bond expected but cannot form polymer bond across TER record"
+        == "Bond to next residue expected but cannot form polymer bond across TER record"
     )
 
 
@@ -953,7 +953,7 @@ def test_filter_on_polymer_linkages_rejects_no_posterior_bond_without_molecule_s
     assert filtered_matches[0].index_to_atomdef == this_match.index_to_atomdef
     assert (
         filtered_matches[0].reason
-        == "Posterior bond not expected but required by neighbours"
+        == "Bond to next residue not expected but required by neighbor"
     )
 
 

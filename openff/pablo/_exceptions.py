@@ -93,16 +93,22 @@ def create_pdb_residue_match_error(
             err.expects_prior_bond for err in only_matched(residue_errors)
         ]
 
-        residue_mismatch_resdef_description_lens = [
-            len(match.residue_definition.description)
-            for match in residue_errors
-            if isinstance(match.residue_definition, ResidueDefinition)
-        ]
-        max_padding = (
-            max(residue_mismatch_resdef_description_lens)
-            if residue_mismatch_resdef_description_lens
-            else 0
+        residue_mismatch_resdef_description_lens = sorted(
+            [
+                len(match.residue_definition.description)
+                for match in residue_errors
+                if isinstance(match.residue_definition, ResidueDefinition)
+            ],
         )
+        max_padding = 0
+        if len(residue_mismatch_resdef_description_lens) > 2 and (
+            residue_mismatch_resdef_description_lens[-1]
+            - residue_mismatch_resdef_description_lens[-2]
+            > 30
+        ):
+            max_padding = residue_mismatch_resdef_description_lens[-2]
+        elif len(residue_mismatch_resdef_description_lens) > 0:
+            max_padding = residue_mismatch_resdef_description_lens[-1]
 
         if isinstance(prototype_residue_error, MatchProtocol):
             msg.append(
@@ -131,15 +137,12 @@ def create_pdb_residue_match_error(
         else:
             msg.append(f"  {resid} ({src}): No matching residue definitions:")
 
-        for err in sorted(
-            residue_errors,
-            key=lambda x: (str(type(x)), x.sort_key()),
-        ):
+        for err in sorted(residue_errors, key=lambda x: str(type(x))):
             if isinstance(err, NoResidueDefinitions):
                 continue
             elif isinstance(err, ResidueMatch):
                 desc = err.residue_definition.description
-                padding = max_padding - len(desc)
+                padding = max(0, max_padding - len(desc))
                 expects = ", ".join(
                     flatten(
                         [
@@ -164,13 +167,13 @@ def create_pdb_residue_match_error(
                 if expects == "":
                     expects = "no other linkages"
                 msg.append(
-                    f"    ├{'─' * padding} {desc}: expects {expects}",
+                    f"    ├─ {desc}{' ' * padding}: expects {expects}",
                 )
             elif isinstance(err, ResidueMismatch):
                 desc = err.residue_definition.description
-                padding = max_padding - len(desc)
+                padding = max(0, max_padding - len(desc))
                 msg.append(
-                    f"    ├{'─' * padding} {desc} " + f"failed to match: {err.reason}",
+                    f"    ├─ {desc}{' ' * padding} " + f"didn't match: {err.reason}",
                 )
             else:
                 msg.append(f"    ├ {err.description}")

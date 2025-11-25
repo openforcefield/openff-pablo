@@ -220,7 +220,7 @@ def _build_topology(
     topology = Topology.from_molecules(molecules)
 
     topology_pdb_indices = [atom.metadata["pdb_index"] for atom in topology.atoms]
-    if topology_pdb_indices != list(range(len(topology_pdb_indices))):
+    if topology_pdb_indices != sorted(topology_pdb_indices):
         logging.debug(
             "\n".join(
                 f"topology index {j: <7} has pdb index {i: <7}"

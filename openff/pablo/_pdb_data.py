@@ -170,6 +170,10 @@ class PdbData:
 
         n_atom_sites = len(block["_atom_site.id"])
 
+        model_strs = block.get("_atom_site.pdbx_PDB_model_num")
+        occupancy_strs = block.get("_atom_site.occupancy")
+        temp_factor_strs = block.get("_atom_site.B_iso_or_equiv")
+
         data = cls(
             strict=True,
             cryst1_a=unwrap_or_none(cif_opt_floats(block["_cell.length_a"])),
@@ -178,7 +182,11 @@ class PdbData:
             cryst1_alpha=unwrap_or_none(cif_opt_floats(block["_cell.angle_alpha"])),
             cryst1_beta=unwrap_or_none(cif_opt_floats(block["_cell.angle_beta"])),
             cryst1_gamma=unwrap_or_none(cif_opt_floats(block["_cell.angle_gamma"])),
-            model=cif_opt_ints(block["_atom_site.pdbx_PDB_model_num"]),
+            model=(
+                [None] * n_atom_sites
+                if model_strs is None
+                else cif_opt_ints(model_strs)
+            ),
             serial=cif_strs(block["_atom_site.id"]),
             name=cif_strs(block["_atom_site.label_atom_id"]),
             alt_loc=cif_strs(block["_atom_site.label_alt_id"]),
@@ -188,8 +196,16 @@ class PdbData:
             x=cif_floats(block["_atom_site.Cartn_x"]),
             y=cif_floats(block["_atom_site.Cartn_y"]),
             z=cif_floats(block["_atom_site.Cartn_z"]),
-            occupancy=cif_floats(block["_atom_site.occupancy"]),
-            temp_factor=cif_floats(block["_atom_site.B_iso_or_equiv"]),
+            occupancy=(
+                [1.0] * n_atom_sites
+                if occupancy_strs is None
+                else cif_floats(occupancy_strs)
+            ),
+            temp_factor=(
+                [0.0] * n_atom_sites
+                if temp_factor_strs is None
+                else cif_floats(temp_factor_strs)
+            ),
             element=cif_strs(block["_atom_site.type_symbol"]),
             charge=cif_opt_ints(block["_atom_site.pdbx_formal_charge"]),
             line_no=cif_ints(block["_atom_site.id.__pablo__line_no"]),
@@ -197,39 +213,43 @@ class PdbData:
             terminated=[False] * n_atom_sites,
             conects=[set()] * n_atom_sites,
         )
-        # TODO: CONECT record equivalent
 
-        residues = [
-            (res_seq, res_name, chain_id)
-            for res_seq, res_name, chain_id in zip(
-                block["_pdbx_poly_seq_scheme.seq_id"],
-                block["_pdbx_poly_seq_scheme.mon_id"],
-                block["_pdbx_poly_seq_scheme.asym_id"],
-            )
-        ]
-        model_residues = list(residues)
-        res_seq, res_name, chain_id = model_residues.pop(0)
-        prev_model: type[__UNSET__] | int | None = __UNSET__
-        for i, (this_res_seq, this_chain_id, this_model) in enumerate(
-            zip(data.res_seq, data.chain_id, data.model, strict=True),
-        ):
-            # Reset model_residues on new model
-            if prev_model is not __UNSET__ and prev_model != this_model:
-                model_residues = list(residues)
-                res_seq, res_name, chain_id = model_residues.pop(0)
-            # Pop the next residue off the stack when the residue changes
-            if this_res_seq != res_seq or this_chain_id != chain_id:
-                res_seq, res_name, chain_id = model_residues.pop(0)
-            # Raise an error if we skip a residue
-            if this_res_seq != res_seq or this_chain_id != chain_id:
-                this_serial = data.serial[i]
-                this_line_no = data.line_no[i]
-                raise PabloError(
-                    "Could not identify residue name"
-                    + f" for atom serial {this_serial} (l{this_line_no})",
+        if "_atom_site.label_comp_id" in block:
+            data.res_name = cif_strs(block["_atom_site.label_comp_id"])
+        else:
+            residues = [
+                (res_seq, res_name, chain_id)
+                for res_seq, res_name, chain_id in zip(
+                    block["_pdbx_poly_seq_scheme.seq_id"],
+                    block["_pdbx_poly_seq_scheme.mon_id"],
+                    block["_pdbx_poly_seq_scheme.asym_id"],
                 )
-            data.res_name.append(res_name)
-            prev_model = this_model
+            ]
+            model_residues = list(residues)
+            res_seq, res_name, chain_id = model_residues.pop(0)
+            prev_model: type[__UNSET__] | int | None = __UNSET__
+            for i, (this_res_seq, this_chain_id, this_model) in enumerate(
+                zip(data.res_seq, data.chain_id, data.model, strict=True),
+            ):
+                # Reset model_residues on new model
+                if prev_model is not __UNSET__ and prev_model != this_model:
+                    model_residues = list(residues)
+                    res_seq, res_name, chain_id = model_residues.pop(0)
+                # Pop the next residue off the stack when the residue changes
+                if this_res_seq != res_seq or this_chain_id != chain_id:
+                    res_seq, res_name, chain_id = model_residues.pop(0)
+                # Raise an error if we skip a residue
+                if this_res_seq != res_seq or this_chain_id != chain_id:
+                    this_serial = data.serial[i]
+                    this_line_no = data.line_no[i]
+                    raise PabloError(
+                        "Could not identify residue name"
+                        + f" for atom serial {this_serial} (l{this_line_no})",
+                    )
+                data.res_name.append(res_name)
+                prev_model = this_model
+
+        # TODO: CONECT record equivalent
 
         return data
 
@@ -552,7 +572,7 @@ class PdbData:
                 reason=reason,
             )
 
-        # Get the map from the canonical names to the indices
+        # Get the map from the indices to the canonical names
         index_to_atomdef = {
             i: residue_definition.name_to_atom.get(self.name[i], None)
             for i in res_atom_idcs
@@ -561,13 +581,43 @@ class PdbData:
             matched_atoms = {
                 atom.name for atom in index_to_atomdef.values() if atom is not None
             }
-            reason = (
-                "The following atoms had unknown names: "
-                + ", ".join(
-                    self.name[i] for i, atom in index_to_atomdef.items() if atom is None
-                )
-                + f" (expected {'; '.join(sorted((atom.name + (' or synonyms ' if atom.synonyms else '') + ', '.join(atom.synonyms) for atom in residue_definition.atoms if atom.name not in matched_atoms), key=len))})"
+            unmatched_indices = [
+                i for i, atom in index_to_atomdef.items() if atom is None
+            ]
+            expected_atoms = [
+                atom
+                for atom in residue_definition.atoms
+                if atom.name not in matched_atoms
+            ]
+            expected = "; ".join(
+                sorted(
+                    (
+                        atom.name
+                        + (" or synonyms " if atom.synonyms else "")
+                        + ", ".join(atom.synonyms)
+                        for atom in expected_atoms
+                    ),
+                    key=len,
+                ),
             )
+            reason = (
+                "Unknown atom names: "
+                + ", ".join(self.name[i] for i in unmatched_indices)
+                + f" (expected {expected}"
+                + (
+                    "; different number of atoms were expected than were"
+                    + " unmatched"
+                    + (
+                        " - check protonation state"
+                        if all("H" in atom.name for atom in expected_atoms)
+                        else ""
+                    )
+                    if len(expected_atoms) != len(unmatched_indices)
+                    else ""
+                )
+                + ")"
+            )
+
             logging.debug("    Match failed: " + reason)
             return ResidueMismatch(
                 residue_definition=residue_definition,
@@ -618,10 +668,18 @@ class PdbData:
         # is either entirely present or entirely absent
         missing_atom_names = {atom.name for atom in missing_atoms}
         if any(not atom.leaving for atom in missing_atoms):
-            reason = "Missing atom(s) are not leaving atoms"
-            reason += (
-                f" {tuple({atom.name for atom in missing_atoms if not atom.leaving})}"
+            reason = "Expected atoms are missing: "
+            reason += ", ".join(
+                {atom.name for atom in missing_atoms if not atom.leaving},
             )
+            unmatched_indices = [
+                i for i in res_atom_idcs_without_vsites if i not in index_to_atomdef
+            ]
+            if len(unmatched_indices) > 0:
+                # This should be unreachable, but just in case
+                reason += f" (unmatched atoms: {', '.join(self.name[i] for i in unmatched_indices)})"
+            else:
+                reason += " (all present atoms were matched)"
             logging.debug("    Match failed: " + reason)
             return match.reject(reason)
         elif residue_definition._missing_atoms_are_valid_leaving_atoms(
@@ -630,7 +688,7 @@ class PdbData:
             logging.debug("    Match succeeded!")
             return match
         else:
-            reason = "Missing atoms do not specify link"
+            reason = "Expected atoms are missing:"
             logging.debug("    Match failed: " + reason)
             return match.reject(reason)
 
@@ -664,10 +722,9 @@ class PdbData:
             prototype_index = res_atom_idcs[0]
             res_name = self.res_name[prototype_index]
             logging.info(f"Beginning name-based match of {res_name} {res_atom_idcs}")
-            if len(res_atom_idcs) <= 3:
-                logging.debug(
-                    f"  Atom names are ({', '.join(self.name[i] for i in res_atom_idcs)})",
-                )
+            logging.debug(
+                f"  Atom names are ({', '.join(self.name[i] for i in res_atom_idcs)})",
+            )
 
             matches = [
                 self.subset_matches_residue(
@@ -1057,7 +1114,7 @@ class PdbData:
                     )
 
                 if len(prior_conect_partners) == 1:
-                    logging.debug("    Prior linking bond found in CONECT records")
+                    logging.debug("    Unique prior bond found in CONECT records")
                     ((_, prior_bond_partner_atom_idx),) = prior_conect_partners
                     match.set_prior_bond(
                         prior_bond_partner_atom_idx,
@@ -1067,12 +1124,12 @@ class PdbData:
                     match.residue_definition.linking_bond
                     not in neighbour_supported_prior_bonds
                 ):
-                    reason = "Prior bond expected but not supported by neighbours"
+                    reason = "Bond to previous residue expected but not supported by neighbor"
                     logging.debug(f"    Match failed: {reason}")
                     yield match.reject(reason)
                     continue
                 elif prev_residue_terminated:
-                    reason = "Prior bond expected but cannot form polymer bond across TER record"
+                    reason = "Bond to previous residue expected but cannot form polymer bond across TER record"
                     logging.debug(f"    Match failed: {reason}")
                     yield match.reject(reason)
                     continue
@@ -1087,13 +1144,17 @@ class PdbData:
                         match.prior_bond_idcs is not None
                         and match.prior_bond_idcs != bond_idcs
                     ):
-                        reason = "Multiple inconsistent prior bonds identified"
+                        reason = (
+                            "Multiple inconsistent bonds to previous residue identified"
+                        )
                         logging.debug(f"    Match failed: {reason}")
                         yield match.reject(reason)
                         continue
                     match.set_prior_bond(*bond_idcs)
             elif not neighbours_support_molecule_start:
-                reason = "Prior bond not expected but required by neighbours"
+                reason = (
+                    "Bond to previous residue not expected but required by neighbor"
+                )
                 logging.debug(f"    Match failed: {reason}")
                 yield match.reject(reason)
                 continue
@@ -1124,7 +1185,7 @@ class PdbData:
 
                 if len(posterior_conect_partners) == 1:
                     logging.debug(
-                        "    Unique posterior linking bond found in CONECT records",
+                        "    Unique posterior bond found in CONECT records",
                     )
                     ((_, posterior_bond_partner_atom_idx),) = posterior_conect_partners
                     match.set_posterior_bond(
@@ -1135,12 +1196,14 @@ class PdbData:
                     match.residue_definition.linking_bond
                     not in neighbour_supported_posterior_bonds
                 ):
-                    reason = "Posterior bond expected but not supported by neighbours"
+                    reason = (
+                        "Bond to next residue expected but not supported by neighbor"
+                    )
                     logging.debug(f"    Match failed: {reason}")
                     yield match.reject(reason)
                     continue
                 elif this_residue_terminated:
-                    reason = "Posterior bond expected but cannot form polymer bond across TER record"
+                    reason = "Bond to next residue expected but cannot form polymer bond across TER record"
                     logging.debug(f"    Match failed: {reason}")
                     yield match.reject(reason)
                     continue
@@ -1157,13 +1220,15 @@ class PdbData:
                         match.posterior_bond_idcs is not None
                         and match.posterior_bond_idcs != bond_idcs
                     ):
-                        reason = "Multiple inconsistent posterior bonds identified"
+                        reason = (
+                            "Multiple inconsistent bonds to next residue identified"
+                        )
                         logging.debug(f"    Match failed: {reason}")
                         yield match.reject(reason)
                         continue
                     match.set_posterior_bond(*bond_idcs)
             elif not neighbours_support_molecule_end:
-                reason = "Posterior bond not expected but required by neighbours"
+                reason = "Bond to next residue not expected but required by neighbor"
                 logging.debug(f"    Match failed: {reason}")
                 yield match.reject(reason)
                 continue
