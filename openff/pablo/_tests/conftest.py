@@ -6,6 +6,7 @@ from openff.toolkit import Molecule, Topology
 
 from openff.pablo._pdb_data import PdbData, ResidueMatch
 from openff.pablo._tests.utils import get_test_data_path
+from openff.pablo.ccd import CcdCache
 from openff.pablo.chem import DISULFIDE_BOND, PEPTIDE_BOND
 from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
 
@@ -31,6 +32,91 @@ def pdbfn(request: pytest.FixtureRequest) -> Path:
 )
 def pdbxfn(request: pytest.FixtureRequest) -> Path:
     return get_test_data_path(request.param)
+
+
+@pytest.fixture
+def tmp_ccd_cache(tmp_path: Path) -> CcdCache:
+    import openff.pablo.ccd.patches as patches
+
+    return CcdCache(
+        # TODO: Use a proper resource setup for this
+        library_paths=[Path(__file__).parent.parent / "ccd/data/ccd_cache"],
+        cache_path=tmp_path,
+        patches=[
+            {
+                "ACE": patches.fix_caps,
+                "NME": patches.fix_caps,
+                "NH2": patches.fix_caps,
+                "CYS": patches.add_disulfide_crosslink,
+            },
+            {"*": patches.add_protonation_variants},
+            {
+                "U": patches.add_dephosphorylated_5p_terminus,
+                "G": patches.add_dephosphorylated_5p_terminus,
+                "C": patches.add_dephosphorylated_5p_terminus,
+                "A": patches.add_dephosphorylated_5p_terminus,
+                "DT": patches.add_dephosphorylated_5p_terminus,
+                "DG": patches.add_dephosphorylated_5p_terminus,
+                "DC": patches.add_dephosphorylated_5p_terminus,
+                "DA": patches.add_dephosphorylated_5p_terminus,
+                "NH2": patches.add_nh2_leaving_atom,
+            },
+            {
+                "U": patches.set_hop3_leaving,
+                "G": patches.set_hop3_leaving,
+                "C": patches.set_hop3_leaving,
+                "A": patches.set_hop3_leaving,
+                "DT": patches.set_hop3_leaving,
+                "DG": patches.set_hop3_leaving,
+                "DC": patches.set_hop3_leaving,
+                "DA": patches.set_hop3_leaving,
+            },
+            {"*": patches.disambiguate_alt_ids},
+            {"*": patches.add_synonyms},
+            {"*": patches.strip_linkless_leavers},
+            {
+                "HIS": patches.patch_his_sidechain_zwitterion,
+                "ARG": patches.delete_doubly_deprotonated_arginine,
+            },
+        ],
+        extra_definitions={
+            "I": [ResidueDefinition.from_smiles("[I-:1]", {1: "I"}, "I")],
+            "WAT": [
+                ResidueDefinition.from_smiles(
+                    "[H:2][O:1][H:3]",
+                    {1: "O", 2: "H1", 3: "H2"},
+                    "WAT",
+                ).with_synonyms({"H1": ["1H"], "H2": ["2H"]}),
+            ],
+            # Maestro NME:
+            "NMA": [
+                ResidueDefinition.from_smiles(
+                    residue_name="NMA",
+                    mapped_smiles="[H:3][N:1]([H:4])[C:2]([H:5])([H:6])[H:7]",
+                    atom_names={
+                        1: "N",
+                        2: "C",
+                        3: "HN1",
+                        4: "HN2",
+                        5: "H1",
+                        6: "H2",
+                        7: "H3",
+                    },
+                    leaving_atoms=[3],
+                    linking_bond=PEPTIDE_BOND,
+                    description="METHYLAMINE (MAESTRO)",
+                ).with_synonyms(
+                    {
+                        "HN2": ["H"],
+                        "C": ["CA", "CH3"],
+                        "H1": ["1HH3", "HA1", "1HA"],
+                        "H2": ["2HH3", "HA2", "2HA"],
+                        "H3": ["3HH3", "HA3", "3HA"],
+                    },
+                ),
+            ],
+        },
+    )
 
 
 @pytest.fixture

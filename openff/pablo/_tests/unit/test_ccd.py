@@ -15,8 +15,48 @@ from openff.pablo.residue import ResidueDefinition
         "GDP",
     ],
 )
-def test_ccdcache_can_load_residues_with_internet(resname: str):
-    STD_CCD_CACHE[resname]
+def test_ccdcache_raises_by_default_with_internet(
+    tmp_ccd_cache: CcdCache,
+    resname: str,
+):
+    assert resname not in tmp_ccd_cache
+    assert tmp_ccd_cache.auto_download is False
+    with pytest.raises(KeyError):
+        tmp_ccd_cache[resname]
+
+
+@pytest.mark.parametrize(
+    "resname",
+    [
+        "EST",
+        "GDP",
+    ],
+)
+def test_ccdcache_can_load_residues_with_internet(
+    tmp_ccd_cache: CcdCache,
+    resname: str,
+):
+    assert resname not in tmp_ccd_cache
+    assert tmp_ccd_cache.auto_download is False
+
+    tmp_ccd_cache.auto_download = True
+
+    resdef = tmp_ccd_cache[resname]
+    assert resdef.residue_name == resname
+
+
+@pytest.mark.parametrize(
+    "resname",
+    [
+        "EST",
+        "GDP",
+    ],
+)
+def test_ccdcache_can_manually_download_residues(tmp_ccd_cache: CcdCache, resname: str):
+    assert resname not in tmp_ccd_cache
+
+    resdef = tmp_ccd_cache.get_from_ccd(resname)
+    assert resdef.residue_name == resname
 
 
 @pytest.mark.disable_socket
@@ -66,8 +106,11 @@ def test_ccdcache_can_load_residues_with_internet(resname: str):
         "HOH",
     ],
 )
-def test_ccdcache_can_load_common_residues_without_internet(resname: str):
-    STD_CCD_CACHE[resname]
+def test_ccdcache_can_load_common_residues_without_internet(
+    tmp_ccd_cache: CcdCache,
+    resname: str,
+):
+    tmp_ccd_cache[resname]
 
 
 @pytest.mark.parametrize(
@@ -93,33 +136,37 @@ def test_default_ccdcache_cys_definitions_unique():
 
 
 @pytest.mark.slow
-def test_ccdcache_with(hooh_def: ResidueDefinition, hoh_def: ResidueDefinition):
-    assert "HOOH" not in STD_CCD_CACHE
-    new_ccdcache = STD_CCD_CACHE.with_([hooh_def])
-    assert new_ccdcache is not STD_CCD_CACHE
+def test_ccdcache_with(
+    tmp_ccd_cache: CcdCache,
+    hooh_def: ResidueDefinition,
+    hoh_def: ResidueDefinition,
+):
+    assert "HOOH" not in tmp_ccd_cache
+    new_ccdcache = tmp_ccd_cache.with_([hooh_def])
+    assert new_ccdcache is not tmp_ccd_cache
     assert "HOOH" in new_ccdcache
-    assert "HOOH" not in STD_CCD_CACHE
+    assert "HOOH" not in tmp_ccd_cache
     assert new_ccdcache["HOOH"] == (hooh_def,)
 
-    assert "HOH" in STD_CCD_CACHE
-    assert STD_CCD_CACHE["HOH"] != hoh_def
-    new_ccdcache = STD_CCD_CACHE.with_({"HOH": [hoh_def]})
-    assert new_ccdcache is not STD_CCD_CACHE
-    assert new_ccdcache["HOH"] == (*STD_CCD_CACHE["HOH"], hoh_def)
+    assert "HOH" in tmp_ccd_cache
+    assert tmp_ccd_cache["HOH"] != hoh_def
+    new_ccdcache = tmp_ccd_cache.with_({"HOH": [hoh_def]})
+    assert new_ccdcache is not tmp_ccd_cache
+    assert new_ccdcache["HOH"] == (*tmp_ccd_cache["HOH"], hoh_def)
 
 
-def test_ccdcache_with_replaced(hoh_def: ResidueDefinition):
-    assert "HOH" in STD_CCD_CACHE
-    assert STD_CCD_CACHE["HOH"] != hoh_def
-    new_ccdcache = STD_CCD_CACHE.with_replaced({"HOH": [hoh_def]})
-    assert new_ccdcache is not STD_CCD_CACHE
+def test_ccdcache_with_replaced(tmp_ccd_cache: CcdCache, hoh_def: ResidueDefinition):
+    assert "HOH" in tmp_ccd_cache
+    assert tmp_ccd_cache["HOH"] != hoh_def
+    new_ccdcache = tmp_ccd_cache.with_replaced({"HOH": [hoh_def]})
+    assert new_ccdcache is not tmp_ccd_cache
     assert new_ccdcache["HOH"] == (hoh_def,)
 
 
 @pytest.mark.slow
-def test_ccdcache_without(hooh_def: ResidueDefinition):
-    assert "HOOH" not in STD_CCD_CACHE
-    ccdcache_with_hooh = STD_CCD_CACHE.with_([hooh_def])
+def test_ccdcache_without(tmp_ccd_cache: CcdCache, hooh_def: ResidueDefinition):
+    assert "HOOH" not in tmp_ccd_cache
+    ccdcache_with_hooh = tmp_ccd_cache.with_([hooh_def])
     new_ccdcache = ccdcache_with_hooh.without({"HOOH"})
     assert new_ccdcache is not ccdcache_with_hooh
     assert "HOOH" not in new_ccdcache
@@ -194,16 +241,16 @@ def test_with_patch():
         assert cache2["ACE"] == cache3["ACE"]
 
 
-def test_water():
-    hoh = unwrap(STD_CCD_CACHE["HOH"])
-    wat = unwrap(STD_CCD_CACHE["WAT"])
+def test_water(tmp_ccd_cache: CcdCache):
+    hoh = unwrap(tmp_ccd_cache["HOH"])
+    wat = unwrap(tmp_ccd_cache["WAT"])
     assert hoh.to_openff_molecule().is_isomorphic_with(wat.to_openff_molecule())
     assert hoh.virtual_sites == ()
     assert wat.virtual_sites == ()
     assert [atom.name for atom in hoh.atoms] == ["O", "H1", "H2"]
     assert [atom.name for atom in wat.atoms] == ["O", "H1", "H2"]
 
-    ccd_with_sol = STD_CCD_CACHE.with_([hoh.replace(residue_name="SOL")])
+    ccd_with_sol = tmp_ccd_cache.with_([hoh.replace(residue_name="SOL")])
 
     sol = unwrap(
         resdef for resdef in ccd_with_sol["SOL"] if resdef.n_expected_atoms == 3
