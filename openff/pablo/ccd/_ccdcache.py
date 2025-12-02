@@ -376,20 +376,11 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         return inner(s)
 
     def __contains__(self, value: object) -> bool:
-        if value in self._definitions:
-            return True
         if not isinstance(value, str):
             raise TypeError(
                 f"CcdCache keys are residue names of type str, not {type(value)}",
             )
-
-        try:
-            self[value]
-        except Exception:
-            # This catches KeyError, but also failures to download the residue
-            return False
-        else:
-            return True
+        return value in self._definitions
 
     def __iter__(self) -> Iterator[str]:
         return self._definitions.__iter__()
