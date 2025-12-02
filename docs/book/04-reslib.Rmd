@@ -14,7 +14,7 @@ The fact that a residue library admits multiple residue definitions for each nam
 
 The default value of the [`residue_library`] argument is a module-level constant called [`STD_CCD_CACHE`]. This is an instance of the [`CcdCache`] class that comes pre-loaded with a number of common residues and patches designed to make it more usable for common biomolecular workflows.
 
-The [`CcdCache`] class provides a `Mapping` interface to the CCD itself; unknown residues are downloaded from the CCD when requested, and cached both in memory and on disk in the standard user cache directory. If the `$XDG_CACHE_HOME` environment variable is set, this is `$XDG_CACHE_HOME/openff-pablo/ccd_cache`; otherwise, it defaults to `~/.cache/openff-pablo/ccd_cache` on Linux, and `~/Library/Caches/openff-pablo/ccd_cache` on MacOS.
+The [`CcdCache`] class provides a `Mapping` interface to the CCD itself; unknown residues are downloaded from the CCD when requested, and cached both in memory and on disk in the standard user cache directory. If the `$XDG_CACHE_HOME` environment variable is set, this is `$XDG_CACHE_HOME/openff-pablo/ccd_cache`; otherwise, it defaults to `~/.cache/openff-pablo/ccd_cache` on Linux, and `~/Library/Caches/openff-pablo/ccd_cache` on MacOS. Automatic downloads are disabled by default, but can be enabled by setting `STD_CCD_CACHE.auto_download=True`.
 
 ## Augmenting the default library
 
@@ -76,6 +76,8 @@ topology = topology_from_pdb(
 The CCD format does not provide alternate protonation states for all residues, and for those it does many are chemical nonsense and represent fragments that may be visible crystallographically rather than something you'd want to simulate. As a result, all alternate protonation states must be specified either by Pablo or by the user. The [`CcdCache.with_varied_protonation`] function makes this simple:
 
 ```{python}
+STD_CCD_CACHE.auto_download = True
+
 my_residue_library = STD_CCD_CACHE.with_varied_protonation(
     "ABU", # GABA, a gamma amino acid with both basic and acidic groups
     acidic=["HXT"], # Atom name of existing abstractable proton

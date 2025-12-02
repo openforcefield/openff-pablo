@@ -30,14 +30,14 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
 
     This class is a wrapper around a ``dict`` that stores residue definitions.
     When a residue is requested via the indexing syntax (for example,
-    ``my_ccd_cache["ALA"]``) or the ``in`` operator, this dictionary is checked
-    first. If the residue is not present, the CCD is then checked. If the
-    residue cannot be retrieved from the inner ``dict`` or the CCD, a
-    ``KeyError`` is raised or ``False`` is returned as appropriate.
+    ``my_ccd_cache["ALA"]``), this dictionary is checked first. If the residue
+    is not present and the ``auto_download`` attribute is truthy, the CCD is
+    then checked. If the residue cannot be retrieved from the inner ``dict`` or
+    the CCD, a ``KeyError`` is raised.
 
-    Iterating over the mapping, checking its length, or otherwise treating the
-    ``CcdCache`` as a mapping other than with the indexing syntax or ``in``
-    operator works only on the inner ``dict``. As a result, accessing
+    Iterating over the mapping, checking its length, using the ``in`` operator,
+    or otherwise treating the ``CcdCache`` as a mapping other than with the
+    indexing syntax works only on the inner ``dict``. As a result, accessing
     a residue via indexing may return a value even if these other methods
     suggest it won't.
 
@@ -77,9 +77,14 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         searched.
     cache_path
         The path to which to download CCD entries. This path is searched in
-        addition to ``library_paths``.
+        addition to ``library_paths``. If ``None``, no on-disk cache is used,
+        though the inner dictionary still functions as an in-memory cache.
     preload
-        A list of residue names to download when initializing the class.
+        A list of residue names to ensure are present when initializing the
+        class. If absent from the library or cache directory, these are
+        downloaded from the CCD even if ``auto_download`` is falsy. Note that
+        a download failure will raise an error when the corresponding residue is
+        first requested, not at instantiation.
     patches
         Functions to call on ``ResidueDefinitions`` downloaded from the CCD
         before they are returned or added to the inner ``dict``. An iterable of
@@ -90,6 +95,10 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
     extra_definitions
         Additional residue definitions to add to the cache. Note that patches
         are not applied to these definitions.
+    auto_download
+        If ``True``, automatically attempt to download unknown residues from the
+        CCD. If ``False``, raise ``KeyError`` when residues absent from the
+        cache are requested.
     """
 
     # TODO: remove library_paths in favour of loading pre-patched entries
