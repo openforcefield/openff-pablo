@@ -41,8 +41,8 @@ def test_ccdcache_can_load_residues_with_internet(
 
     tmp_ccd_cache.auto_download = True
 
-    resdef = tmp_ccd_cache[resname]
-    assert resdef.residue_name == resname
+    resdefs = tmp_ccd_cache[resname]
+    assert len(resdefs) > 0
 
 
 @pytest.mark.parametrize(
@@ -55,8 +55,8 @@ def test_ccdcache_can_load_residues_with_internet(
 def test_ccdcache_can_manually_download_residues(tmp_ccd_cache: CcdCache, resname: str):
     assert resname not in tmp_ccd_cache
 
-    resdef = tmp_ccd_cache.get_from_ccd(resname)
-    assert resdef.residue_name == resname
+    resdefs = tmp_ccd_cache.get_from_ccd(resname)
+    assert len(resdefs) > 0
 
 
 @pytest.mark.disable_socket
@@ -121,13 +121,18 @@ def test_ccdcache_can_load_common_residues_without_internet(
         ("UNL", "reserved residue name"),
     ],
 )
-def test_ccdcache_gives_clear_errors(resname: str, expected_message: str):
+def test_ccdcache_gives_clear_errors(
+    tmp_ccd_cache: CcdCache,
+    resname: str,
+    expected_message: str,
+):
+    tmp_ccd_cache.auto_download = True
     with pytest.raises(
         KeyError,
         match=expected_message,
         check=lambda e: e.args == (resname, expected_message),
     ):
-        STD_CCD_CACHE[resname]
+        tmp_ccd_cache[resname]
 
 
 def test_default_ccdcache_cys_definitions_unique():
@@ -197,11 +202,13 @@ def test_with_patch():
             library_paths=[],
             cache_path=tmpdir1,
             patches=[{"ACE": test_patch}],
+            auto_download=True,
         )
 
         cache2: CcdCache = CcdCache(
             library_paths=[],
             cache_path=tmpdir2,
+            auto_download=True,
         ).with_patch("ACE", test_patch)
 
         cache3: CcdCache = CcdCache(

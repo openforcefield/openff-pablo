@@ -6,7 +6,6 @@ from typing import Self, no_type_check
 from urllib.error import URLError
 from urllib.request import HTTPError, urlopen
 
-import xdg.BaseDirectory as xdg_base_dir
 from openmm.app.internal.pdbx.reader.PdbxReader import PdbxReader
 
 from openff.pablo._utils import flatten
@@ -107,10 +106,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
     def __init__(
         self,
         library_paths: Iterable[Path | str],
-        cache_path: Path | str = Path(
-            xdg_base_dir.save_cache_path("openff-pablo"),
-            "ccd_cache",
-        ),
+        cache_path: Path | str | None = None,
         preload: list[str] = [],
         patches: Iterable[
             Mapping[
@@ -119,9 +115,15 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
             ]
         ] = {},
         extra_definitions: Mapping[str, Iterable[ResidueDefinition]] = {},
+        auto_download: bool = False,
     ):
-        self._cache_path = Path(cache_path).resolve()
-        self._cache_path.mkdir(parents=True, exist_ok=True)
+        self.auto_download = auto_download
+
+        if cache_path is None:
+            self._cache_path = None
+        else:
+            self._cache_path = Path(cache_path).resolve()
+            self._cache_path.mkdir(parents=True, exist_ok=True)
         self._library_paths = {Path(path).resolve() for path in library_paths}
 
         self._definitions: dict[str, list[ResidueDefinition]] = {}
@@ -141,7 +143,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
 
         for resname in set(preload) - set(self._definitions):
             try:
-                self[resname]
+                self.get_from_ccd(resname)
             except Exception:
                 # If a preload fails, skip it - we want an error at runtime, not importtime
                 pass
@@ -168,20 +170,55 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         # We should check the cache here in case this file has been downloaded
         # since this CcdCache was created - say, in a separate process, or
         # another CcdCache - but this is done by _add_definition_from_ccd()
-        try:
-            return tuple(self._add_definition_from_ccd(res_name))
-        except HTTPError:
-            raise KeyError(res_name, "unknown and absent from CCD")
-        except URLError:
-            raise KeyError(res_name, "unknown and CCD could not be accessed")
+        if self.auto_download:
+            try:
+                return tuple(self._add_definition_from_ccd(res_name))
+            except HTTPError:
+                raise KeyError(res_name, "unknown and absent from CCD")
+            except URLError:
+                raise KeyError(res_name, "unknown and CCD could not be accessed")
+        else:
+            raise KeyError(res_name, "unknown and auto_download=False")
+
+    def get_from_ccd(
+        self,
+        res_name: str,
+        patch: bool = True,
+    ) -> list[ResidueDefinition]:
+        """
+        Retrieve a residue definition from the CCD, adding it to the cache.
+
+        Downloads the residue definition from the CCD, applies any patches, adds
+        it to the cache, and returns the new, patched residue definitions. Does
+        not return any definitions existing in the cache. Always downloads, even
+        when the entry is already in the cache or ``auto_download`` is falsy.
+
+        Parameters
+        ==========
+        res_name
+            The 3-letter code for the residue.
+        patch
+            If ``True``, apply patches before adding to the cache and returning.
+            If ``False``, do not apply patches.
+        """
+        s = self._download_cif(res_name)
+        return self._add_definition_from_str(
+            s,
+            res_name=res_name,
+            patch=patch,
+            return_old_definitions=False,
+        )
 
     def _add_definition_from_ccd(self, res_name: str) -> list[ResidueDefinition]:
         """Add a definition by retrieving it from the CCD (or the cache)"""
-        cache_path = self._cache_path / f"{res_name}.cif"
-        if cache_path.is_file():
-            s = cache_path.read_text()
-        else:
+        if self._cache_path is None:
             s = self._download_cif(res_name)
+        else:
+            cache_path = self._cache_path / f"{res_name}.cif"
+            if cache_path.is_file():
+                s = cache_path.read_text()
+            else:
+                s = self._download_cif(res_name)
 
         return self._add_definition_from_str(s, res_name=res_name, patch=True)
 
@@ -215,6 +252,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         s: str,
         res_name: str | None = None,
         patch: bool = False,
+        return_old_definitions: bool = True,
     ) -> list[ResidueDefinition]:
         definition = self._res_def_from_ccd_str(s)
         if res_name is None:
@@ -224,13 +262,19 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
                 )
             res_name = definition.residue_name.upper()
 
-        return self._add_definitions((definition,), res_name, patch=patch)
+        return self._add_definitions(
+            (definition,),
+            res_name,
+            patch=patch,
+            return_old_definitions=return_old_definitions,
+        )
 
     def _add_definitions(
         self,
         definitions: Iterable[ResidueDefinition],
         res_name: str,
         patch: bool = False,
+        return_old_definitions: bool = True,
     ) -> list[ResidueDefinition]:
         if patch:
             definitions = list(flatten(map(self._apply_patches, definitions)))
@@ -255,15 +299,19 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         stored_definitions.extend(
             {k: None for k in definitions if k not in old_definitions},
         )
-        return stored_definitions
+        if return_old_definitions:
+            return stored_definitions
+        else:
+            return definitions
 
     def _download_cif(self, resname: str) -> str:
         with urlopen(
             f"https://files.rcsb.org/ligands/download/{resname.upper()}.cif",
         ) as stream:
             s: str = stream.read().decode("utf-8")
-        path = self._cache_path / f"{resname.upper()}.cif"
-        path.write_text(s)
+        if self._cache_path is not None:
+            path = self._cache_path / f"{resname.upper()}.cif"
+            path.write_text(s)
         return s
 
     def _glob(
@@ -286,7 +334,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
             Whether to look in the library paths for the glob
         """
         for path in {
-            *((self._cache_path,) if cached else ()),
+            *((self._cache_path,) if (cached and self._cache_path is not None) else ()),
             *(self._library_paths if library else ()),
         }:
             yield from path.glob(pattern)
