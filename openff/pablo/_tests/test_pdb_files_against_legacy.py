@@ -1,3 +1,5 @@
+from collections.abc import Collection, Mapping
+
 import pytest
 from openff.toolkit import Molecule, Topology
 from openff.toolkit.utils.exceptions import UnassignedChemistryInPDBError
@@ -5,6 +7,7 @@ from openff.toolkit.utils.exceptions import UnassignedChemistryInPDBError
 from openff.pablo._pdb import topology_from_pdb
 from openff.pablo._tests.utils import get_test_data_path
 from openff.pablo._utils import sort_tuple
+from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.residue import ResidueDefinition
 
 FAST_PDBS: list[tuple[str, list[Molecule], list[ResidueDefinition]]] = [
@@ -80,11 +83,14 @@ def test_connectivity_and_atom_order_and_net_residue_charge_and_metadata_matches
     pdbfile: str,
     unknown_molecules: list[Molecule],
     additional_substructures: list[ResidueDefinition],
+    tmp_ccd_cache: CcdCache,
 ):
+    tmp_ccd_cache.auto_download = True
     connectivity_and_atom_order_and_net_residue_charge_and_metadata_matches_legacy(
         pdbfile,
         unknown_molecules,
         additional_substructures,
+        tmp_ccd_cache,
     )
 
 
@@ -96,11 +102,14 @@ def test_connectivity_and_atom_order_and_net_residue_charge_and_metadata_matches
     pdbfile: str,
     unknown_molecules: list[Molecule],
     additional_substructures: list[ResidueDefinition],
+    tmp_ccd_cache: CcdCache,
 ):
+    tmp_ccd_cache.auto_download = True
     connectivity_and_atom_order_and_net_residue_charge_and_metadata_matches_legacy(
         pdbfile,
         unknown_molecules,
         additional_substructures,
+        tmp_ccd_cache,
     )
 
 
@@ -108,6 +117,7 @@ def connectivity_and_atom_order_and_net_residue_charge_and_metadata_matches_lega
     pdbfile: str,
     unknown_molecules: list[Molecule],
     additional_substructures: list[ResidueDefinition],
+    residue_library: Mapping[str, Collection[ResidueDefinition]],
 ):
     filename = get_test_data_path(pdbfile)
 
@@ -125,6 +135,7 @@ def connectivity_and_atom_order_and_net_residue_charge_and_metadata_matches_lega
 
     pablo_top = topology_from_pdb(
         filename,
+        residue_library=residue_library,
         additional_definitions=[
             *(ResidueDefinition.anon_from_molecule(mol) for mol in unknown_molecules),
             *additional_substructures,

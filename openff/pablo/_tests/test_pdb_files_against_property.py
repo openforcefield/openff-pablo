@@ -4,20 +4,21 @@ from collections.abc import Mapping, Sequence
 import pytest
 from openff.toolkit import Molecule, Topology, unit
 
+from openff.pablo import STD_CCD_CACHE
 from openff.pablo._pdb import topology_from_pdb
-from openff.pablo._std_ccd_cache import STD_CCD_CACHE
 from openff.pablo._tests.utils import get_test_data_path
 from openff.pablo._utils import sort_tuple, unwrap
+from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.chem import PEPTIDE_BOND
 from openff.pablo.exceptions import PdbResidueMatchError
 from openff.pablo.residue import BondDefinition, ResidueDefinition
 
 
 @pytest.mark.slow
-def test_2zuq_cross_chain_disulfide_discontinuous():
+def test_2zuq_cross_chain_disulfide_discontinuous(tmp_ccd_cache: CcdCache):
     pdbfn = get_test_data_path("prepared_pdbs/2zuq_prepared.pdb")
     with pytest.warns():
-        topology = topology_from_pdb(pdbfn)
+        topology = topology_from_pdb(pdbfn, residue_library=tmp_ccd_cache)
 
     # Correct number of molecules
     assert topology.n_molecules == 3
@@ -57,9 +58,12 @@ def test_2zuq_cross_chain_disulfide_discontinuous():
     )
 
 
-def test_2mum_neutralized_has_all_neutral_aas(all_aa_resnames: set[str]):
+def test_2mum_neutralized_has_all_neutral_aas(
+    all_aa_resnames: set[str],
+    tmp_ccd_cache: CcdCache,
+):
     pdbfn = get_test_data_path("prepared_pdbs/2MUM_neutralized.pdb")
-    topology = topology_from_pdb(pdbfn)
+    topology = topology_from_pdb(pdbfn, residue_library=tmp_ccd_cache)
     assert {residue.identifier[3] for residue in topology.residues} == all_aa_resnames
     print(
         *[
@@ -81,9 +85,9 @@ def test_2mum_neutralized_has_all_neutral_aas(all_aa_resnames: set[str]):
 
 
 @pytest.mark.slow
-def test_1p3q_loads_chains_without_ter():
+def test_1p3q_loads_chains_without_ter(tmp_ccd_cache: CcdCache):
     pdbfn = get_test_data_path("prepared_pdbs/1p3q_noter.pdb")
-    topology = topology_from_pdb(pdbfn)
+    topology = topology_from_pdb(pdbfn, residue_library=tmp_ccd_cache)
 
     # Correct number of molecules
     assert topology.n_molecules == 5
@@ -111,9 +115,13 @@ def test_1p3q_loads_chains_without_ter():
         )
 
 
-def test_5eil_is_three_proteins_with_ncaa_plus_fe3_and_water():
+def test_5eil_is_three_proteins_with_ncaa_plus_fe3_and_water(tmp_ccd_cache: CcdCache):
+    tmp_ccd_cache.get_from_ccd("BP5")
+    tmp_ccd_cache.get_from_ccd("FE")
+
     topology = topology_from_pdb(
         get_test_data_path("prepared_pdbs/5eil_fixed.pdb"),
+        residue_library=tmp_ccd_cache,
     )
 
     protein_a = topology.molecule(0)
@@ -136,12 +144,12 @@ def test_5eil_is_three_proteins_with_ncaa_plus_fe3_and_water():
 
 
 @pytest.mark.slow
-def test_3ip9_loads_with_augmented_resdb():
+def test_3ip9_loads_with_augmented_resdb(tmp_ccd_cache: CcdCache):
     smiles = "[c:1]1([H:41])[c:2]([H:42])[c:3]2[c:4]([c:5]([H:43])[c:6]1[N:7]1[C:8](=[O:9])[C:10]([H:44])([H:45])[C@@:11]([S:12][C:13]([C@:14]([N:15]([H:16])[H:50])([C:17](=[O:18])[O:19][H:59])[H:49])([H:47])[H:48])([H:46])[C:20]1=[O:21])[C:22](=[O:23])[O:24][C:25]21[c:26]2[c:27]([c:28]([H:51])[c:29]([O:32][H:54])[c:30]([H:52])[c:31]2[H:53])[O:33][c:34]2[c:35]1[c:36]([H:55])[c:37]([H:56])[c:38]([O:40][H:58])[c:39]2[H:57]"
     leavers = {16, 19, 59}
     pablo_top = topology_from_pdb(
         get_test_data_path("prepared_pdbs/3ip9_dye_solvated.pdb"),
-        residue_library=STD_CCD_CACHE.with_(
+        residue_library=tmp_ccd_cache.with_(
             {
                 "DYE": [
                     ResidueDefinition.from_smiles(
@@ -266,7 +274,7 @@ def test_3ip9_loads_with_augmented_resdb():
 
 
 @pytest.mark.slow
-def test_3ip9_loads_via_conects():
+def test_3ip9_loads_via_conects(tmp_ccd_cache: CcdCache):
     path = get_test_data_path("prepared_pdbs/3ip9_dye_solvated.pdb")
     smiles = "[c:1]1([H:41])[c:2]([H:42])[c:3]2[c:4]([c:5]([H:43])[c:6]1[N:7]1[C:8](=[O:9])[C:10]([H:44])([H:45])[C@@:11]([S:12][C:13]([C@:14]([N:15]([H:16])[H:50])([C:17](=[O:18])[O:19][H:59])[H:49])([H:47])[H:48])([H:46])[C:20]1=[O:21])[C:22](=[O:23])[O:24][C:25]21[c:26]2[c:27]([c:28]([H:51])[c:29]([O:32][H:54])[c:30]([H:52])[c:31]2[H:53])[O:33][c:34]2[c:35]1[c:36]([H:55])[c:37]([H:56])[c:38]([O:40][H:58])[c:39]2[H:57]"
 
@@ -291,7 +299,7 @@ def test_3ip9_loads_via_conects():
 
     pablo_top = topology_from_pdb(
         path,
-        residue_library=STD_CCD_CACHE.with_(
+        residue_library=tmp_ccd_cache.with_(
             [
                 ResidueDefinition.from_molecule(
                     molecule=substructure_mol,
@@ -345,11 +353,11 @@ def test_3ip9_loads_via_conects():
         assert pablo_res_charge == legacy_res_charge
 
 
-def test_e2_loads_via_conects():
+def test_e2_loads_via_conects(tmp_ccd_cache: CcdCache):
     """Check that a file that consists of a single residue non-polymer molecule
     with the wrong atom names and correct CONECT records matches"""
     path = get_test_data_path("e2_7nel.pdb")
-    substructure_mol = unwrap(STD_CCD_CACHE["EST"]).to_openff_molecule()
+    substructure_mol = unwrap(tmp_ccd_cache.get_from_ccd("EST")).to_openff_molecule()
     for atom in substructure_mol.atoms:
         atom.name = ""
         atom.metadata["synonyms"] = ""
@@ -387,7 +395,7 @@ def test_e2_loads_via_conects():
         assert i_atom.metadata["canonical_name"] == j_atom.name
 
 
-def test_3ip9_trimmed_loads_via_conects_like_legacy():
+def test_3ip9_trimmed_loads_via_conects_like_legacy(tmp_ccd_cache: CcdCache):
     path = get_test_data_path("3ip9_dye_trimmed.pdb")
     smiles = "[c:1]1([H:41])[c:2]([H:42])[c:3]2[c:4]([c:5]([H:43])[c:6]1[N:7]1[C:8](=[O:9])[C:10]([H:44])([H:45])[C@@:11]([S:12][C:13]([C@:14]([N:15]([H:16])[H:50])([C:17](=[O:18])[O:19][H:59])[H:49])([H:47])[H:48])([H:46])[C:20]1=[O:21])[C:22](=[O:23])[O:24][C:25]21[c:26]2[c:27]([c:28]([H:51])[c:29]([O:32][H:54])[c:30]([H:52])[c:31]2[H:53])[O:33][c:34]2[c:35]1[c:36]([H:55])[c:37]([H:56])[c:38]([O:40][H:58])[c:39]2[H:57]"
 
@@ -412,7 +420,7 @@ def test_3ip9_trimmed_loads_via_conects_like_legacy():
 
     pablo_top = topology_from_pdb(
         path,
-        residue_library=STD_CCD_CACHE.with_(
+        residue_library=tmp_ccd_cache.with_(
             [
                 ResidueDefinition.from_molecule(
                     molecule=substructure_mol,
@@ -466,7 +474,7 @@ def test_3ip9_trimmed_loads_via_conects_like_legacy():
         assert pablo_res_charge == legacy_res_charge
 
 
-def test_3ip9_trimmed_loads_via_conects():
+def test_3ip9_trimmed_loads_via_conects(tmp_ccd_cache: CcdCache):
     resdef = ResidueDefinition.from_smiles(
         mapped_smiles="[c:1]1([H:41])[c:2]([H:42])[c:3]2[c:4]([c:5]([H:43])[c:6]1[N:7]1[C:8](=[O:9])[C:10]([H:44])([H:45])[C@@:11]([S:12][C:13]([C@:14]([N:15]([H:16])[H:50])([C:17](=[O:18])[O:19][H:59])[H:49])([H:47])[H:48])([H:46])[C:20]1=[O:21])[C:22](=[O:23])[O:24][C:25]21[c:26]2[c:27]([c:28]([H:51])[c:29]([O:32][H:54])[c:30]([H:52])[c:31]2[H:53])[O:33][c:34]2[c:35]1[c:36]([H:55])[c:37]([H:56])[c:38]([O:40][H:58])[c:39]2[H:57]",
         leaving_atoms=[16, 19, 59],
@@ -480,7 +488,7 @@ def test_3ip9_trimmed_loads_via_conects():
 
     top = topology_from_pdb(
         pdb_path,
-        residue_library=STD_CCD_CACHE.with_([resdef]),
+        residue_library=tmp_ccd_cache.with_([resdef]),
     )
 
     sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
@@ -495,7 +503,7 @@ def test_3ip9_trimmed_loads_via_conects():
     assert top_mol.is_isomorphic_with(ref_mol)
 
 
-def test_3ip9_trimmed_loads_via_dye_additional_definitions():
+def test_3ip9_trimmed_loads_via_dye_additional_definitions(tmp_ccd_cache: CcdCache):
     resdef = ResidueDefinition.from_smiles(
         mapped_smiles="[c:1]1([H:41])[c:2]([H:42])[c:3]2[c:4]([c:5]([H:43])[c:6]1[N:7]1[C:8](=[O:9])[C:10]([H:44])([H:45])[C@@:11]([S:12][C:13]([C@:14]([N:15]([H:16])[H:50])([C:17](=[O:18])[O:19][H:59])[H:49])([H:47])[H:48])([H:46])[C:20]1=[O:21])[C:22](=[O:23])[O:24][C:25]21[c:26]2[c:27]([c:28]([H:51])[c:29]([O:32][H:54])[c:30]([H:52])[c:31]2[H:53])[O:33][c:34]2[c:35]1[c:36]([H:55])[c:37]([H:56])[c:38]([O:40][H:58])[c:39]2[H:57]",
         leaving_atoms=[16, 19, 59],
@@ -507,7 +515,11 @@ def test_3ip9_trimmed_loads_via_dye_additional_definitions():
 
     pdb_path = get_test_data_path("3ip9_dye_trimmed.pdb")
 
-    top = topology_from_pdb(pdb_path, additional_definitions=[resdef])
+    top = topology_from_pdb(
+        pdb_path,
+        residue_library=tmp_ccd_cache,
+        additional_definitions=[resdef],
+    )
 
     sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
     ref_mol = Molecule.from_file(sdf_path, "SDF")
@@ -528,7 +540,10 @@ def test_3ip9_trimmed_loads_via_dye_additional_definitions():
         pytest.param("3ip9_dye_trimmed_dyecys.pdb", marks=pytest.mark.xfail),
     ],
 )
-def test_3ip9_trimmed_loads_via_anon_dye_additional_definitions(filename: str):
+def test_3ip9_trimmed_loads_via_anon_dye_additional_definitions(
+    filename: str,
+    tmp_ccd_cache: CcdCache,
+):
     resdef = ResidueDefinition.anon_from_smiles_marked_leaving(
         smiles="[H:1]N[C@@H](CS[C@H]1CC(=O)N(c2ccc3c(c2)C(=O)OC32c3ccc(O)cc3Oc3cc(O)ccc32)C1=O)C(=O)[O:2][H:3]",
         # smiles="[c]1([H])[c]([H])[c]2[c]([c]([H])[c]1[N]1[C](=[O])[C]([H])([H])[C@@]([S][C]([C@]([N]([H:16])[H])([C](=[O])[O:19][H:59])[H])([H])[H])([H])[C]1=[O])[C](=[O])[O][C]21[c]2[c]([c]([H])[c]([O][H])[c]([H])[c]2[H])[O][c]2[c]1[c]([H])[c]([H])[c]([O][H])[c]2[H]",
@@ -537,7 +552,11 @@ def test_3ip9_trimmed_loads_via_anon_dye_additional_definitions(filename: str):
 
     pdb_path = get_test_data_path(filename)
 
-    top = topology_from_pdb(pdb_path, additional_definitions=[resdef])
+    top = topology_from_pdb(
+        pdb_path,
+        residue_library=tmp_ccd_cache,
+        additional_definitions=[resdef],
+    )
 
     sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
     ref_mol = Molecule.from_file(sdf_path, "SDF")
@@ -551,13 +570,19 @@ def test_3ip9_trimmed_loads_via_anon_dye_additional_definitions(filename: str):
     assert top_mol.is_isomorphic_with(ref_mol)
 
 
-def test_3ip9_trimmed_loads_via_anon_whole_molecule_additional_definitions():
+def test_3ip9_trimmed_loads_via_anon_whole_molecule_additional_definitions(
+    tmp_ccd_cache: CcdCache,
+):
     pdb_path = get_test_data_path("3ip9_dye_trimmed.pdb")
     sdf_path = get_test_data_path("3ip9_dye_trimmed.sdf")
 
     resdef = ResidueDefinition.anon_from_sdf(sdf_path)
 
-    top = topology_from_pdb(pdb_path, additional_definitions=[resdef])
+    top = topology_from_pdb(
+        pdb_path,
+        residue_library=tmp_ccd_cache,
+        additional_definitions=[resdef],
+    )
 
     ref_mol = Molecule.from_file(sdf_path, "SDF")
     if not isinstance(ref_mol, Molecule):
@@ -590,7 +615,7 @@ def test_3ip9_trimmed_loads_via_whole_molecule_unique_molecules():
 
 
 @pytest.mark.slow
-def test_big_bilayer():
+def test_big_bilayer(tmp_ccd_cache: CcdCache):
     """
     Test file with 100k+ atoms w/ CONECT records and 4-letter residue names
 
@@ -600,7 +625,7 @@ def test_big_bilayer():
     """
     top = topology_from_pdb(
         get_test_data_path("big_bilayer.pdb"),
-        residue_library=STD_CCD_CACHE.with_(
+        residue_library=tmp_ccd_cache.with_(
             {
                 "DLPC": [
                     ResidueDefinition.from_smiles(
@@ -751,31 +776,34 @@ def test_big_bilayer():
 
 
 @pytest.mark.xfail
-def test_cannot_load_arg_alternate_resonance_form():
+def test_cannot_load_arg_alternate_resonance_form(tmp_ccd_cache: CcdCache):
     """One day this will pass, but not just yet"""
     topology_from_pdb(
         get_test_data_path("capped_arg_altresonance.pdb"),
+        residue_library=tmp_ccd_cache,
     )
 
 
-def test_can_load_arg_alternate_resonance_form_with_conects():
+def test_can_load_arg_alternate_resonance_form_with_conects(tmp_ccd_cache: CcdCache):
     """Polymer residue with non-standard resonance form and CONECT records"""
     topology_from_pdb(
         get_test_data_path("capped_arg_altresonance_conect.pdb"),
+        residue_library=tmp_ccd_cache,
     )
 
 
-def test_misplaced_ter_with_custom_resdef_gives_clear_error():
+def test_misplaced_ter_with_custom_resdef_gives_clear_error(tmp_ccd_cache: CcdCache):
     with pytest.raises(
         ValueError,
         match="didn't match: Bond to next residue expected but cannot form polymer bond across TER record",
     ):
         topology_from_pdb(
             get_test_data_path("capped_ser_extrater.pdb"),
+            residue_library=tmp_ccd_cache,
         )
 
 
-def test_unknown_residue_gives_clear_error():
+def test_unknown_residue_gives_clear_error(tmp_ccd_cache: CcdCache):
     path = get_test_data_path("5ap1_prepared.pdb").absolute()
 
     def check_err(err: ValueError) -> bool:
@@ -797,7 +825,7 @@ def test_unknown_residue_gives_clear_error():
         ValueError,
         check=check_err,
     ):
-        topology_from_pdb(path)
+        topology_from_pdb(path, residue_library=tmp_ccd_cache)
 
 
 def test_unmatched_residues_give_clear_error(
@@ -836,12 +864,12 @@ def test_unmatched_residues_give_clear_error(
         )
 
 
-def test_polyglycines_loads_with_augmented_ccd():
+def test_polyglycines_loads_with_augmented_ccd(tmp_ccd_cache: CcdCache):
     # Loading this PDB file with this augmented CCD cache will test all kinds
     # of residue-residue interface; see prepared_pdbs/polyglycines.py
     topology = topology_from_pdb(
         get_test_data_path("prepared_pdbs/polyglycines.pdb"),
-        residue_library=STD_CCD_CACHE.with_(
+        residue_library=tmp_ccd_cache.with_(
             [
                 ResidueDefinition.from_smiles(
                     mapped_smiles="[N-:1]([H:2])[C:3]([H:4])([H:5])[C:6](=[O:7])[O:8][H:9]",
@@ -883,7 +911,7 @@ def test_polyglycines_loads_with_augmented_ccd():
     )
     assert topology.n_molecules == 103
 
-    triglycine = Molecule.from_smiles(
+    triglycine = Molecule.from_mapped_smiles(
         "[N-:1]([H:2])[C:3]([H:4])([H:5])[C:6](=[O:7])"
         + "[N:8]([H:9])[C:10]([H:11])([H:12])[C:13](=[O:14])"
         + "[N:15]([H:16])[C:17]([H:18])([H:19])[C-:20](=[O:21])",
@@ -936,10 +964,10 @@ def test_5ap1_fails_with_broken_resdefs(
         )
 
 
-def test_microviridin_crosslinks():
-    from openff.pablo import STD_CCD_CACHE, topology_from_pdb
+def test_microviridin_crosslinks(tmp_ccd_cache: CcdCache):
+    from openff.pablo import topology_from_pdb
 
-    custom_residue_database = STD_CCD_CACHE.with_(
+    custom_residue_database = tmp_ccd_cache.with_(
         {
             "TH4": [
                 resdef.replace(
@@ -951,7 +979,7 @@ def test_microviridin_crosslinks():
                     ],
                     description=resdef.description + " w/ crosslink",
                 )
-                for resdef in STD_CCD_CACHE["THR"]
+                for resdef in tmp_ccd_cache["THR"]
                 if resdef.description == "THREONINE"
             ],
             "A10": [
@@ -968,7 +996,7 @@ def test_microviridin_crosslinks():
                     ],
                     description=resdef.description + " w/ crosslink",
                 )
-                for resdef in STD_CCD_CACHE["ASP"]
+                for resdef in tmp_ccd_cache["ASP"]
                 if resdef.description == "ASPARTIC ACID"
             ],
             "LY6": [
@@ -989,7 +1017,7 @@ def test_microviridin_crosslinks():
                     ],
                     description=resdef.description + " w/ crosslink",
                 )
-                for resdef in STD_CCD_CACHE["LYS"]
+                for resdef in tmp_ccd_cache["LYS"]
                 if resdef.description == "LYSINE -HZ3"
             ],
             "G13": [
@@ -1004,7 +1032,7 @@ def test_microviridin_crosslinks():
                     ],
                     description=resdef.description + " w/ crosslink",
                 )
-                for resdef in STD_CCD_CACHE["GLU"]
+                for resdef in tmp_ccd_cache["GLU"]
                 if resdef.description == "GLUTAMIC ACID"
             ],
             "SE9": [
@@ -1017,7 +1045,7 @@ def test_microviridin_crosslinks():
                     ],
                     description=resdef.description + " w/ crosslink",
                 )
-                for resdef in STD_CCD_CACHE["SER"]
+                for resdef in tmp_ccd_cache["SER"]
                 if resdef.description == "SERINE"
             ],
             "G12": [
@@ -1032,7 +1060,7 @@ def test_microviridin_crosslinks():
                     ],
                     description=resdef.description + " w/ crosslink",
                 )
-                for resdef in STD_CCD_CACHE["GLU"]
+                for resdef in tmp_ccd_cache["GLU"]
                 if resdef.description == "GLUTAMIC ACID"
             ],
         },
@@ -1045,39 +1073,22 @@ def test_microviridin_crosslinks():
 
 
 @pytest.mark.slow
-def test_complex_pdb_1flr():
+def test_complex_pdb_1flr(tmp_ccd_cache: CcdCache):
     ligand = ResidueDefinition.anon_from_sdf(
         get_test_data_path("prepared_pdbs/1FLR_Ligand.sdf"),
     )
 
     with pytest.warns(
+        UserWarning,
         match="Alt locs not supported; only empty or 'A' alt locs will be read",
     ):
         topology = topology_from_pdb(
             get_test_data_path("prepared_pdbs/1FLR_prepared.pdb"),
+            residue_library=tmp_ccd_cache.with_patch(
+                "THR",
+                lambda resdef: [resdef.with_synonyms({"OXT": ["O2"]})],
+            ),
             additional_definitions=[ligand],
-            residue_library=STD_CCD_CACHE.with_(
-                {
-                    "NMA": [
-                        ResidueDefinition.from_smiles(
-                            "[N:1]([H:2])([H:7])[C:3]([H:4])([H:5])[H:6]",
-                            atom_names={
-                                1: "N",
-                                2: "H",
-                                7: "H2",
-                                3: "CA",
-                                4: "1HA",
-                                5: "2HA",
-                                6: "3HA",
-                            },
-                            residue_name="NMA",
-                            linking_bond=PEPTIDE_BOND,
-                            leaving_atoms=[7],
-                            description="Maestro NME",
-                        ),
-                    ],
-                },
-            ).with_patch("THR", lambda resdef: [resdef.with_synonyms({"OXT": ["O2"]})]),
         )
 
     uniques = {}
@@ -1107,24 +1118,27 @@ def test_complex_pdb_1flr():
 # TODO: Debug this
 @pytest.mark.xfail
 @pytest.mark.slow
-def test_7yv1_using_sdf():
+def test_7yv1_using_sdf(tmp_ccd_cache: CcdCache):
     ligand = ResidueDefinition.anon_from_sdf(
         get_test_data_path("7yv1/7yv1_ligand.sdf"),
     )
 
-    _topology = topology_from_pdb(
-        file=get_test_data_path("7yv1/7yv1_prepped.pdb"),
-        additional_definitions=[ligand],
-    )
+    with pytest.warns(UserWarning, match="Alt locs not supported"):
+        _topology = topology_from_pdb(
+            file=get_test_data_path("7yv1/7yv1_prepped.pdb"),
+            residue_library=tmp_ccd_cache,
+            additional_definitions=[ligand],
+        )
 
 
-def test_7yv1_peptide_using_sdf():
+def test_7yv1_peptide_using_sdf(tmp_ccd_cache: CcdCache):
     ligand = ResidueDefinition.anon_from_sdf(
         get_test_data_path("7yv1/7yv1_ligand.sdf"),
     )
 
     _topology = topology_from_pdb(
         file=get_test_data_path("7yv1/7yv1_prepped_cyclicpeptide.pdb"),
+        residue_library=tmp_ccd_cache,
         additional_definitions=[ligand],
     )
 

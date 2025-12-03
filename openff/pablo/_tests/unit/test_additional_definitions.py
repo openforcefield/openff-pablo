@@ -3,8 +3,8 @@ from openff.toolkit import Molecule
 from openff.pablo._additional_definitions import _get_pdb_graph
 from openff.pablo._matching import SuccessfulMatch, unwrap_successful
 from openff.pablo._pdb_data import PdbData, ResidueMatch
-from openff.pablo._std_ccd_cache import STD_CCD_CACHE
 from openff.pablo._tests.utils import get_test_data_path
+from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.chem import PEPTIDE_BOND
 from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
 
@@ -51,12 +51,13 @@ def test_get_pdb_graph_partial():
 
 
 def test_get_pdb_graph_vicinal_disulfide(
+    tmp_ccd_cache: CcdCache,
     vicinal_disulfide_data: PdbData,
     vicinal_disulfide_molecule: Molecule,
 ):
     matches: list[SuccessfulMatch] = []
     for match in vicinal_disulfide_data.match_residues(
-        STD_CCD_CACHE,
+        tmp_ccd_cache,
         (),
     ):
         try:
@@ -80,7 +81,7 @@ def test_get_pdb_graph_vicinal_disulfide(
         assert atomdef.charge == atom.formal_charge.m
 
 
-def test_get_pdb_graph_3ip9_trimmed_partial():
+def test_get_pdb_graph_3ip9_trimmed_partial(tmp_ccd_cache: CcdCache):
     """
     VAL-NCAA-ASP PDB file with canonical residues provided as matches vs SDF
     file with intended chemistry. NCAA has CONECT records.
@@ -94,7 +95,7 @@ def test_get_pdb_graph_3ip9_trimmed_partial():
 
     matches: list[SuccessfulMatch] = []
     for match in data.match_residues(
-        STD_CCD_CACHE,
+        tmp_ccd_cache,
         (),
     ):
         try:
@@ -121,7 +122,7 @@ def test_get_pdb_graph_3ip9_trimmed_partial():
             assert atomdef.charge == atom.formal_charge.m
 
 
-def test_get_pdb_graph_3ip9_trimmed_complete():
+def test_get_pdb_graph_3ip9_trimmed_complete(tmp_ccd_cache: CcdCache):
     """
     VAL-NCAA-ASP PDB file with all three residues provided as matches vs SDF file
     with intended chemistry. NCAA has CONECT records.
@@ -146,7 +147,7 @@ def test_get_pdb_graph_3ip9_trimmed_complete():
 
     matches: list[SuccessfulMatch] = []
     for match in data.match_residues(
-        STD_CCD_CACHE.with_([resdef]),
+        tmp_ccd_cache.with_([resdef]),
         (),
     ):
         try:

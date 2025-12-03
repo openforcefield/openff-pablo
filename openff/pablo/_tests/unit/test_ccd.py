@@ -2,7 +2,6 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from openff.pablo._std_ccd_cache import STD_CCD_CACHE
 from openff.pablo._utils import unwrap
 from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.residue import ResidueDefinition
@@ -135,8 +134,8 @@ def test_ccdcache_gives_clear_errors(
         tmp_ccd_cache[resname]
 
 
-def test_default_ccdcache_cys_definitions_unique():
-    cys_defs = STD_CCD_CACHE["CYS"]
+def test_default_ccdcache_cys_definitions_unique(tmp_ccd_cache: CcdCache):
+    cys_defs = tmp_ccd_cache["CYS"]
     assert len(set(cys_defs)) == len(cys_defs)
 
 

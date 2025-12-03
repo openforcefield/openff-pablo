@@ -1780,12 +1780,14 @@ class PdbData:
                     additional_definitions=additional_definitions,
                     additional_matches=additional_matches,
                     unmatched_pdb_idcs=unmatched_atoms,
+                    residue_library=residue_library,
                 )
 
         raise create_pdb_residue_match_error(
             data=self,
             errors=errors,
             additional_definitions=additional_definitions,
+            residue_library=residue_library,
         )
 
     def matches_to_rdmol(

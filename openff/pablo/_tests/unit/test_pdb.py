@@ -5,12 +5,13 @@ import pytest
 from openff.pablo._pdb import (
     topology_from_pdb,
 )
+from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.residue import ResidueDefinition
 
 
-def test_load_file_object(cys_pdblines: list[str]):
+def test_load_file_object(cys_pdblines: list[str], tmp_ccd_cache: CcdCache):
     with StringIO(initial_value="\n".join(cys_pdblines)) as f:
-        top = topology_from_pdb(f)
+        top = topology_from_pdb(f, residue_library=tmp_ccd_cache)
     assert top.n_atoms == 14
 
 
