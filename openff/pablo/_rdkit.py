@@ -50,6 +50,9 @@ PERIODIC_TABLE: PeriodicTable = GetPeriodicTable()
 class RdMol:
     _mol: Mol = field(default_factory=Mol)
 
+    def __post_init__(self):
+        self._mol.UpdatePropertyCache()
+
     @classmethod
     def from_smiles(
         cls,
