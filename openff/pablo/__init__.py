@@ -30,16 +30,15 @@ The CCD, with commonly-required patches for biomolecular simulation.
 
 ``STD_CCD_CACHE`` is Pablo's default residue library.
 
-This attribute provides the CCD with a dict-like API. When a residue is
-requested via the indexing syntax (for example, ``STD_CCD_CACHE["ALA"]``) or the
-``in`` operator, a cache is checked first. If the residue is not present, the
-CCD is then checked. This requires internet access. If the residue cannot be
-retrieved from the cache or the CCD, a ``KeyError`` is raised or ``False`` is
-returned as appropriate.
+This module attribute provides the CCD with a dict-like API. When a residue is
+requested via the indexing syntax (for example, ``my_ccd_cache["ALA"]``), a
+cache is checked first. If the residue is not present and the ``auto_download``
+attribute is truthy, the residue is downloaded from the CCD. If the residue
+cannot be retrieved from the cache or the CCD, a ``KeyError`` is raised.
 
-Iterating over the cache, checking its length, or otherwise treating
-``STD_CCD_CACHE`` as a mapping other than with the indexing syntax or ``in``
-operator works only on the cache itself. As a result, accessing
+Iterating over the cache, checking its length, using the ``in`` operator,
+or otherwise treating ``STD_CCD_CACHE`` as a mapping other than with the
+indexing syntax works only on the cache itself. As a result, accessing
 a residue via indexing may return a value even if these other methods
 suggest it won't.
 
@@ -62,6 +61,11 @@ that have not already been downloaded from the CCD.
 
 Accessing the CCD requires internet access. Without internet access, only
 entries packaged with Pablo or already in the cache can be loaded.
+
+By default, ``STD_CCD_CACHE`` does not automatically access the internet.
+Automatic CCD downloads of uncached residues can be enabled by setting
+``STD_CCD_CACHE.auto_download = True``, and specific residues can be downloaded
+on a case-by-case basis with :py:meth:`openff.pablo.ccd.CcdCache.get_from_ccd`.
 
 For details about the available methods, see the class documentation at
 :py:class:`openff.pablo.ccd.CcdCache`

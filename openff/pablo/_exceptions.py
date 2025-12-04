@@ -17,7 +17,7 @@ __all__ = [
 
 
 import itertools
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from openff.pablo._matching import (
@@ -30,6 +30,7 @@ from openff.pablo._matching import (
     only_matched,
 )
 from openff.pablo._utils import flatten
+from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.exceptions import (
     MissingAtomError,
     PabloError,
@@ -59,6 +60,7 @@ def _format_linenos(data: "PdbData", res_atom_idcs: Sequence[int]) -> str:
 def create_pdb_residue_match_error(
     data: "PdbData",
     errors: list[list[MismatchProtocol] | list[SuccessfulMatch]],
+    residue_library: Mapping[str, Collection[ResidueDefinition]],
     additional_definitions: Sequence[ResidueDefinition] = (),
     additional_matches: Sequence[SuccessfulMatch] | None = None,
     unmatched_pdb_idcs: Iterable[int] = (),
@@ -73,6 +75,7 @@ def create_pdb_residue_match_error(
         ),
         "could not be identified from the provided chemical library:",
     ]
+    missing_resnames: set[str] = set()
 
     for residue_errors in errors:
         if len(residue_errors) == 0:
@@ -82,6 +85,9 @@ def create_pdb_residue_match_error(
         i = prototype_residue_error.prototype_index
         src = _format_linenos(data, prototype_residue_error.res_atom_idcs)
         resid = f"{data.chain_id[i]}:{data.res_name[i]}#{data.res_seq[i]}"
+
+        if isinstance(prototype_residue_error, MismatchProtocol):
+            missing_resnames.add(data.res_name[i])
 
         expects_crosslinks = [
             err.expects_crosslink for err in only_matched(residue_errors)
@@ -256,5 +262,22 @@ def create_pdb_residue_match_error(
             )
             for match in additional_matches:
                 msg.append(f"    {match.description}")
+
+    if (
+        any(
+            len(resname) <= 3 and resname not in ("UNK", "UNL")
+            for resname in missing_resnames
+        )
+        and isinstance(residue_library, CcdCache)
+        and not residue_library.auto_download
+    ):
+        msg.extend(
+            [
+                "",
+                "Some missing residues are likely to be in the CCD; you can download",
+                "them automatically by setting `residue_library.auto_download = True`",
+                "or manually with the get_from_ccd method.",
+            ],
+        )
 
     return PdbResidueMatchError("\n".join(msg))

@@ -123,7 +123,7 @@ Pablo can read and write most residue information from a `Molecule`; see the [`f
 
 ```{python}
 # Rename atom based on SMARTS string
-riboflavin = STD_CCD_CACHE["RBF"][0]
+riboflavin = STD_CCD_CACHE.get_from_ccd("RBF")[0]
 offmol = riboflavin.to_openff_molecule()
 # match the nitrogen in the flavin ring that bonds to the ribose sidechain
 matches = offmol.chemical_environment_matches("[N&R:1]-[CH2&!R]")
@@ -146,7 +146,7 @@ ResidueDefinition.anon_from_sdf("l-mirtazapine.sdf").visualize()
 In addition to the [`CcdCache.with_varied_protonation`] method that lets you modify a residue library directly, the [`ResidueDefinition.vary_protonation`] method generates all requested protonation states in one go:
 
 ```{python}
-glycine = STD_CCD_CACHE["GLY"][0]
+glycine = STD_CCD_CACHE.get_from_ccd("GLY")[0]
 glycine_resdefs = glycine.vary_protonation(
     acidic=["HXT"], # Atom name of abstractable proton
     basic=[("N", "H3")], # Atom to protonate, name of new proton
@@ -159,7 +159,7 @@ glycine_resdefs = glycine.vary_protonation(
 A powerful way to create a new residue definition is to react two existing definitions together. the [`ResidueDefinition.react`] method takes any number of reactant residue definitions and some SMARTS patterns mapping atoms in the reactants to how they should appear in the products, and then produces the product residue definitions:
 
 ```{python}
-serine = STD_CCD_CACHE["SER"][0]
+serine = STD_CCD_CACHE.get_from_ccd("SER")[0]
 
 phosphate = Molecule.from_smiles("[OH]P(=O)([O-])[O-]")
 phosphate.generate_unique_atom_names()

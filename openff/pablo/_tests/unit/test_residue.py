@@ -1,9 +1,9 @@
 import pytest
 from openff.toolkit import Molecule
 
-from openff.pablo._std_ccd_cache import STD_CCD_CACHE
 from openff.pablo._tests.utils import get_test_data_path
 from openff.pablo._utils import unwrap
+from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.chem import DISULFIDE_BOND, PEPTIDE_BOND
 from openff.pablo.exceptions import ResidueValidationError
 from openff.pablo.residue import (
@@ -513,9 +513,12 @@ class TestResidueDefinition:
         assert sorted(cys_def._leaving_fragment_of("H2")) == ["H2"]
         assert sorted(cys_def._leaving_fragment_of("OXT")) == ["HXT", "OXT"]
 
-    def test_validate_linking_atoms_have_single_leaving_fragment(self):
+    def test_validate_linking_atoms_have_single_leaving_fragment(
+        self,
+        tmp_ccd_cache: CcdCache,
+    ):
         resdef = unwrap(
-            resdef for resdef in STD_CCD_CACHE["LYS"] if resdef.description == "LYSINE"
+            resdef for resdef in tmp_ccd_cache["LYS"] if resdef.description == "LYSINE"
         )
         with pytest.raises(ResidueValidationError):
             resdef.replace(

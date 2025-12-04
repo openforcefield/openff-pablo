@@ -7,8 +7,8 @@ from openff.pablo._matching import (
     ResidueMismatch,
 )
 from openff.pablo._pdb_data import PdbData, ResidueMatch
-from openff.pablo._std_ccd_cache import STD_CCD_CACHE
 from openff.pablo._utils import default_dict
+from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.exceptions import UnknownOrAmbiguousSerialInConectError
 from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
 
@@ -497,9 +497,9 @@ def test_match_residues_loads_vicinal_disulfide(
     assert match2.residue_definition is cys_def
 
 
-def test_get_name_based_matches_one_per_residue(pdbfn: Path):
+def test_get_name_based_matches_one_per_residue(tmp_ccd_cache: CcdCache, pdbfn: Path):
     data = PdbData.from_file(pdbfn)
-    results = list(data.get_name_based_matches(STD_CCD_CACHE))
+    results = list(data.get_name_based_matches(tmp_ccd_cache))
     assert len(results) == len(list(data.residue_indices))
     assert data.res_idx is not None
     assert len(list(data.residue_indices)) == len(set(data.res_idx))
@@ -518,8 +518,11 @@ def test_get_name_based_matches_subsequence_contains_noresiduedefs_when_unmatche
     assert isinstance(results[0][0], NoResidueDefinitions)
 
 
-def test_filter_on_polymer_linkages_yields_all_matches_simple(cys_data: PdbData):
-    matches = list(cys_data.get_name_based_matches(STD_CCD_CACHE))
+def test_filter_on_polymer_linkages_yields_all_matches_simple(
+    tmp_ccd_cache: CcdCache,
+    cys_data: PdbData,
+):
+    matches = list(cys_data.get_name_based_matches(tmp_ccd_cache))
     residue_matches = matches[0]
     results = list(
         cys_data.identify_polymer_linkages(0, [residue_matches]),
@@ -533,7 +536,7 @@ def test_filter_on_polymer_linkages_yields_all_matches_simple(cys_data: PdbData)
         assert before.residue_definition == after.residue_definition
 
 
-def test_filter_on_polymer_linkages_yields_all_matches():
+def test_filter_on_polymer_linkages_yields_all_matches(tmp_ccd_cache: CcdCache):
     from openff.pablo._tests.utils import get_test_data_path
     from openff.pablo.chem import PEPTIDE_BOND
 
@@ -542,7 +545,7 @@ def test_filter_on_polymer_linkages_yields_all_matches():
     data = PdbData.from_file(get_test_data_path("prepared_pdbs/polyglycines.pdb"))
     matches = list(
         data.get_name_based_matches(
-            STD_CCD_CACHE.with_(
+            tmp_ccd_cache.with_(
                 [
                     ResidueDefinition.from_smiles(
                         mapped_smiles="[N-:1]([H:2])[C:3]([H:4])([H:5])[C:6](=[O:7])[O:8][H:9]",

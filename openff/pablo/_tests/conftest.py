@@ -6,6 +6,7 @@ from openff.toolkit import Molecule, Topology
 
 from openff.pablo._pdb_data import PdbData, ResidueMatch
 from openff.pablo._tests.utils import get_test_data_path
+from openff.pablo.ccd import CcdCache
 from openff.pablo.chem import DISULFIDE_BOND, PEPTIDE_BOND
 from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
 
@@ -31,6 +32,13 @@ def pdbfn(request: pytest.FixtureRequest) -> Path:
 )
 def pdbxfn(request: pytest.FixtureRequest) -> Path:
     return get_test_data_path(request.param)
+
+
+@pytest.fixture
+def tmp_ccd_cache(tmp_path: Path) -> CcdCache:
+    from openff.pablo._std_ccd_cache import _construct_std_ccd_cache
+
+    return _construct_std_ccd_cache(cache_path=tmp_path)
 
 
 @pytest.fixture

@@ -17,10 +17,12 @@ topology = topology_from_pdb("2hi7_prepared.pdb")
 topology.visualize()
 ```
 
-Even files that include ligands can load automatically, as long as the ligands have all their atoms and are named in the "standard" PDB way (according to the CCD):
+Even files that include ligands can load automatically, as long as the ligands have all their atoms and are named in the "standard" PDB way (according to the CCD) - we just need to tell Pablo that it can implicitly access the internet:
 
 ```{python}
-from openff.pablo import topology_from_pdb
+from openff.pablo import topology_from_pdb, STD_CCD_CACHE
+
+STD_CCD_CACHE.auto_download = True
 
 topology = topology_from_pdb("1c9h_prepared.pdb")
 topology.visualize()

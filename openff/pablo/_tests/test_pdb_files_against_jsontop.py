@@ -1,3 +1,4 @@
+from collections.abc import Collection, Mapping
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,7 @@ from openff.toolkit import Topology
 from openff.pablo._pdb import topology_from_pdb
 from openff.pablo._tests.utils import get_test_data_path
 from openff.pablo._utils import sort_tuple
+from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.residue import ResidueDefinition
 
 FAST_PDBS: list[tuple[str, str, list[ResidueDefinition]]] = [
@@ -79,12 +81,15 @@ SLOW_PDBS: list[tuple[str, str, list[ResidueDefinition]]] = [
 )
 def test_extended_atom_residue_numbering(
     fn_stem: str,
+    tmp_ccd_cache: CcdCache,
 ):
     path_stem = Path("prepared_pdbs") / fn_stem
+    tmp_ccd_cache.auto_download = True
     topology_identical_to_jsontop(
         path_stem.with_suffix(".pdb"),
         path_stem.with_suffix(".json"),
         [],
+        tmp_ccd_cache,
     )
 
 
@@ -97,11 +102,14 @@ def test_topology_identical_to_jsontop_slow(
     pdbfile: str,
     jsontopfile: str,
     additional_definitions: list[ResidueDefinition],
+    tmp_ccd_cache: CcdCache,
 ):
+    tmp_ccd_cache.auto_download = True
     topology_identical_to_jsontop(
         pdbfile,
         jsontopfile,
         additional_definitions,
+        tmp_ccd_cache,
     )
 
 
@@ -113,11 +121,14 @@ def test_topology_identical_to_jsontop_fast(
     pdbfile: str,
     jsontopfile: str,
     additional_definitions: list[ResidueDefinition],
+    tmp_ccd_cache: CcdCache,
 ):
+    tmp_ccd_cache.auto_download = True
     topology_identical_to_jsontop(
         pdbfile,
         jsontopfile,
         additional_definitions,
+        tmp_ccd_cache,
     )
 
 
@@ -125,10 +136,12 @@ def topology_identical_to_jsontop(
     pdbfile: str | Path,
     jsontopfile: str | Path,
     additional_definitions: list[ResidueDefinition],
+    residue_library: Mapping[str, Collection[ResidueDefinition]],
 ):
     pablo_top = topology_from_pdb(
         get_test_data_path(pdbfile),
         additional_definitions=additional_definitions,
+        residue_library=residue_library,
     )
     jsontop_top = Topology.from_json(get_test_data_path(jsontopfile).read_text())
 
