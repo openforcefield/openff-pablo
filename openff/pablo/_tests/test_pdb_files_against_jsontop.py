@@ -116,13 +116,9 @@ def test_topology_identical_to_jsontop_slow(
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    ("pdbfile", "jsontopfile", "monomersfile"),
+    "pdbfile",
     [
-        (
-            file,
-            file.with_suffix(".topology.json"),
-            file.with_suffix(".monomers.json"),
-        )
+        file
         for dir in get_test_data_path("polymers/").iterdir()
         if dir.is_dir()
         for file in dir.iterdir()
@@ -132,27 +128,28 @@ def test_topology_identical_to_jsontop_slow(
             and file.with_suffix(".monomers.json").exists()
         )
     ],
+    ids=lambda pdbfile: pdbfile.name,
 )
 def test_polymers(
     pdbfile: Path,
-    jsontopfile: Path,
-    monomersfile: Path,
+    tmp_ccd_cache: CcdCache,
 ):
+    jsontopfile: Path = pdbfile.with_suffix(".topology.json")
+    monomersfile: Path = pdbfile.with_suffix(".monomers.json")
     all_smarts = [
         (key, smarts)
-        for key, smarts_list in json.loads(monomersfile.read_text())["monomers"].items()
+        for key, smarts_list in json.loads(monomersfile.read_text()).items()
         for smarts in smarts_list
     ]
-    print(all_smarts)
     additional_definitions = [
         ResidueDefinition._anon_from_smarts(smarts, description=key)
         for key, smarts in all_smarts
     ]
-    print(additional_definitions)
     topology_identical_to_jsontop(
         pdbfile,
         jsontopfile,
         additional_definitions,
+        tmp_ccd_cache,
     )
 
 

@@ -1744,11 +1744,22 @@ class ResidueDefinition:
         atom_available_valences: list[list[int]] = []
         for i, atom in enumerate(rdsmarts.atoms):
             assert i == atom.index
+
+            # Leaving atoms can have a stand-in charge of 0, but non-leaving
+            # atoms must have explicit charge
+            try:
+                formal_charge = atom.formal_charge
+            except PabloError as e:
+                if atom.symbol is None:
+                    formal_charge = 0
+                else:
+                    raise e
+
             atoms.append(
                 AtomDefinition.with_defaults(
                     name=str(i),
                     symbol="" if atom.symbol is None else atom.symbol,
-                    charge=atom.formal_charge,
+                    charge=formal_charge,
                     leaving=True if atom.symbol is None else False,
                 ),
             )
@@ -1785,18 +1796,22 @@ class ResidueDefinition:
             atom_degrees,
             atom_available_valences,
         ):
+            if atom.leaving:
+                continue
             if degree is None:
                 raise PabloError("Undefined degree not supported")
             available_valence: int = unwrap(
                 (v for v in available_valences if v >= degree),
-                "Cannot uniquely satisfy valence",
+                f"Cannot uniquely satisfy valence from among {available_valences} for atom with degree {degree}",
             )
 
             dummy_bond_orders = [available_valence // degree] * degree
             if available_valence == sum(dummy_bond_orders) + 1:
                 dummy_bond_orders[0] += 1
             else:
-                raise PabloError("Cannot uniquely satisfy valence")
+                raise PabloError(
+                    f"Cannot uniquely satisfy valence from among {available_valences} for atom with degree {degree}",
+                )
 
             for order in dummy_bond_orders:
                 dummy_idx = len(atoms)

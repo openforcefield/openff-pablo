@@ -1,3 +1,4 @@
+# pyright: basic
 import re
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -496,13 +497,13 @@ class RdBond:
                 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class RdQueryAtom:
     _atom: QueryAtom
-    _smarts: str = field(init=False)
+    _smarts: str
 
-    @property
-    def __post_init__(self):
+    def __init__(self, atom: QueryAtom):
+        object.__setattr__(self, "_atom", atom)
         object.__setattr__(
             self,
             "_smarts",
@@ -549,13 +550,15 @@ class RdQueryAtom:
                     int_found = True
                 case _, _:
                     assert False, "unreachable"
+
         if (
             (self._smarts.count("+") + self._smarts.count("-") == 0)
-            or (self._smarts.count("+") >= 1 and self._smarts.count("-") == 0)
-            or (self._smarts.count("+") == 0 and self._smarts.count("-") >= 1)
+            or (self._smarts.count("+") != 0 and self._smarts.count("-") != 0)
             or (int_found and lone_sign_found)
         ):
-            raise PabloError("ambiguous charge on atom")
+            raise PabloError(
+                f"ambiguous charge on atom: {self._smarts}",
+            )
         return formal_charge
 
     @property
@@ -574,13 +577,13 @@ class RdQueryAtom:
         return self._atom.GetIdx()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class RdQueryBond:
     _bond: QueryBond
-    _smarts: str = field(init=False)
+    _smarts: str
 
-    @property
-    def __post_init__(self):
+    def __init__(self, bond: QueryBond):
+        object.__setattr__(self, "_bond", bond)
         object.__setattr__(
             self,
             "_smarts",
@@ -626,7 +629,8 @@ class RdSmarts:
 
     @property
     def atoms(self) -> Iterator[RdQueryAtom]:
-        yield from (RdQueryAtom(atom) for atom in self._mol.GetAtoms())
+        for atom in self._mol.GetAtoms():
+            yield RdQueryAtom(atom)
 
     @property
     def n_atoms(self) -> int:

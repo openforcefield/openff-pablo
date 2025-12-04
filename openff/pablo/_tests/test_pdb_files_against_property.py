@@ -65,19 +65,6 @@ def test_2mum_neutralized_has_all_neutral_aas(
     pdbfn = get_test_data_path("prepared_pdbs/2MUM_neutralized.pdb")
     topology = topology_from_pdb(pdbfn, residue_library=tmp_ccd_cache)
     assert {residue.identifier[3] for residue in topology.residues} == all_aa_resnames
-    print(
-        *[
-            (
-                atom.name,
-                atom.metadata["residue_name"],
-                atom.metadata["res_seq"],
-                atom.formal_charge.m,
-            )
-            for atom in topology.atoms
-            if atom.formal_charge.m != 0
-        ],
-        sep="\n",
-    )
     assert {
         atom.formal_charge.m_as("elementary_charge")
         for atom in topology.atoms  # type: ignore

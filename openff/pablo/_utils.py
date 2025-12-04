@@ -1,6 +1,6 @@
 import logging
 from collections import defaultdict
-from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Sequence
 from typing import (
     Any,
     DefaultDict,
@@ -9,7 +9,6 @@ from typing import (
     no_type_check,
     overload,
 )
-from collections.abc import Sequence
 
 import rdkit
 import rdkit.Chem

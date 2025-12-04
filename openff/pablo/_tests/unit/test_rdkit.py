@@ -8,7 +8,6 @@ def test_split_simple_molecule_fragments():
     rdmol = RdMol.from_smiles(smiles)
     fragments = list(rdmol.split_molecule_fragments())
     assert len(fragments) == 2
-    print([fragment.to_smiles() for fragment in fragments])
     a, b = fragments
     assert a.n_atoms == 3
     assert b.n_atoms == 3
