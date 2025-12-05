@@ -19,6 +19,7 @@ from openff.toolkit.utils import RDKitToolkitWrapper
 from openff.units import elements, unit
 
 from openff.pablo._graph import Graph
+from openff.pablo._rdkit import PERIODIC_TABLE, RdSmarts
 from openff.pablo._utils import (
     __UNSET__,
     draw_molecule,
@@ -1734,3 +1735,93 @@ class ResidueDefinition:
             )
             for products in all_products
         ]
+
+    @classmethod
+    def _anon_from_smarts(cls, smarts: str, *, description: str = "") -> Self:
+        rdsmarts = RdSmarts(smarts)
+        atoms: list[AtomDefinition] = []
+        atom_degrees: list[int | None] = []
+        atom_available_valences: list[list[int]] = []
+        for i, atom in enumerate(rdsmarts.atoms):
+            assert i == atom.index
+            atoms.append(
+                AtomDefinition.with_defaults(
+                    name=str(i),
+                    symbol="" if atom.symbol is None else atom.symbol,
+                    charge=atom.formal_charge,
+                    leaving=True if atom.symbol is None else False,
+                ),
+            )
+            atom_degrees.append(atom.degree)
+
+            available_valences: list[int] = []
+            if atom.symbol is not None:
+                available_valences.extend(PERIODIC_TABLE.GetValenceList(atom.symbol))
+            atom_available_valences.append(available_valences)
+        bonds: list[BondDefinition] = []
+        for bond in rdsmarts.bonds:
+            assert bond.order == int(bond.order), "non-integral bond order"
+            atom1_idx = bond.begin_atom.index
+            atom2_idx = bond.begin_atom.index
+            bonds.append(
+                BondDefinition.with_defaults(
+                    atom1=atoms[atom1_idx].name,
+                    atom2=atoms[atom2_idx].name,
+                    order=int(bond.order),
+                ),
+            )
+
+            for i in (atom1_idx, atom2_idx):
+                degree = atom_degrees[i]
+                if degree is not None:
+                    degree -= 1
+                atom_degrees[i] = degree
+                atom_available_valences[i] = [
+                    j - int(bond.order) for j in atom_available_valences[i]
+                ]
+        # Now add more dummy atoms to fill out degrees
+        for atom, degree, available_valences in zip(
+            atoms,
+            atom_degrees,
+            atom_available_valences,
+        ):
+            if degree is None:
+                raise PabloError("Undefined degree not supported")
+            available_valence: int = unwrap(
+                (v for v in available_valences if v >= degree),
+                "Cannot uniquely satisfy valence",
+            )
+
+            dummy_bond_orders = [available_valence // degree] * degree
+            if available_valence == sum(dummy_bond_orders) + 1:
+                dummy_bond_orders[0] += 1
+            else:
+                raise PabloError("Cannot uniquely satisfy valence")
+
+            for order in dummy_bond_orders:
+                dummy_idx = len(atoms)
+                dummy_name = str(dummy_idx)
+                atoms.append(
+                    AtomDefinition.with_defaults(
+                        name=dummy_name,
+                        symbol="",
+                        leaving=True,
+                    ),
+                )
+                bonds.append(
+                    BondDefinition.with_defaults(
+                        atom1=atom.name,
+                        atom2=dummy_name,
+                        order=order,
+                    ),
+                )
+
+        return cls(
+            residue_name=None,
+            description=description,
+            linking_bond=None,
+            crosslink=None,
+            atoms=tuple(atoms),
+            bonds=tuple(bonds),
+            virtual_sites=(),
+        )
