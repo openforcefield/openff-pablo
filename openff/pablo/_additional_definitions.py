@@ -1,11 +1,13 @@
+import itertools
 import logging
+from collections import defaultdict
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
 from openff.pablo._graph import Graph
 from openff.pablo._utils import flatten, sort_tuple
-from openff.pablo.exceptions import PabloError
+from openff.pablo.exceptions import AmbiguousMatchError
 
 from ._matching import (
     ResidueMatch,
@@ -48,19 +50,18 @@ def apply_additional_definitions(
     new_matches: list[AdditionalDefMatch] = []
     for resdef in additional_definitions:
         logging.debug(f"checking {resdef.description}")
-        match = _apply_resdef_to_graph(
-            data,
-            resdef,
-            pdb_graph,
-            atoms,
-            bonds,
+        prev_n_new_matches = len(new_matches)
+        new_matches.extend(
+            _apply_resdef_to_graph(
+                data,
+                resdef,
+                pdb_graph,
+                atoms,
+                bonds,
+            ),
         )
-        if match is None:
+        if prev_n_new_matches == len(new_matches):
             logging.debug("  no matches")
-            continue
-        new_matches.append(
-            match,
-        )
 
     return new_matches
 
@@ -130,14 +131,14 @@ def _apply_resdef_to_graph(
     pdb_graph: Graph[int, tuple[int, int]],
     atoms: dict[int, AtomDefinition | None],
     bonds: dict[tuple[int, int], BondDefinition | None],
-) -> "AdditionalDefMatch | None":
-    """Find a way to match this additional residue definition to the graph
+) -> "list[AdditionalDefMatch]":
+    """Find all ways to match this additional residue definition to the graph
 
     Raises
     ======
     ValueError
-        If the residue definition can be mapped to an otherwise unknown atom
-        in multiple chemically distinct ways.
+        If the residue definition can be mapped to an otherwise unknown atom or
+        bond in multiple chemically distinct ways.
     """
 
     mappings: list[AdditionalDefMatch] = []
@@ -148,41 +149,48 @@ def _apply_resdef_to_graph(
         + f" {resdef.n_core_atoms} core atoms. Finding mappings...",
     )
     n_successful_mappings = 0
-    # TODO: Support multiple, possibly overlapping matches
     for resdef_graph in resdef_graphs:
         for mapping in _get_mappings(data, pdb_graph, resdef_graph, atoms, bonds):
             n_successful_mappings += 1
-            mappings.append(
-                AdditionalDefMatch.from_mapping(
-                    mapping,
-                    resdef,
-                ),
+            new_mapping = AdditionalDefMatch.from_mapping(
+                mapping,
+                resdef,
             )
+            if not any(mapping.agrees_with(new_mapping) for mapping in mappings):
+                mappings.append(new_mapping)
 
-            if len(mappings) == 10_001:
-                first_mapping = mappings[0]
-                for other_mapping in mappings[1:]:
-                    if not first_mapping.agrees_with(other_mapping):
-                        raise PabloError("resdef does not unambiguously map")
-
-                mappings.clear()
-                mappings.append(first_mapping)
-
-                logging.info(
-                    f"  {n_successful_mappings=}, no conflicts",
-                )
-
-    logging.debug(f"Found {len(mappings)} mappings to {resdef.description}")
+    logging.debug(
+        f"Found {len(mappings)} unique mappings to {resdef.description} from"
+        + f" {n_successful_mappings} total mappings",
+    )
 
     if len(mappings) == 0:
-        return None
+        return []
 
-    mapping = mappings.pop()
-    for other_mapping in mappings:
-        if not mapping.agrees_with(other_mapping):
-            raise PabloError("resdef does not unambiguously map")
+    # if there are multiple mappings covering the same indices, the mapping is certainly ambiguous
+    # this is o(n) in the number of mappings so it's worth checking as an optimization
+    mappings_clash_counts: defaultdict[tuple[int, ...], int] = defaultdict(int)
+    for mapping in mappings:
+        indices = tuple(sorted(mapping.index_to_atomdef.keys()))
+        mappings_clash_counts[indices] += 1
+    mappings_clash_counts_multiple = [
+        (indices, count)
+        for indices, count in mappings_clash_counts.items()
+        if count > 1
+    ]
+    if len(mappings_clash_counts_multiple) != 0:
+        raise AmbiguousMatchError(
+            [
+                f"indices {indices} are covered in {count} conflicting ways"
+                for indices, count in mappings_clash_counts_multiple
+            ],
+        )
 
-    return mapping
+    # Do the exhaustive o(n**2) check for ambiguity
+    for mapping_a, mapping_b in itertools.combinations(mappings, r=2):
+        mapping_a.check_agrees_with_where_overlaps(mapping_b)
+
+    return mappings
 
 
 def _get_mappings(

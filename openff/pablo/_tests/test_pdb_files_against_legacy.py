@@ -55,6 +55,11 @@ FAST_PDBS: list[tuple[str, list[Molecule], list[ResidueDefinition]]] = [
         [],
         [],
     ),
+    (
+        "two_butanols.pdb",
+        [Molecule.from_smiles("CCCCO")],
+        [],
+    ),
 ]
 SLOW_PDBS: list[tuple[str, list[Molecule], list[ResidueDefinition]]] = [
     (
@@ -78,6 +83,7 @@ SLOW_PDBS: list[tuple[str, list[Molecule], list[ResidueDefinition]]] = [
 @pytest.mark.parametrize(
     ("pdbfile", "unknown_molecules", "additional_substructures"),
     SLOW_PDBS,
+    ids=[pdbfile for pdbfile, _, _ in SLOW_PDBS],
 )
 def test_connectivity_and_atom_order_and_net_residue_charge_and_metadata_matches_legacy_slow(
     pdbfile: str,
@@ -97,6 +103,7 @@ def test_connectivity_and_atom_order_and_net_residue_charge_and_metadata_matches
 @pytest.mark.parametrize(
     ("pdbfile", "unknown_molecules", "additional_substructures"),
     FAST_PDBS,
+    ids=[pdbfile for pdbfile, _, _ in FAST_PDBS],
 )
 def test_connectivity_and_atom_order_and_net_residue_charge_and_metadata_matches_legacy_fast(
     pdbfile: str,

@@ -51,3 +51,15 @@ class UnknownOrAmbiguousSerialInConectError(PabloError):
             msg += "but multiple corresponding ATOM/HETATM records were found "
             msg += f"(records {','.join(map(str, possible_indices))})"
         super().__init__(msg)
+
+
+class AmbiguousMatchError(PabloError):
+    """Two matches disagree where they overlap."""
+
+    def __init__(self, reasons: list[str]):
+        self.reasons = reasons
+        super().__init__(
+            f"resdef does not unambiguously map: {''.join(f'\n  {reason}' for reason in reasons)}",
+        )
+
+    pass
