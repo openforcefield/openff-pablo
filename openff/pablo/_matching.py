@@ -1,11 +1,11 @@
 import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cached_property, reduce
 from typing import ClassVar, Protocol, TypeAlias
 
 from openff.pablo._utils import sort_tuple
-from openff.pablo.exceptions import PabloError
+from openff.pablo.exceptions import AmbiguousMatchError, PabloError
 
 from .residue import AtomDefinition, BondDefinition, ResidueDefinition
 
@@ -258,61 +258,6 @@ class ResidueMatch(MatchProtocol):
             logging.debug("  deferring to super class")
             return super().agrees_with(other)
 
-        # All atoms should have the same element
-        for i, self_atom in self.index_to_atomdef.items():
-            other_atom = other.index_to_atomdef[i]
-            if self_atom.symbol != other_atom.symbol:
-                logging.debug(
-                    f"  DISAGREE: elements differ at index {i}:"
-                    + f" {self_atom.symbol} vs {other_atom.symbol}",
-                )
-                return False
-
-        # Net charge should be identical
-        self_net_charge: int = sum(
-            atom.charge
-            for atom in self.residue_definition.atoms
-            if atom.name in self.canonical_atom_name_to_index
-        )
-        other_net_charge: int = sum(
-            atom.charge
-            for atom in other.residue_definition.atoms
-            if atom.name in other.canonical_atom_name_to_index
-        )
-        if self_net_charge != other_net_charge:
-            logging.debug(
-                "  DISAGREES: Total formal charge differs:"
-                + f" {self_net_charge} vs {other_net_charge}",
-            )
-            return False
-
-        # Internal connectivity graph should be identical
-        self_bonds: set[tuple[int, int]] = {
-            sort_tuple(
-                (
-                    self.canonical_atom_name_to_index[bond.atom1],
-                    self.canonical_atom_name_to_index[bond.atom2],
-                ),
-            )
-            for bond in self.residue_definition.bonds
-            if bond.atom1 in self.canonical_atom_name_to_index
-            and bond.atom2 in self.canonical_atom_name_to_index
-        }
-        other_bonds: set[tuple[int, int]] = {
-            sort_tuple(
-                (
-                    other.canonical_atom_name_to_index[bond.atom1],
-                    other.canonical_atom_name_to_index[bond.atom2],
-                ),
-            )
-            for bond in other.residue_definition.bonds
-            if bond.atom1 in other.canonical_atom_name_to_index
-            and bond.atom2 in other.canonical_atom_name_to_index
-        }
-        if self_bonds != other_bonds:
-            logging.debug("  DISAGREES: Bonds differ")
-            return False
-
         # External connectivity graph should be identical
         if (
             self.residue_definition.crosslink is not None
@@ -342,7 +287,86 @@ class ResidueMatch(MatchProtocol):
         )
         if not expect_same_bonds:
             logging.debug("  DISAGREES: Expects different linking bonds")
-        return expect_same_bonds
+            return False
+
+        try:
+            self.check_agrees_with_where_overlaps(other)
+        except AmbiguousMatchError as e:
+            logging.debug(
+                f"  DISAGREES: {''.join(f'\n  {reason}' for reason in e.reasons)}",
+            )
+            return False
+        return True
+
+    def check_agrees_with_where_overlaps(self, other: "ResidueMatch"):
+        overlap = {
+            i: (self_atom, other.index_to_atomdef[i])
+            for i, self_atom in self.index_to_atomdef.items()
+            if i in other.index_to_atomdef
+        }
+
+        # All atoms should have the same element
+        for i, (self_atom, other_atom) in overlap.items():
+            if self_atom.symbol != other_atom.symbol:
+                raise AmbiguousMatchError(
+                    [
+                        f"elements differ at index {i}:"
+                        + f" {self_atom.symbol} vs {other_atom.symbol}",
+                    ],
+                )
+
+        # Net charge should be identical
+        self_net_charge, other_net_charge = reduce(
+            lambda netcharges, atoms: (
+                netcharges[0] + atoms[0].charge,
+                netcharges[1] + atoms[1].charge,
+            ),
+            overlap.values(),
+            (0, 0),
+        )
+        if self_net_charge != other_net_charge:
+            raise AmbiguousMatchError(
+                [
+                    "Total formal charge differs:"
+                    + f" {self_net_charge} vs {other_net_charge}",
+                ],
+            )
+
+        # Internal connectivity graph should be identical
+        self_bonds: set[tuple[int, int]] = {
+            sort_tuple(
+                (
+                    self.canonical_atom_name_to_index[bond.atom1],
+                    self.canonical_atom_name_to_index[bond.atom2],
+                ),
+            )
+            for bond in self.residue_definition.bonds
+            if bond.atom1 in self.canonical_atom_name_to_index
+            and bond.atom2 in self.canonical_atom_name_to_index
+        }
+        other_bonds: set[tuple[int, int]] = {
+            sort_tuple(
+                (
+                    other.canonical_atom_name_to_index[bond.atom1],
+                    other.canonical_atom_name_to_index[bond.atom2],
+                ),
+            )
+            for bond in other.residue_definition.bonds
+            if bond.atom1 in other.canonical_atom_name_to_index
+            and bond.atom2 in other.canonical_atom_name_to_index
+        }
+        self_bonds_overlap = {
+            (idx_a, idx_b)
+            for idx_a, idx_b in self_bonds
+            if idx_a in overlap and idx_b in overlap
+        }
+        other_bonds_overlap = {
+            (idx_a, idx_b)
+            for idx_a, idx_b in other_bonds
+            if idx_a in overlap and idx_b in overlap
+        }
+        if self_bonds_overlap != other_bonds_overlap:
+            raise AmbiguousMatchError(["Bonds differ"])
 
 
 class ResidueConectMismatch(ResidueMismatch):
