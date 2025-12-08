@@ -54,12 +54,15 @@ class UnknownOrAmbiguousSerialInConectError(PabloError):
 
 
 class AmbiguousMatchError(PabloError):
-    """Two matches disagree where they overlap."""
+    """Two matches disagree where they overlap.
+
+    This error is raised if a residue definition can be mapped via
+    `additional_definitions` to an otherwise unknown atom or bond in multiple
+    chemically distinct ways.
+    """
 
     def __init__(self, reasons: list[str]):
         self.reasons = reasons
         super().__init__(
             f"resdef does not unambiguously map: {''.join(f'\n  {reason}' for reason in reasons)}",
         )
-
-    pass

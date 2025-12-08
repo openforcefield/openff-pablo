@@ -136,7 +136,7 @@ def _apply_resdef_to_graph(
 
     Raises
     ======
-    ValueError
+    AmbiguousMatchError
         If the residue definition can be mapped to an otherwise unknown atom or
         bond in multiple chemically distinct ways.
     """
@@ -156,6 +156,8 @@ def _apply_resdef_to_graph(
                 mapping,
                 resdef,
             )
+            # Discard the mapping if it would assign the same chemistry as an
+            # existing mapping
             if not any(mapping.agrees_with(new_mapping) for mapping in mappings):
                 mappings.append(new_mapping)
 
@@ -167,7 +169,9 @@ def _apply_resdef_to_graph(
     if len(mappings) == 0:
         return []
 
-    # if there are multiple mappings covering the same indices, the mapping is certainly ambiguous
+    # if there are multiple mappings covering the same indices, the mapping is
+    # certainly ambiguous, since mappings that assign the same chemistry have
+    # already been pruned
     # this is o(n) in the number of mappings so it's worth checking as an optimization
     mappings_clash_counts: defaultdict[tuple[int, ...], int] = defaultdict(int)
     for mapping in mappings:
