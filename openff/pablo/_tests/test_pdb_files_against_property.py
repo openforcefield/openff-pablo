@@ -1130,4 +1130,20 @@ def test_7yv1_peptide_using_sdf(tmp_ccd_cache: CcdCache):
     )
 
 
+def test_two_butanols_fails_with_no_additional_definitions():
+    with pytest.raises(PdbResidueMatchError):
+        topology_from_pdb(
+            get_test_data_path("two_butanols.pdb"),
+            additional_definitions=[],
+        )
+
+
+def test_two_butanols_fails_with_wrong_additional_definitions():
+    with pytest.raises(PdbResidueMatchError):
+        topology_from_pdb(
+            get_test_data_path("two_butanols.pdb"),
+            additional_definitions=[ResidueDefinition.anon_from_smiles("CCC")],
+        )
+
+
 # TODO: Test that the correct atom metadata are written out (as documented in topology_from_pdb())

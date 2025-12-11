@@ -153,6 +153,45 @@ def test_polymers(
     )
 
 
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "pdbfile",
+    [
+        file
+        for dir in get_test_data_path("polymers/").iterdir()
+        if dir.is_dir()
+        for file in dir.iterdir()
+        if (
+            file.suffix.endswith(".pdb")
+            and file.with_suffix(".topology.json").exists()
+            and file.with_suffix(".monomers.smiles.json").exists()
+        )
+    ],
+    ids=lambda pdbfile: pdbfile.name,
+)
+def test_polymers_smiles(
+    pdbfile: Path,
+    tmp_ccd_cache: CcdCache,
+):
+    jsontopfile: Path = pdbfile.with_suffix(".topology.json")
+    monomersfile: Path = pdbfile.with_suffix(".monomers.smiles.json")
+    all_smiles = [
+        (key, smiles)
+        for key, smiles_list in json.loads(monomersfile.read_text()).items()
+        for smiles in smiles_list
+    ]
+    additional_definitions = [
+        ResidueDefinition.anon_from_smiles_marked_nonleaving(smiles, description=key)
+        for key, smiles in all_smiles
+    ]
+    topology_identical_to_jsontop(
+        pdbfile,
+        jsontopfile,
+        additional_definitions,
+        tmp_ccd_cache,
+    )
+
+
 @pytest.mark.parametrize(
     ("pdbfile", "jsontopfile", "additional_definitions"),
     FAST_PDBS,
