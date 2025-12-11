@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Iterable, Mapping
+from collections.abc import Generator, Iterable, Mapping
 from dataclasses import dataclass
 from functools import cached_property, reduce
 from typing import ClassVar, Protocol, TypeAlias
@@ -107,6 +107,19 @@ class ResidueMatch(MatchProtocol):
             return self.residue_definition.name_to_atom[identifier]
         else:
             raise TypeError(f"unknown identifier type {type(identifier)}")
+
+    def bond_indices(self) -> Generator[tuple[int, int]]:
+        if self.prior_bond_idcs is not None:
+            yield self.prior_bond_idcs
+        if self.posterior_bond_idcs is not None:
+            yield self.posterior_bond_idcs
+        if self.crosslink_idcs is not None:
+            yield self.crosslink_idcs
+        for bonddef in self.residue_definition.bonds:
+            atom1_idx = self.canonical_atom_name_to_index.get(bonddef.atom1)
+            atom2_idx = self.canonical_atom_name_to_index.get(bonddef.atom2)
+            if atom1_idx is not None and atom2_idx is not None:
+                yield (atom1_idx, atom2_idx)
 
     def set_crosslink(self, atom1_idx: int, atom2_idx: int) -> None:
         """Set a match for crosslinking"""
@@ -248,7 +261,7 @@ class ResidueMatch(MatchProtocol):
         identical."""
         if set(self.index_to_atomdef.keys()) != set(other.index_to_atomdef.keys()):
             logging.debug(
-                "  DISAGREE: Covers different indices"
+                "    DISAGREE: Covers different indices"
                 + f" ({set(self.index_to_atomdef.keys())}"
                 + f" vs {set(other.index_to_atomdef.keys())})",
             )

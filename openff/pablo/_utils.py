@@ -147,6 +147,13 @@ def coerce_or_none[T](value: Any, func: Callable[[Any], T]) -> T | None:
         return None
 
 
+def coerce_or_leave[T, U](value: T, func: Callable[[Any], U]) -> T | U:
+    try:
+        return func(value)
+    except Exception:
+        return value
+
+
 def with_neighbours[T, U](
     iterable: Iterable[T],
     default: U = None,

@@ -14,6 +14,7 @@ from openff.pablo._matching import SuccessfulMatch
 from openff.pablo._pdb_data import PdbData
 from openff.pablo._std_ccd_cache import STD_CCD_CACHE
 from openff.pablo._utils import (
+    coerce_or_leave,
     cryst_to_box_vectors,
     sort_tuple,
 )
@@ -250,12 +251,18 @@ def _check_all_conects(topology: Topology, data: PdbData):
         for j in js:
             conect_bonds.add(sort_tuple((i, j)))
     if not conect_bonds.issubset(all_bonds):
+        unknown_conects = conect_bonds.difference(all_bonds)
         raise PabloError(
-            "CONECT records without chemical information not supported",
+            f"{len(unknown_conects)} bonds in CONECT records were not assigned chemical information:",
             sorted(
                 {
-                    sort_tuple((data.serial[a], data.serial[b]))
-                    for a, b in conect_bonds.difference(all_bonds)
+                    sort_tuple(
+                        (
+                            coerce_or_leave(data.serial[a], int),
+                            coerce_or_leave(data.serial[b], int),
+                        ),
+                    )
+                    for a, b in unknown_conects
                 },
             ),
         )

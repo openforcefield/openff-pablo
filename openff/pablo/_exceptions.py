@@ -64,6 +64,7 @@ def create_pdb_residue_match_error(
     additional_definitions: Sequence[ResidueDefinition] = (),
     additional_matches: Sequence[SuccessfulMatch] | None = None,
     unmatched_pdb_idcs: Iterable[int] = (),
+    unmatched_pdb_conects: Iterable[tuple[int, int]] = (),
 ) -> PdbResidueMatchError:
     msg: list[str] = [
         "some residues could not be identified",
@@ -73,7 +74,7 @@ def create_pdb_residue_match_error(
             if data.src_filename is not None
             else "atom and bond. The following residues present in the PDB file"
         ),
-        "could not be identified from the provided chemical library:",
+        "could not be identified from the provided residue library:",
     ]
     missing_resnames: set[str] = set()
 
@@ -192,9 +193,15 @@ def create_pdb_residue_match_error(
     if msg[-1] == "":
         msg = msg[:-1]
 
-    unmatched_atoms = [
-        f"{data.chain_id[i]}:{data.res_name[i]}{data.res_seq[i]}.{data.name[i]} (l{data.line_no[i]})"
-        for i in unmatched_pdb_idcs
+    def format_atom(i: int) -> str:
+        return f"{data.chain_id[i]}:{data.res_name[i]}{data.res_seq[i]}.{data.name[i]} (l{data.line_no[i]})"
+
+    unmatched_pdb_idcs = set(unmatched_pdb_idcs)
+    unmatched_atoms = [format_atom(i) for i in unmatched_pdb_idcs]
+    unmatched_bonds = [
+        f"{format_atom(i)} CONECTed to {format_atom(j)}"
+        for i, j in unmatched_pdb_conects
+        if i not in unmatched_pdb_idcs and j not in unmatched_pdb_idcs
     ]
     if len(additional_definitions) > 0:
         if additional_matches is None:
@@ -213,20 +220,29 @@ def create_pdb_residue_match_error(
                     "the additional_definitions",
                 ],
             )
-        elif len(unmatched_atoms) > 0:
+        else:
             msg.extend(
                 [
                     "",
                     "Also, the following additional_definitions could be",
-                    "matched to unknown atoms, but they did not cover all",
-                    "atoms that were left unknown and so some atoms were",
-                    "left without chemical information:",
+                    "matched to unknown atoms and bonds, but they did not cover",
+                    "all atoms and bonds that were unknown after initial",
+                    "matching and so some atoms or bonds were left without",
+                    "chemical information:",
                 ],
             )
+            match_resdef_counts: dict[ResidueDefinition, int] = {}
             for match in additional_matches:
-                msg.append(f"    {match.description}")
+                match_resdef_counts.setdefault(match.residue_definition, 0)
+                match_resdef_counts[match.residue_definition] += 1
+            for match, count in match_resdef_counts.items():
+                msg.append(
+                    f"  {match.description}{'' if count == 1 else ' (matched ' + str(count) + ' times)'}",
+                )
 
-            if len(unmatched_atoms) < 100:
+            if len(unmatched_atoms) == 0:
+                msg.append("All atoms were identified.")
+            elif len(unmatched_atoms) <= 100:
                 atom_len = max(len(s) for s in unmatched_atoms)
                 batch_size = (80) // (atom_len + 2)
                 msg.extend(
@@ -250,18 +266,22 @@ def create_pdb_residue_match_error(
                         ),
                     ],
                 )
-        else:
-            msg.extend(
-                [
-                    "",
-                    "Also, the following additional_definitions could be",
-                    "matched to unknown atoms, but they did not cover all",
-                    "bonds that were left unknown and so some bonds were",
-                    "left without chemical information:",
-                ],
-            )
-            for match in additional_matches:
-                msg.append(f"    {match.description}")
+            else:
+                msg.append("More than 100 atoms were left unidentified.")
+
+            if len(unmatched_bonds) == 0:
+                msg.append("All bonds between known atoms were identified")
+            elif len(unmatched_bonds) <= 10:
+                msg.extend(
+                    [
+                        "The following bonds between known atoms were left unidentified:",
+                        *("  " + line for line in unmatched_bonds),
+                    ],
+                )
+            else:
+                msg.append(
+                    "More than 10 bonds between known atoms were left unidentified",
+                )
 
     if (
         any(
@@ -274,9 +294,10 @@ def create_pdb_residue_match_error(
         msg.extend(
             [
                 "",
-                "Some missing residues are likely to be in the CCD; you can download",
-                "them automatically by setting `residue_library.auto_download = True`",
-                "or manually with the get_from_ccd method.",
+                "Some missing residues are likely to be in the CCD; if the CCD",
+                "form is what you intend, you can download them automatically",
+                "by setting `residue_library.auto_download = True` or manually",
+                "with the get_from_ccd method.",
             ],
         )
 

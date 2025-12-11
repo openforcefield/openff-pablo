@@ -37,10 +37,10 @@ def apply_additional_definitions(
         verified statically by the type checker. Any assert error in user code
         is a bug and may indicate that results are incorrect - please report it!
     """
-    logging.debug("Generating graph of known info")
+    logging.info("Generating graph of known info")
     pdb_graph, atoms, bonds = _get_pdb_graph(data, matches)
-    logging.debug(
-        "Generated graph with"
+    logging.info(
+        "  Generated graph with"
         + f" {len(atoms)} atoms"
         + f" ({sum(1 for atom in atoms.values() if atom is None)} unknown),"
         + f" {len(bonds)} bonds"
@@ -49,10 +49,10 @@ def apply_additional_definitions(
 
     new_matches: list[AdditionalDefMatch] = []
     for resdef in additional_definitions:
-        logging.debug(f"checking {resdef.description}")
+        logging.info(f"checking {resdef.description}")
         prev_n_new_matches = len(new_matches)
         new_matches.extend(
-            _apply_resdef_to_graph(
+            _map_resdef_to_graph(
                 data,
                 resdef,
                 pdb_graph,
@@ -125,7 +125,7 @@ def _get_pdb_graph(
     return (graph, atoms, bonds)
 
 
-def _apply_resdef_to_graph(
+def _map_resdef_to_graph(
     data: "PdbData",
     resdef: ResidueDefinition,
     pdb_graph: Graph[int, tuple[int, int]],
@@ -144,13 +144,14 @@ def _apply_resdef_to_graph(
     mappings: list[AdditionalDefMatch] = []
     resdef_graphs = list(resdef._to_graphs())
     logging.debug(
-        f"{resdef.description} has {len(resdef_graphs)} graphs,"
+        f"  {resdef.description} has {len(resdef_graphs)} graphs,"
         + f" {resdef.n_expected_atoms} expected atoms,"
-        + f" {resdef.n_core_atoms} core atoms. Finding mappings...",
+        + f" {resdef.n_core_atoms} core atoms.",
     )
     n_successful_mappings = 0
-    for resdef_graph in resdef_graphs:
-        for mapping in _get_mappings(data, pdb_graph, resdef_graph, atoms, bonds):
+    for i, resdef_graph in enumerate(resdef_graphs):
+        logging.debug(f"  Finding mappings for graph {i}")
+        for mapping in _get_all_mappings(data, pdb_graph, resdef_graph, atoms, bonds):
             n_successful_mappings += 1
             new_mapping = AdditionalDefMatch.from_mapping(
                 mapping,
@@ -159,10 +160,15 @@ def _apply_resdef_to_graph(
             # Discard the mapping if it would assign the same chemistry as an
             # existing mapping
             if not any(mapping.agrees_with(new_mapping) for mapping in mappings):
+                mapping_readable = ", ".join(
+                    f"{data.name[k]} (idx{k}@l{data.line_no[k]}): <{v.symbol}{v.name!r}{' (leaving)' if v.leaving else ''}>"
+                    for k, v in sorted(new_mapping.index_to_atomdef.items())
+                )
+                logging.debug(f"    Found a new mapping: {mapping_readable}")
                 mappings.append(new_mapping)
 
-    logging.debug(
-        f"Found {len(mappings)} unique mappings to {resdef.description} from"
+    logging.info(
+        f"  Found {len(mappings)} unique mappings to {resdef.description} from"
         + f" {n_successful_mappings} total mappings",
     )
 
@@ -197,7 +203,7 @@ def _apply_resdef_to_graph(
     return mappings
 
 
-def _get_mappings(
+def _get_all_mappings(
     data: "PdbData",
     pdb_graph: Graph[int, tuple[int, int]],
     resdef_graph: Graph[AtomDefinition, BondDefinition],
@@ -306,7 +312,7 @@ def _has_valid_connectivity(
         if resdef_atom.symbol == "":
             if data.name[pdb_idx] not in resdef_atom.names:
                 logging.debug(
-                    f"  MAPPING INVALID: invalid name {data.name[pdb_idx]} in PDB for {resdef_atom}",
+                    f"    MAPPING INVALID: invalid name {data.name[pdb_idx]} in PDB for {resdef_atom}",
                 )
                 return False
             continue
@@ -315,7 +321,7 @@ def _has_valid_connectivity(
         n_pdb_neighbours = n_pdb_neighbours_map[pdb_idx]
         if n_resdef_neighbours != n_pdb_neighbours:
             logging.debug(
-                f"  MAPPING INVALID: {n_pdb_neighbours=} but {n_resdef_neighbours=} for {resdef_atom}",
+                f"    MAPPING INVALID: {n_pdb_neighbours=} but {n_resdef_neighbours=} for {resdef_atom}",
             )
             return False
 

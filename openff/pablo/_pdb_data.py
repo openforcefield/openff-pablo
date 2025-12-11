@@ -418,6 +418,13 @@ class PdbData:
                         conects[b_idx].add(a_idx)
         return conects
 
+    def _allowed_alt_locs(self) -> set[str]:
+        unique_alt_locs = set(self.alt_loc)
+        if len(unique_alt_locs) == 1:
+            return unique_alt_locs
+        else:
+            return {"", "A"}
+
     @property
     def residue_indices(self) -> Iterator[tuple[int, ...]]:
         """
@@ -434,6 +441,15 @@ class PdbData:
         prev = None
         res_idx = 0
         self.res_idx = []
+
+        # TODO: Support alt-locs as alternate conformers
+        allowed_alt_locs = self._allowed_alt_locs()
+        assert len(allowed_alt_locs) == 1 or allowed_alt_locs == {"", "A"}
+        if allowed_alt_locs == {"", "A"}:
+            warnings.warn(
+                "Alt loc support is limited; only empty or 'A' alt locs will be read",
+            )
+
         for atom_idx, (alt_loc, terminated, *residue_info) in enumerate(
             zip(
                 self.alt_loc,
@@ -446,15 +462,10 @@ class PdbData:
                 strict=True,
             ),
         ):
-            if alt_loc != "":
-                # TODO: Support alt-locs as alternate conformers
-                warnings.warn(
-                    "Alt locs not supported; only empty or 'A' alt locs will be read",
-                )
-                if alt_loc != "A":
-                    # TODO: Improve this res_idx behavior
-                    self.res_idx.append(res_idx)
-                    continue
+            if alt_loc not in allowed_alt_locs:
+                # TODO: Improve this res_idx behavior
+                self.res_idx.append(res_idx)
+                continue
             if residue_info[0] != first_model:
                 # TODO: Support multi-model files
                 warnings.warn(
@@ -1708,7 +1719,7 @@ class PdbData:
             residue_library,
             additional_definitions,
         ):
-            logging.debug(
+            logging.info(
                 f"  Checking errors for {self.res_name[possible_residue_matches[0].prototype_index]} {possible_residue_matches[0].res_atom_idcs}",
             )
 
@@ -1753,13 +1764,13 @@ class PdbData:
                 errors.append(matches)
 
         if all_residues_successful:
-            logging.debug(
+            logging.info(
                 "All residues successfully matched",
             )
             return residues
 
         if check_additional_definitions:
-            logging.debug(f"Checking additional definitions {additional_definitions}")
+            logging.info(f"Checking additional definitions {additional_definitions}")
             additional_matches = apply_additional_definitions(
                 self,
                 residues,
@@ -1771,7 +1782,14 @@ class PdbData:
                 for i in match.res_atom_idcs
                 if match.index_to_atomdef[i].symbol != ""
             }
-            if len(unmatched_atoms) == 0:
+            unmatched_bonds: set[tuple[int, int]] = {
+                sort_tuple((i, j)) for i, js in enumerate(self.conects) for j in js
+            } - {
+                sort_tuple((i, j))
+                for match in additional_matches
+                for i, j in match.bond_indices()
+            }
+            if len(unmatched_atoms) == 0 and len(unmatched_bonds) == 0:
                 return residues + additional_matches
             else:
                 raise create_pdb_residue_match_error(
@@ -1780,6 +1798,7 @@ class PdbData:
                     additional_definitions=additional_definitions,
                     additional_matches=additional_matches,
                     unmatched_pdb_idcs=unmatched_atoms,
+                    unmatched_pdb_conects=unmatched_bonds,
                     residue_library=residue_library,
                 )
 
@@ -1797,13 +1816,16 @@ class PdbData:
         use_canonical_names: bool = False,
     ) -> RdMol:
         rdmol = EditableRdMol()
-        pdb_idcs = {i for i in range(self.n_atoms) if self.alt_loc[i] in {"", " ", "A"}}
+        allowed_alt_locs = self._allowed_alt_locs()
+        pdb_idcs = {
+            i for i in range(self.n_atoms) if self.alt_loc[i] in allowed_alt_locs
+        }
         bonds: dict[tuple[int, int], BondDefinition] = {}
         """{(pdb_idx_1, pdb_idx_2): bond_order, ...}"""
         atoms: dict[int, tuple[AtomDefinition, SuccessfulMatch]] = {}
         """{pdb_idx: (atom_definition, match), ...}"""
 
-        logging.debug("Begin collating chemical information from matches")
+        logging.info("Begin collating chemical information from matches")
         for match in matches:
             logging.debug(
                 f"  collating {match.residue_definition.description} with {match.canonical_atom_name_to_index}",
@@ -1885,7 +1907,7 @@ class PdbData:
             return (
                 f"{atom.properties['chain_id']}:{atom.properties['residue_name']}"
                 + f"{atom.properties['res_seq']}.{atom.name}"
-                + f" (l{atom.properties['pdb_line_no']})"
+                + f" ({atom.symbol}, l{atom.properties['pdb_line_no']})"
             )
 
         for atom in rdmol.atoms:
@@ -1896,8 +1918,12 @@ class PdbData:
                     + f" {atom.n_bonds} bonds.",
                 )
                 for bond in atom.bonds:
+                    atom1 = format_atom(bond.begin_atom)
+                    atom2 = format_atom(bond.end_atom)
+                    if atom2 == format_atom(atom):
+                        atom1, atom2 = atom2, atom1
                     logging.warning(
-                        f"  {format_atom(bond.begin_atom)} bonded to {format_atom(bond.end_atom)} with order {bond.order}",
+                        f"  {atom1} bonded to {atom2} with order {bond.order}",
                     )
 
         logging.debug("Finished producing rdmol")

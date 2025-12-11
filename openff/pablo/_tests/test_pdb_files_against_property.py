@@ -800,7 +800,7 @@ def test_unknown_residue_gives_clear_error(tmp_ccd_cache: CcdCache):
                 "A topology cannot be created without chemical information for every",
                 "atom and bond. The following residues present in PDB file",
                 str(path),
-                "could not be identified from the provided chemical library:",
+                "could not be identified from the provided residue library:",
                 "  C:UNK#1 (l4980-5038): No residue definitions",
             ],
         )
@@ -827,7 +827,7 @@ def test_unmatched_residues_give_clear_error(
                 "A topology cannot be created without chemical information for every",
                 "atom and bond. The following residues present in PDB file",
                 str(path),
-                "could not be identified from the provided chemical library:",
+                "could not be identified from the provided residue library:",
                 "  A:CYS#221 (l1-11): No matching residue definitions:",
                 "    ╰─ CYSTEINE didn't match: found CONECT record that could not be matched with a bond",
                 "",

@@ -791,6 +791,52 @@ class ResidueDefinition:
         )
 
     @classmethod
+    def anon_from_smiles_marked_nonleaving(
+        cls,
+        smiles: str,
+        *,
+        virtual_sites: Collection[str] = (),
+        description: str | None = None,
+    ) -> Self:
+        """
+        Create an anonymous ``ResidueDefinition`` from a partially mapped SMILES.
+
+        All non-mapped atoms are treated as leaving atoms.
+
+        Parameters
+        ----------
+        smiles
+            The SMILES string. All atoms except leaving atoms should be mapped.
+            All leaving atoms must not be.
+        virtual_sites
+            Virtual sites expected by the residue. See
+            :py:data:`openff.pablo.ResidueDefinition.virtual_sites`
+        description
+            An optional string describing the residue. See
+            :py:data:`openff.pablo.ResidueDefinition.description`
+        """
+        molecule = Molecule.from_smiles(
+            smiles,
+            allow_undefined_stereo=True,
+        )
+
+        neighbours: DefaultDict[int, set[int]] = defaultdict(set)
+        for atom1, atom2 in molecule.nth_degree_neighbors(1):
+            neighbours[atom1.molecule_atom_index].add(atom2.molecule_atom_index)
+            neighbours[atom2.molecule_atom_index].add(atom1.molecule_atom_index)
+
+        for i in range(molecule.n_atoms):
+            if i not in molecule.properties["atom_map"]:
+                atom = molecule.atom(i)
+                atom.metadata["leaving_atom"] = True
+
+        return cls.anon_from_molecule(
+            molecule=molecule,
+            description=smiles if description is None else description,
+            virtual_sites=virtual_sites,
+        )
+
+    @classmethod
     def from_smiles(
         cls,
         mapped_smiles: str,
@@ -1369,7 +1415,7 @@ class ResidueDefinition:
                         for i in range(len(leaving_atom_fragments) + 1)
                     ):
                         logging.debug(
-                            f"Generating graph for {self.description}:"
+                            f"  Generating graph for {self.description}:"
                             + f" {crosslink=} {posterior_bond=} {prior_bond=} {leaving_atoms=}",
                         )
                         yield self._to_graph(
@@ -1497,6 +1543,9 @@ class ResidueDefinition:
                 )
 
         assert graph.is_connected()
+        logging.debug(
+            f"      graph includes atom names {[atom.name for atom in graph.nodes]}",
+        )
         return graph
 
     def visualize(
@@ -1505,6 +1554,7 @@ class ResidueDefinition:
         width: int = -1,
         height: int = 300,
         highlight: Iterable[str] = (),
+        label_atoms: bool | None = None,
     ) -> "IPython.core.display.SVG":
         from IPython.display import SVG
 
@@ -1519,16 +1569,21 @@ class ResidueDefinition:
 
         legend_elements: list[str] = []
 
-        if self.is_anonymous:
-            atom_notes = {}
-            legend_elements.append("Anonymous Residue Definition")
-            if len(deemphasize_atoms) != 0:
-                legend_elements.append("(leaving atoms drawn in light grey)")
-        else:
+        if label_atoms is None:
+            label_atoms = not self.is_anonymous
+        if label_atoms:
             atom_notes = {
                 i: f"{'|'.join([atom.name, *atom.synonyms])}{'*' if atom.leaving else ''}"
                 for i, atom in enumerate(self.atoms)
             }
+        else:
+            atom_notes = {}
+
+        if self.is_anonymous:
+            legend_elements.append("Anonymous Residue Definition")
+            if len(deemphasize_atoms) != 0:
+                legend_elements.append("(leaving atoms drawn in light grey)")
+        else:
             if self.description:
                 legend_elements.append(f"{self.residue_name}: {self.description}")
             else:
@@ -1773,7 +1828,7 @@ class ResidueDefinition:
         for bond in rdsmarts.bonds:
             assert bond.order == int(bond.order), "non-integral bond order"
             atom1_idx = bond.begin_atom.index
-            atom2_idx = bond.begin_atom.index
+            atom2_idx = bond.end_atom.index
             bonds.append(
                 BondDefinition.with_defaults(
                     atom1=atoms[atom1_idx].name,
@@ -1796,7 +1851,7 @@ class ResidueDefinition:
             atom_degrees,
             atom_available_valences,
         ):
-            if atom.leaving:
+            if atom.leaving or degree == 0:
                 continue
             if degree is None:
                 raise PabloError("Undefined degree not supported")

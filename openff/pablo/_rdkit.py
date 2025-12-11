@@ -377,6 +377,10 @@ class RdAtom:
     def atomic_number(self) -> int:
         return self._atom.GetAtomicNum()
 
+    @property
+    def symbol(self) -> str:
+        return PERIODIC_TABLE.GetElementSymbol(self.atomic_number)
+
     def with_formal_charge(self, formal_charge: int) -> Self:
         new = self._copy()
         new._atom.SetFormalCharge(formal_charge)
