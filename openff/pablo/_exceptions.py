@@ -269,9 +269,10 @@ def create_pdb_residue_match_error(
             else:
                 msg.append("More than 100 atoms were left unidentified.")
 
+            max_print_unmatched_bonds = 200000
             if len(unmatched_bonds) == 0:
                 msg.append("All bonds between known atoms were identified")
-            elif len(unmatched_bonds) <= 10:
+            elif len(unmatched_bonds) <= max_print_unmatched_bonds:
                 msg.extend(
                     [
                         "The following bonds between known atoms were left unidentified:",
@@ -280,7 +281,7 @@ def create_pdb_residue_match_error(
                 )
             else:
                 msg.append(
-                    "More than 10 bonds between known atoms were left unidentified",
+                    f"More than {max_print_unmatched_bonds} bonds between known atoms were left unidentified",
                 )
 
     if (

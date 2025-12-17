@@ -1,4 +1,5 @@
 from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping
+from pprint import pformat
 from typing import Literal
 
 import rustworkx as rx
@@ -27,6 +28,18 @@ class Graph[NodeT: Hashable, EdgeT: Hashable]:
 
     def __contains__(self, item: NodeT | EdgeT):
         return item in self._node_idcs or item in self._edge_idcs
+
+    def __repr__(self) -> str:
+        idcs_to_nodes = {v: k for k, v in self._node_idcs.items()}
+        idcs_to_edges = {v: k for k, v in self._edge_idcs.items()}
+        node_idcs_to_edges = {
+            (node_idx_a, node_idx_b): idcs_to_edges[edge_idx]
+            for (
+                edge_idx,
+                (node_idx_a, node_idx_b, _weight),
+            ) in self._graph.edge_index_map().items()
+        }
+        return f"<{self.__class__.__name__} object with nodes {pformat(idcs_to_nodes)} and edges {pformat(node_idcs_to_edges)}>"
 
     @property
     def n_nodes(self) -> int:
@@ -152,11 +165,22 @@ class Graph[NodeT: Hashable, EdgeT: Hashable]:
     def is_connected(self) -> bool:
         return rx.is_connected(self._graph)
 
-    def desymmetrize_leaf_nodes(self) -> "Graph[tuple[NodeT, int], EdgeT]":
+    def desymmetrize_leaf_nodes[KeyT](
+        self,
+        key: Callable[[NodeT], KeyT] = lambda n: n,
+    ) -> "Graph[tuple[NodeT, int], EdgeT]":
+        """
+        Append an integer to desymmetrize leaf nodes
+
+        Sibling leaf nodes with the same ``key`` are desymmetrized by placing
+        them in a tuple with increasing integers. Nodes that are not leafs or
+        are already asymmetric are given the integer 0. The default value of
+        ``key`` uses the entire node value as the key.
+        """
         new_graph = Graph[tuple[NodeT, int], EdgeT]()
 
         old_to_new: dict[int, int] = {}
-        leaf_nodes: dict[int, list[int]] = {}
+        leaf_nodes: dict[tuple[int, KeyT], list[int]] = {}
         for node_idx in self._graph.node_indices():
             n_edges = self._graph.degree(node_idx)
             if n_edges != 1:
@@ -166,10 +190,11 @@ class Graph[NodeT: Hashable, EdgeT: Hashable]:
                 continue
             # node_idx is a leaf node
             parent = unwrap(self._graph.neighbors(node_idx))
-            leaf_nodes.setdefault(parent, []).append(node_idx)
+            node_key = key(self._graph[node_idx])
+            leaf_nodes.setdefault((parent, node_key), []).append(node_idx)
 
-        for sibling_leaf_nodes in leaf_nodes.values():
-            for i, node_idx in enumerate(sibling_leaf_nodes):
+        for symm_sibling_leaf_nodes in leaf_nodes.values():
+            for i, node_idx in enumerate(symm_sibling_leaf_nodes):
                 node = (self._graph[node_idx], i)
                 new_graph.add_node(node)
                 old_to_new[node_idx] = new_graph._node_idcs[node]

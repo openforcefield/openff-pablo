@@ -258,8 +258,17 @@ class ResidueMatch(MatchProtocol):
 
         Matches are considered to assign the same chemistry if their
         connectivity graphs (ignoring bond order) and net formal charges are
-        identical."""
-        if set(self.index_to_atomdef.keys()) != set(other.index_to_atomdef.keys()):
+        identical. Matches that identify different atoms are never considered
+        to agree."""
+        self_identified_indices = {
+            i for i, atom in self.index_to_atomdef.items() if atom.symbol != ""
+        }
+        other_identified_indices = {
+            i
+            for i, atom in other.index_to_atomdef.items()
+            if atom is not None and atom.symbol != ""
+        }
+        if self_identified_indices != other_identified_indices:
             logging.debug(
                 "    DISAGREE: Covers different indices"
                 + f" ({set(self.index_to_atomdef.keys())}"
@@ -306,7 +315,7 @@ class ResidueMatch(MatchProtocol):
             self.check_agrees_with_where_overlaps(other)
         except AmbiguousMatchError as e:
             logging.debug(
-                f"  DISAGREES: {''.join(f'\n  {reason}' for reason in e.reasons)}",
+                f"  DISAGREES: {' and '.join(e.reasons)}",
             )
             return False
         return True
@@ -316,6 +325,7 @@ class ResidueMatch(MatchProtocol):
             i: (self_atom, other.index_to_atomdef[i])
             for i, self_atom in self.index_to_atomdef.items()
             if i in other.index_to_atomdef
+            and "" not in [self_atom.symbol, other.index_to_atomdef[i].symbol]
         }
 
         # All atoms should have the same element

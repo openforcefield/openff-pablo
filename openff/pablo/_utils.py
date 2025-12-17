@@ -253,7 +253,11 @@ def charge_int_or_none(s: str, strict: bool = False):
     if s == "" or s == "?":
         return 0 if strict else None
     else:
-        if s.endswith("+"):
+        if s.strip() == "+" and not strict:
+            return 1
+        elif s.strip() == "-" and not strict:
+            return -1
+        elif s.endswith("+"):
             return int(s[:-1])
         elif s.endswith("-"):
             return -int(s[:-1])

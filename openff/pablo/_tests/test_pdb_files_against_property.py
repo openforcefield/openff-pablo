@@ -1071,7 +1071,7 @@ def test_complex_pdb_1flr(tmp_ccd_cache: CcdCache):
 
     with pytest.warns(
         UserWarning,
-        match="Alt locs not supported; only empty or 'A' alt locs will be read",
+        match="Alt loc support is limited; only empty or 'A' alt locs will be read",
     ):
         topology = topology_from_pdb(
             get_test_data_path("prepared_pdbs/1FLR_prepared.pdb"),

@@ -1782,15 +1782,16 @@ class PdbData:
                 for i in match.res_atom_idcs
                 if match.index_to_atomdef[i].symbol != ""
             }
+            all_matches = residues + additional_matches
             unmatched_bonds: set[tuple[int, int]] = {
                 sort_tuple((i, j)) for i, js in enumerate(self.conects) for j in js
             } - {
                 sort_tuple((i, j))
-                for match in additional_matches
+                for match in all_matches
                 for i, j in match.bond_indices()
             }
             if len(unmatched_atoms) == 0 and len(unmatched_bonds) == 0:
-                return residues + additional_matches
+                return all_matches
             else:
                 raise create_pdb_residue_match_error(
                     data=self,
@@ -1833,8 +1834,13 @@ class PdbData:
             for vsite in match.vsite_idcs:
                 pdb_idcs.remove(vsite)
 
+            keep_bonds_with_atoms: set[int] = set()
+
             for i, atom in match.index_to_atomdef.items():
-                if atom.symbol == "" or i in atoms:
+                if i in atoms:
+                    continue
+                keep_bonds_with_atoms.add(i)
+                if atom.symbol == "":
                     continue
                 atoms[i] = (atom, match)
                 pdb_idcs.remove(i)
@@ -1842,10 +1848,17 @@ class PdbData:
             for bond in match.residue_definition.bonds:
                 atom1 = match.canonical_atom_name_to_index.get(bond.atom1)
                 atom2 = match.canonical_atom_name_to_index.get(bond.atom2)
-                if atom1 is not None and atom2 is not None:
+                if (
+                    atom1 is not None
+                    and atom2 is not None
+                    and atom1 in keep_bonds_with_atoms
+                    and atom2 in keep_bonds_with_atoms
+                ):
                     idcs = sort_tuple((atom1, atom2))
                     if idcs in bonds:
-                        assert bonds[idcs].order == bond.order
+                        assert bonds[idcs].order == bond.order, (
+                            f"bond {idcs}: new bond order {bond.order} differs from established bond {bonds[idcs].order}"
+                        )
                     bonds[idcs] = bond
             for idcs, bond in (
                 (match.posterior_bond_idcs, match.residue_definition.linking_bond),

@@ -1,5 +1,5 @@
 import json
-from collections.abc import Collection, Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import pytest
@@ -86,12 +86,17 @@ def test_extended_atom_residue_numbering(
 ):
     path_stem = Path("prepared_pdbs") / fn_stem
     tmp_ccd_cache.auto_download = True
-    topology_identical_to_jsontop(
-        path_stem.with_suffix(".pdb"),
-        path_stem.with_suffix(".json"),
-        [],
-        tmp_ccd_cache,
+
+    pdbfile = path_stem.with_suffix(".pdb")
+    jsontopfile = path_stem.with_suffix(".json")
+
+    pablo_top = topology_from_pdb(
+        get_test_data_path(pdbfile),
+        residue_library=tmp_ccd_cache,
     )
+    jsontop_top = Topology.from_json(get_test_data_path(jsontopfile).read_text())
+
+    topology_identical_to_jsontop(pablo_top, jsontop_top)
 
 
 @pytest.mark.slow
@@ -106,11 +111,42 @@ def test_topology_identical_to_jsontop_slow(
     tmp_ccd_cache: CcdCache,
 ):
     tmp_ccd_cache.auto_download = True
+
+    pablo_top = topology_from_pdb(
+        get_test_data_path(pdbfile),
+        additional_definitions=additional_definitions,
+        residue_library=tmp_ccd_cache,
+    )
+    jsontop_top = Topology.from_json(get_test_data_path(jsontopfile).read_text())
+
     topology_identical_to_jsontop(
-        pdbfile,
-        jsontopfile,
-        additional_definitions,
-        tmp_ccd_cache,
+        pablo_top,
+        jsontop_top,
+    )
+
+
+@pytest.mark.parametrize(
+    ("pdbfile", "jsontopfile", "additional_definitions"),
+    FAST_PDBS,
+)
+def test_topology_identical_to_jsontop_fast(
+    pdbfile: str,
+    jsontopfile: str,
+    additional_definitions: list[ResidueDefinition],
+    tmp_ccd_cache: CcdCache,
+):
+    tmp_ccd_cache.auto_download = True
+
+    pablo_top = topology_from_pdb(
+        get_test_data_path(pdbfile),
+        additional_definitions=additional_definitions,
+        residue_library=tmp_ccd_cache,
+    )
+    jsontop_top = Topology.from_json(get_test_data_path(jsontopfile).read_text())
+
+    topology_identical_to_jsontop(
+        pablo_top,
+        jsontop_top,
     )
 
 
@@ -130,9 +166,10 @@ def test_topology_identical_to_jsontop_slow(
     ],
     ids=lambda pdbfile: pdbfile.name,
 )
-def test_polymers(
+def test_polymers_smarts(
     pdbfile: Path,
     tmp_ccd_cache: CcdCache,
+    recwarn: pytest.WarningsRecorder,
 ):
     jsontopfile: Path = pdbfile.with_suffix(".topology.json")
     monomersfile: Path = pdbfile.with_suffix(".monomers.json")
@@ -145,11 +182,12 @@ def test_polymers(
         ResidueDefinition._anon_from_smarts(smarts, description=key)
         for key, smarts in all_smarts
     ]
-    topology_identical_to_jsontop(
+    return polymers(
+        additional_definitions,
         pdbfile,
         jsontopfile,
-        additional_definitions,
         tmp_ccd_cache,
+        recwarn,
     )
 
 
@@ -172,6 +210,7 @@ def test_polymers(
 def test_polymers_smiles(
     pdbfile: Path,
     tmp_ccd_cache: CcdCache,
+    recwarn: pytest.WarningsRecorder,
 ):
     jsontopfile: Path = pdbfile.with_suffix(".topology.json")
     monomersfile: Path = pdbfile.with_suffix(".monomers.smiles.json")
@@ -184,46 +223,49 @@ def test_polymers_smiles(
         ResidueDefinition.anon_from_smiles_marked_nonleaving(smiles, description=key)
         for key, smiles in all_smiles
     ]
-    topology_identical_to_jsontop(
+    return polymers(
+        additional_definitions,
         pdbfile,
         jsontopfile,
-        additional_definitions,
         tmp_ccd_cache,
+        recwarn,
     )
 
 
-@pytest.mark.parametrize(
-    ("pdbfile", "jsontopfile", "additional_definitions"),
-    FAST_PDBS,
-)
-def test_topology_identical_to_jsontop_fast(
-    pdbfile: str,
-    jsontopfile: str,
+def polymers(
     additional_definitions: list[ResidueDefinition],
-    tmp_ccd_cache: CcdCache,
+    pdbfile: Path,
+    jsontopfile: Path,
+    residue_library: Mapping[str, Sequence[ResidueDefinition]],
+    recwarn: pytest.WarningsRecorder,
 ):
-    tmp_ccd_cache.auto_download = True
-    topology_identical_to_jsontop(
-        pdbfile,
-        jsontopfile,
-        additional_definitions,
-        tmp_ccd_cache,
-    )
-
-
-def topology_identical_to_jsontop(
-    pdbfile: str | Path,
-    jsontopfile: str | Path,
-    additional_definitions: list[ResidueDefinition],
-    residue_library: Mapping[str, Collection[ResidueDefinition]],
-):
+    jsontop_top = Topology.from_json(get_test_data_path(jsontopfile).read_text())
     pablo_top = topology_from_pdb(
         get_test_data_path(pdbfile),
         additional_definitions=additional_definitions,
         residue_library=residue_library,
     )
-    jsontop_top = Topology.from_json(get_test_data_path(jsontopfile).read_text())
 
+    # Skip if we raise an atom ordering warning
+    # TODO: Regenerate topologies for PDB files that can't be represented as a Topology
+    atom_order_warnings = [
+        warning
+        for warning in recwarn
+        if (
+            "Input PDB has an atom ordering that cannot be represented in an OpenFF Topology"
+            in str(warning.message)
+        )
+    ]
+    if len(atom_order_warnings) > 0:
+        pytest.xfail("This JSONtop was mangled by the openff toolkit")
+
+    return topology_identical_to_jsontop(pablo_top, jsontop_top)
+
+
+def topology_identical_to_jsontop(
+    pablo_top: Topology,
+    jsontop_top: Topology,
+):
     assert pablo_top.n_molecules == jsontop_top.n_molecules
     for pablo_mol, jsontop_mol in zip(pablo_top.molecules, jsontop_top.molecules):
         assert pablo_mol.n_atoms == jsontop_mol.n_atoms
@@ -241,4 +283,8 @@ def topology_identical_to_jsontop(
             (sort_tuple((bond.atom1_index, bond.atom2_index)), bond.bond_order)
             for bond in jsontop_mol.bonds
         }
-        assert pablo_bonds == jsontop_bonds
+        if pablo_bonds == jsontop_bonds:
+            # molecules are identical (even the same kekulization)
+            continue
+        else:
+            assert pablo_mol.is_isomorphic_with(jsontop_mol)

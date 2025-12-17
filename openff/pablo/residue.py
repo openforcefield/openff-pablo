@@ -136,6 +136,14 @@ class AtomDefinition:
         return (
             f"AtomDefinition(name={self.name!r}"
             + (f", synonyms={self.synonyms!r}" if self.synonyms else "")
+            + (
+                f", symbol={self.symbol!r}"
+                if (
+                    self.symbol == ""
+                    or not self.name.upper().startswith(self.symbol.upper())
+                )
+                else ""
+            )
             + ", ...)"
         )
 
@@ -1449,14 +1457,13 @@ class ResidueDefinition:
             ]
             if len(linking_bonds) == 0:
                 continue
-            target_name = f"NON_MATCHING_ATOM_{name}"
-            link_target = AtomDefinition.with_defaults(target_name, "", leaving=True)
+            link_target = AtomDefinition.with_defaults(name, "", leaving=True)
             graph.add_node(link_target)
             graph.add_edges_from(
                 (
                     link_target,
                     self.name_to_atom[bond.atom2],
-                    bond.replace(atom1=target_name),
+                    bond,
                 )
                 for bond in linking_bonds
             )
@@ -1543,9 +1550,6 @@ class ResidueDefinition:
                 )
 
         assert graph.is_connected()
-        logging.debug(
-            f"      graph includes atom names {[atom.name for atom in graph.nodes]}",
-        )
         return graph
 
     def visualize(
