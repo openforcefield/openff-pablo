@@ -108,7 +108,7 @@ def unwrap_or_none[T](container: Iterable[T]) -> T | None:
 
 
 def sort_tuple[*Ts](tup: tuple[*Ts]) -> tuple[*Ts]:
-    return tuple(sorted(tup))  # type: ignore
+    return tuple(sorted(tup))  # pyright: ignore[reportArgumentType, reportUnknownVariableType, reportUnknownArgumentType]
 
 
 def flatten[T](container: Iterable[Iterable[T]]) -> Iterator[T]:
@@ -285,7 +285,7 @@ def cryst_to_box_vectors(
         )
         return box_vectors.value_in_unit(openmm_unit_nanometer) * unit.nanometer
 
-    return inner(a, b, c, alpha, beta, gamma)  # type: ignore
+    return inner(a, b, c, alpha, beta, gamma)  # pyright: ignore[reportUnknownVariableType]
 
 
 def assign_stereochemistry_from_3d(molecule: MoleculeLike):
@@ -438,7 +438,7 @@ def draw_molecule(
             old: new
             for new, old in enumerate(
                 a.GetIdx()
-                for a in rdmol.GetAtoms()  # type: ignore
+                for a in rdmol.GetAtoms()
                 if a.GetAtomicNum() != 1 and a.GetMass() != 1
             )
         }

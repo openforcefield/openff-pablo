@@ -96,7 +96,7 @@ def parse_cif(string: str) -> list[dict[str, list[str]]]:
     for block in document:
         blocks.append({})
         for item in block:
-            if item.loop is not None:  # type: ignore
+            if item.loop is not None:  # pyright: ignore[reportUnnecessaryComparison]
                 loop = item.loop
                 # item.line_number is incorrect - appears to be 2n+1 where n is
                 # the true line number
@@ -124,12 +124,12 @@ def parse_cif(string: str) -> list[dict[str, list[str]]]:
                     },
                 )
             elif item.pair is not None:
-                tag, value = item.pair  # type: ignore
+                tag, value = item.pair  # pyright: ignore[reportGeneralTypeIssues, reportUnknownVariableType]
                 if tag in blocks[-1] or tag + ".__pablo__line_no" in blocks[-1]:
                     raise PabloError("tag cannot be set twice")
                 blocks[-1][tag] = [value]
                 blocks[-1][tag + ".__pablo__line_no"] = [str(item.line_number // 2)]
-            elif item.frame is not None:  # type: ignore
+            elif item.frame is not None:
                 raise PabloError("frames not supported")
             else:
                 raise PabloError("unknown item type")

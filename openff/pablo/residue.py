@@ -497,7 +497,7 @@ class ResidueDefinition:
                     synonyms=(),
                     symbol=atom.symbol,
                     leaving=bool(atom.metadata.get("leaving_atom")),
-                    charge=atom.formal_charge.m_as(unit.elementary_charge),  # type: ignore
+                    charge=atom.formal_charge.m_as(unit.elementary_charge),  # pyright: ignore[reportArgumentType]
                     stereo=atom.stereochemistry,
                     aromatic=atom.is_aromatic,
                 ),
@@ -605,7 +605,7 @@ class ResidueDefinition:
                     synonyms=tuple(synonyms_str.split()),
                     symbol=atom.symbol,
                     leaving=bool(atom.metadata.get("leaving_atom")),
-                    charge=atom.formal_charge.m_as(unit.elementary_charge),  # type: ignore
+                    charge=atom.formal_charge.m_as(unit.elementary_charge),  # pyright: ignore[reportArgumentType]
                     stereo=atom.stereochemistry,
                     aromatic=atom.is_aromatic,
                 ),

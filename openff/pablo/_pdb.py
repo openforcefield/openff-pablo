@@ -169,12 +169,12 @@ def topology_from_pdb(
     """
     if hasattr(file, "readlines"):
         if format is None and hasattr(file, "filename"):
-            format = Path(file.name).suffix[1:].upper()  # type: ignore
-        elif format is None or format == "":  # type: ignore
+            format = Path(file.filename).suffix[1:].upper()  # pyright: ignore[reportAssignmentType, reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownArgumentType]
+        elif format is None or format == "":
             format = "PDB"
-        data = PdbData.from_file_object(file, format=format)  # type: ignore
+        data = PdbData.from_file_object(file, format=format)  # pyright: ignore[reportArgumentType]
     else:
-        data = PdbData.from_file(file, format=format)  # type: ignore
+        data = PdbData.from_file(file, format=format)  # pyright: ignore[reportArgumentType]
 
     matches = data.get_successful_matches(
         residue_library,
@@ -242,7 +242,7 @@ def _build_topology(
 
 def _check_all_conects(topology: Topology, data: PdbData):
     all_bonds: set[tuple[int, int]] = {
-        sort_tuple((bond.atom1.metadata["pdb_index"], bond.atom2.metadata["pdb_index"]))  # type:ignore
+        sort_tuple((bond.atom1.metadata["pdb_index"], bond.atom2.metadata["pdb_index"]))  # pyright: ignore[reportAssignmentType]
         for bond in topology.bonds
     }
 

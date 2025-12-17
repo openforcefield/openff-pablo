@@ -18,7 +18,7 @@ class TestResidueMatch:
 
     def test_get_atom_type_error(self, cys_match: ResidueMatch):
         with pytest.raises(TypeError):
-            cys_match.atom(3.14159)  # type: ignore
+            cys_match.atom(3.14159)  # pyright: ignore[reportArgumentType]
 
     def test_set_crosslink_mutates_match(self, cys_match: ResidueMatch):
         cys_match.set_crosslink(cys_match.canonical_atom_name_to_index["SG"], 99)

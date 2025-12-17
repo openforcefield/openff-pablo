@@ -118,3 +118,4 @@ poetry.lock
 
 .ccd_cache/
 .docs-build/
+ty.toml

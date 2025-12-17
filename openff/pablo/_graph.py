@@ -206,10 +206,11 @@ def _vf2_mapping[
         tuple[Literal["FIRST", "SECOND"], EdgeT | OtherEdgeT],
     ] = rx.PyGraph()
     first_comp_dict = first_labeled.compose(
-        first,  # type: ignore[compose type annotation is incorrect]
+        # compose type annotation is too restrictive
+        first,  # pyright: ignore[reportArgumentType]
         {},
-        node_map_func=lambda x: ("FIRST", x),  # type: ignore
-        edge_map_func=lambda x: ("FIRST", x),  # type: ignore
+        node_map_func=lambda x: ("FIRST", x),  # pyright: ignore[reportArgumentType]
+        edge_map_func=lambda x: ("FIRST", x),  # pyright: ignore[reportArgumentType]
     )
     assert first_comp_dict == {i: i for i in range(first.num_nodes())}
     second_labeled: rx.PyGraph[
@@ -217,10 +218,11 @@ def _vf2_mapping[
         tuple[Literal["FIRST", "SECOND"], EdgeT | OtherEdgeT],
     ] = rx.PyGraph()
     second_comp_dict = second_labeled.compose(
-        second,  # type: ignore[compose type annotation is incorrect]
+        # compose type annotation is too restrictive
+        second,  # pyright: ignore[reportArgumentType]
         {},
-        node_map_func=lambda x: ("SECOND", x),  # type: ignore
-        edge_map_func=lambda x: ("SECOND", x),  # type: ignore
+        node_map_func=lambda x: ("SECOND", x),  # pyright: ignore[reportArgumentType]
+        edge_map_func=lambda x: ("SECOND", x),  # pyright: ignore[reportArgumentType]
     )
     assert second_comp_dict == {i: i for i in range(second.num_nodes())}
     return rx.vf2_mapping(
@@ -230,18 +232,18 @@ def _vf2_mapping[
             None
             if node_matcher is None
             else lambda a, b: (
-                node_matcher(a[1], b[1])  # type: ignore
+                node_matcher(a[1], b[1])  # pyright: ignore[reportArgumentType]
                 if a[0] == "FIRST"
-                else node_matcher(b[1], a[1])  # type: ignore
+                else node_matcher(b[1], a[1])  # pyright: ignore[reportArgumentType]
             )
         ),
         edge_matcher=(
             None
             if edge_matcher is None
             else lambda a, b: (
-                edge_matcher(a[1], b[1])  # type: ignore
+                edge_matcher(a[1], b[1])  # pyright: ignore[reportArgumentType]
                 if a[0] == "FIRST"
-                else edge_matcher(b[1], a[1])  # type: ignore
+                else edge_matcher(b[1], a[1])  # pyright: ignore[reportArgumentType]
             )
         ),
         id_order=id_order,
