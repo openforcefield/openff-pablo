@@ -57,6 +57,11 @@ FAST_PDBS: list[tuple[str, str, list[ResidueDefinition]]] = [
         "1A4T.json",
         [],
     ),
+    (
+        "1CSA.pdb",
+        "1CSA.topology.json",
+        [],
+    ),
 ]
 SLOW_PDBS: list[tuple[str, str, list[ResidueDefinition]]] = [
     (
@@ -151,6 +156,7 @@ def test_topology_identical_to_jsontop_fast(
 
 
 @pytest.mark.slow
+@pytest.mark.skip  # Less good versino of test_polymers_smiles
 @pytest.mark.parametrize(
     "pdbfile",
     [

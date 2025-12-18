@@ -245,11 +245,16 @@ def _check_all_conects(topology: Topology, data: PdbData):
         sort_tuple((bond.atom1.metadata["pdb_index"], bond.atom2.metadata["pdb_index"]))  # pyright: ignore[reportAssignmentType]
         for bond in topology.bonds
     }
+    logging.debug(f"checking bonds in topology: {sorted(all_bonds)}")
 
     conect_bonds: set[tuple[int, int]] = set()
     for i, js in enumerate(data.conects):
+        if data.model[i] != data.model[0]:
+            logging.debug("Only checking CONECT records from first model")
+            break
         for j in js:
             conect_bonds.add(sort_tuple((i, j)))
+    logging.debug(f"against conects: {sorted(conect_bonds)}")
     if not conect_bonds.issubset(all_bonds):
         unknown_conects = conect_bonds.difference(all_bonds)
         raise PabloError(

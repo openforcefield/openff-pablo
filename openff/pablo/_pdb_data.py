@@ -697,11 +697,64 @@ class PdbData:
             missing_atom_names,
         ):
             logging.debug("    Match succeeded!")
+            self.set_linkages_from_conects(match)
             return match
         else:
             reason = "Expected atoms are missing:"
             logging.debug("    Match failed: " + reason)
             return match.reject(reason)
+
+    def set_linkages_from_conects(self, match: ResidueMatch) -> None:
+        posterior_bond = match.residue_definition.linking_bond
+        prior_bond = None if posterior_bond is None else posterior_bond.flipped()
+        for bond, expect_link, set_func, set_partner_first in [
+            (prior_bond, match.expects_prior_bond, match.set_prior_bond, True),
+            (
+                posterior_bond,
+                match.expects_posterior_bond,
+                match.set_posterior_bond,
+                False,
+            ),
+            # (
+            #     match.residue_definition.crosslink,
+            #     match.expects_crosslink,
+            #     match.set_crosslink,
+            # ),
+        ]:
+            if bond is None or not expect_link:
+                continue
+
+            linking_name = bond.atom1
+            partner_name = bond.atom2
+
+            linking_atom_idx = match.canonical_atom_name_to_index[linking_name]
+            conect_partners = [
+                (self.name[i], i)
+                for i in self.conects[linking_atom_idx]
+                if self.name[i] == partner_name and i not in match.res_atom_idcs
+            ]
+            if len(conect_partners) > 1:
+                i = match.prototype_index
+                res = f"{self.chain_id[i]}:{self.res_name[i]}{self.res_seq[i]}"
+                line = self.line_no[i]
+                logging.info(
+                    "    Multiple possible prior linking bond partners"
+                    + f" found in CONECT records for residue {res} ({line});"
+                    + " ignoring all and proceeding with standard linkage"
+                    + "analysis",
+                )
+                continue
+            elif len(conect_partners) != 1:
+                continue
+
+            ((_, partner_atom_idx),) = conect_partners
+            logging.debug(
+                f"    Unique linking bond {(partner_atom_idx, linking_atom_idx)} found in CONECT records; setting with {set_func.__name__}",
+            )
+            if set_partner_first:
+                set_func(partner_atom_idx, linking_atom_idx)
+            else:
+                set_func(linking_atom_idx, partner_atom_idx)
 
     @cached_property
     def atom_idx_to_res_idx(self) -> dict[int, int]:
@@ -1033,13 +1086,15 @@ class PdbData:
         this_matches = all_matches[this_res_idx]
         prev_matches, next_matches = self._get_prev_next(this_res_idx, all_matches)
 
+        res_atom_idcs = this_matches[0].res_atom_idcs
         if len(list(only_matched(this_matches))) != 0:
             logging.info(
-                f"Beginning link-based match of {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
+                f"Beginning link-based match of {self.res_name[this_matches[0].prototype_index]} {res_atom_idcs}",
             )
         else:
             yield from this_matches
             return
+        assert self.res_idx is not None
         # neighbour_supported_posterior_bonds and
         # neighbour_supported_prior_bonds are maps from possible linking
         # bonds in this residue to the atom index (in the neighbouring
@@ -1065,13 +1120,24 @@ class PdbData:
 
         valid_next_matches = list(only_matched(next_matches))
         neighbours_support_molecule_end = (
-            any(not next_match.expects_prior_bond for next_match in valid_next_matches)
+            any(
+                (
+                    next_match.prior_bond_idcs is not None
+                    and next_match.prior_bond_idcs[0] not in res_atom_idcs
+                )
+                or not next_match.expects_prior_bond
+                for next_match in valid_next_matches
+            )
             or len(valid_next_matches) == 0
         )
         valid_prev_matches = list(only_matched(prev_matches))
         neighbours_support_molecule_start = (
             any(
-                not prev_match.expects_posterior_bond
+                (
+                    prev_match.posterior_bond_idcs is not None
+                    and prev_match.posterior_bond_idcs[1] not in res_atom_idcs
+                )
+                or not prev_match.expects_posterior_bond
                 for prev_match in valid_prev_matches
             )
             or len(valid_prev_matches) == 0
@@ -1101,35 +1167,28 @@ class PdbData:
                 f"  Attempting link-based match against {match.residue_definition.description}",
             )
             if match.expects_prior_bond:
-                assert match.residue_definition.linking_bond is not None
-                prior_partner_name = match.residue_definition.linking_bond.atom1
-                prior_linking_name = match.residue_definition.linking_bond.atom2
-                prior_bond_linking_atom_idx = match.canonical_atom_name_to_index[
-                    prior_linking_name
-                ]
-                prior_conect_partners = [
-                    (self.name[i], i)
-                    for i in self.conects[prior_bond_linking_atom_idx]
-                    if self.name[i] == prior_partner_name
-                    and i not in match.res_atom_idcs
-                ]
-                if len(prior_conect_partners) > 1:
-                    i = match.prototype_index
-                    res = f"{self.chain_id[i]}:{self.res_name[i]}{self.res_seq[i]}"
-                    line = self.line_no[i]
-                    logging.info(
-                        "    Multiple possible prior linking bond partners"
-                        + f" found in CONECT records for residue {res} ({line});"
-                        + " ignoring all and proceeding with standard linkage"
-                        + "analysis",
+                if (
+                    match.prior_bond_idcs is not None
+                    and (
+                        match.prior_bond_idcs[1]
+                        in self.conects[match.prior_bond_idcs[0]]
                     )
-
-                if len(prior_conect_partners) == 1:
-                    logging.debug("    Unique prior bond found in CONECT records")
-                    ((_, prior_bond_partner_atom_idx),) = prior_conect_partners
-                    match.set_prior_bond(
-                        prior_bond_partner_atom_idx,
-                        prior_bond_linking_atom_idx,
+                    and any(
+                        isinstance(partner_match, NoResidueDefinitions)
+                        or (
+                            isinstance(partner_match, ResidueMatch)
+                            and (
+                                partner_match.posterior_bond_idcs
+                                == match.prior_bond_idcs
+                            )
+                        )
+                        for partner_match in all_matches[
+                            self.res_idx[match.prior_bond_idcs[0]]
+                        ]
+                    )
+                ):
+                    logging.debug(
+                        "    Valid bond to previous residue already set from CONECT records",
                     )
                 elif (
                     match.residue_definition.linking_bond
@@ -1149,7 +1208,9 @@ class PdbData:
                         neighbour_supported_prior_bonds[
                             match.residue_definition.linking_bond
                         ],
-                        prior_bond_linking_atom_idx,
+                        match.canonical_atom_name_to_index[
+                            match.residue_definition._prior_bond_linking_atom
+                        ],
                     )
                     if (
                         match.prior_bond_idcs is not None
@@ -1171,37 +1232,32 @@ class PdbData:
                 continue
 
             if match.expects_posterior_bond:
-                assert match.residue_definition.linking_bond is not None
-                posterior_linking_name = match.residue_definition.linking_bond.atom1
-                posterior_partner_name = match.residue_definition.linking_bond.atom2
-                posterior_bond_linking_atom_idx = match.canonical_atom_name_to_index[
-                    posterior_linking_name
-                ]
-                posterior_conect_partners = [
-                    (self.name[i], i)
-                    for i in self.conects[posterior_bond_linking_atom_idx]
-                    if self.name[i] == posterior_partner_name
-                    and i not in match.res_atom_idcs
-                ]
-                if len(posterior_conect_partners) > 1:
-                    i = match.prototype_index
-                    res = f"{self.chain_id[i]}:{self.res_name[i]}{self.res_seq[i]}"
-                    line = self.line_no[i]
-                    logging.info(
-                        "    Multiple possible posterior linking bond partners"
-                        + f" found in CONECT records for residue {res} ({line});"
-                        + " ignoring all and proceeding with standard linkage"
-                        + " analysis",
-                    )
+                logging.debug(
+                    f"    {match.posterior_bond_idcs=}",
+                )
 
-                if len(posterior_conect_partners) == 1:
-                    logging.debug(
-                        "    Unique posterior bond found in CONECT records",
+                if (
+                    match.posterior_bond_idcs is not None
+                    and (
+                        match.posterior_bond_idcs[1]
+                        in self.conects[match.posterior_bond_idcs[0]]
                     )
-                    ((_, posterior_bond_partner_atom_idx),) = posterior_conect_partners
-                    match.set_posterior_bond(
-                        posterior_bond_linking_atom_idx,
-                        posterior_bond_partner_atom_idx,
+                    and any(
+                        isinstance(partner_match, NoResidueDefinitions)
+                        or (
+                            isinstance(partner_match, ResidueMatch)
+                            and (
+                                partner_match.prior_bond_idcs
+                                == match.posterior_bond_idcs
+                            )
+                        )
+                        for partner_match in all_matches[
+                            self.res_idx[match.posterior_bond_idcs[1]]
+                        ]
+                    )
+                ):
+                    logging.debug(
+                        "    Valid bond to next residue already set from CONECT records",
                     )
                 elif (
                     match.residue_definition.linking_bond
@@ -1464,9 +1520,10 @@ class PdbData:
         If residues are "adjacent" and capable of forming links, matches that
         don't link them are rejected; if they're not "adjacent", those that do
         attempt to form links are rejected. Residues ``a`` and ``b`` are
-        considered adjacent if ``b``'s ``ATOM``/``HETATM`` records immediately
-        follow ``a``'s, there is no ``TER`` record between ``a`` and ``b``, and
-        ``a`` and ``b`` have the same chain identifier.
+        considered adjacent if their interresidue bond is a CONECT record, or if
+        ``b``'s ``ATOM``/``HETATM`` records immediately follow ``a``'s, there is
+        no ``TER`` record between ``a`` and ``b``, and ``a`` and ``b`` have the
+        same chain identifier.
 
         Parameters
         ----------
@@ -1553,9 +1610,18 @@ class PdbData:
             current_match_forms_prior_bond = match.prior_bond_idcs is not None
             current_match_forms_posterior_bond = match.posterior_bond_idcs is not None
 
+            this_prev_is_adjacent = prev_is_adjacent
+            this_next_is_adjacent = next_is_adjacent
+            if match.prior_bond_idcs is not None and not this_prev_is_adjacent:
+                prior_a, prior_b = match.prior_bond_idcs
+                this_prev_is_adjacent = prior_a in self.conects[prior_b]
+            if match.posterior_bond_idcs is not None and not this_next_is_adjacent:
+                posterior_a, posterior_b = match.posterior_bond_idcs
+                this_next_is_adjacent = posterior_a in self.conects[posterior_b]
+
             if (
                 can_form_prior_bond
-                and prev_is_adjacent
+                and this_prev_is_adjacent
                 and not current_match_forms_prior_bond
             ):
                 reason = "adjacent residues in unterminated chain can be linked"
@@ -1566,7 +1632,7 @@ class PdbData:
                 continue
             elif (
                 can_form_prior_bond
-                and not prev_is_adjacent
+                and not this_prev_is_adjacent
                 and current_match_forms_prior_bond
             ):
                 reason = "non-adjacent residues in unterminated chain cannot be linked"
@@ -1577,7 +1643,7 @@ class PdbData:
                 continue
             if (
                 can_form_posterior_bond
-                and next_is_adjacent
+                and this_next_is_adjacent
                 and not current_match_forms_posterior_bond
             ):
                 reason = "adjacent residues in unterminated chain can be linked"
@@ -1588,7 +1654,7 @@ class PdbData:
                 continue
             elif (
                 can_form_posterior_bond
-                and not next_is_adjacent
+                and not this_next_is_adjacent
                 and current_match_forms_posterior_bond
             ):
                 reason = "non-adjacent residues in unterminated chain cannot be linked"

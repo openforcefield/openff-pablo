@@ -181,6 +181,11 @@ class ResidueMatch(MatchProtocol):
     def canonical_atom_name_to_index(self) -> dict[str, int]:
         return {atom.name: i for i, atom in self.index_to_atomdef.items()}
 
+    def must_infer_prior_bond(self) -> bool:
+        if self.prior_bond_idcs is not None:
+            return False
+        return self.expects_prior_bond
+
     @cached_property
     def expects_prior_bond(self) -> bool:
         if self.residue_definition.linking_bond is None:
@@ -194,6 +199,11 @@ class ResidueMatch(MatchProtocol):
             and len(expected_leaving_atoms) > 0
             and expected_leaving_atoms.issubset(self.missing_leaving_atoms)
         )
+
+    def must_infer_posterior_bond(self) -> bool:
+        if self.posterior_bond_idcs is not None:
+            return False
+        return self.expects_posterior_bond
 
     @cached_property
     def expects_posterior_bond(self) -> bool:

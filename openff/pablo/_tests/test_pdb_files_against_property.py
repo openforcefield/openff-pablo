@@ -1134,20 +1134,60 @@ def test_7yv1_peptide_using_sdf(tmp_ccd_cache: CcdCache):
     )
 
 
-def test_two_butanols_fails_with_no_additional_definitions():
+def test_two_butanols_fails_with_no_additional_definitions(tmp_ccd_cache: CcdCache):
     with pytest.raises(PdbResidueMatchError):
         topology_from_pdb(
             get_test_data_path("two_butanols.pdb"),
+            residue_library=tmp_ccd_cache,
             additional_definitions=[],
         )
 
 
-def test_two_butanols_fails_with_wrong_additional_definitions():
+def test_two_butanols_fails_with_wrong_additional_definitions(tmp_ccd_cache: CcdCache):
     with pytest.raises(PdbResidueMatchError):
         topology_from_pdb(
             get_test_data_path("two_butanols.pdb"),
+            residue_library=tmp_ccd_cache,
             additional_definitions=[ResidueDefinition.anon_from_smiles("CCC")],
         )
+
+
+def test_1csa_maestro_loads(tmp_ccd_cache: CcdCache):
+    tmp_ccd_cache.auto_download = True
+    maestro_top = topology_from_pdb(
+        get_test_data_path("prepared_pdbs/1csa_maestro.pdb"),
+        residue_library=tmp_ccd_cache,
+    )
+    json_top_peptide_only = Topology.from_json(
+        get_test_data_path("1CSA.topology.json").read_text(),
+    )
+    for maestro_mol, json_mol in zip(
+        maestro_top.molecules,
+        json_top_peptide_only.molecules,
+    ):
+        assert maestro_mol.is_isomorphic_with(json_mol)
+
+    assert maestro_top.n_molecules == 2016
+    assert maestro_top.n_unique_molecules == 4
+
+
+def test_1csa_maestro_waterfirst_loads(tmp_ccd_cache: CcdCache):
+    """Test cyclic peptide after monomeric residue with PDB file with first (cyclic peptide) molecule moved to end"""
+    tmp_ccd_cache.auto_download = True
+    maestro_top = topology_from_pdb(
+        get_test_data_path("prepared_pdbs/1csa_maestro_waterfirst.pdb"),
+        residue_library=tmp_ccd_cache,
+    )
+    json_top_peptide_only = Topology.from_json(
+        get_test_data_path("1CSA.topology.json").read_text(),
+    )
+
+    json_peptide = json_top_peptide_only.molecule(0)
+    maestro_peptide = maestro_top.molecule(-1)
+    assert maestro_peptide.is_isomorphic_with(json_peptide)
+
+    assert maestro_top.n_molecules == 2016
+    assert maestro_top.n_unique_molecules == 4
 
 
 # TODO: Test that the correct atom metadata are written out (as documented in topology_from_pdb())
