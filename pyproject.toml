@@ -67,25 +67,18 @@ include = ["openff"]
 exclude = [
   ".soap",
   ".pixi",
-  "docs",
-  "examples",
-  "**/_tests/data",
   "**/node_modules",
   "**/__pycache__",
-  "**/.*",
 ]
 "ignore" = [
-  ".soap",
-  ".pixi",
   "docs",
   "examples",
   "**/_tests/data",
-  "**/node_modules",
-  "**/__pycache__",
   "**/.*",
 ]
 
 typeCheckingMode = "strict"
+strictGenericNarrowing = true
 
 reportUnsupportedDunderAll = "error"
 reportUnknownVariableType = "warning"
@@ -99,8 +92,8 @@ reportUnnecessaryIsInstance = "none"
 reportUnnecessaryTypeIgnoreComment = "error"
 reportPrivateUsage = "none"
 reportMissingTypeArgument = "none"
-
-strictGenericNarrowing = true
+reportIgnoreCommentWithoutRule = "error"
+reportUnnecessaryComparison = "information"
 
 [tool.ruff]
 namespace-packages = ["openff/pablo/"]

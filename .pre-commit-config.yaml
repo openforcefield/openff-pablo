@@ -21,7 +21,7 @@ repos:
         language: conda
         additional_dependencies:
           - pixi>=0.59.0
-          - ripgrep
+          - ripgrep>=15
           - git
         files: "pixi.toml|pixi.lock|devtools/conda-envs/docs_env.yaml"
         pass_filenames: false
@@ -38,7 +38,7 @@ repos:
         language: conda
         additional_dependencies:
           - pixi>=0.59.0
-          - ripgrep
+          - ripgrep>=15
           - git
         files: "pixi.toml|pixi.lock|devtools/conda-envs/test_env.yaml"
         pass_filenames: false
@@ -55,7 +55,7 @@ repos:
         language: conda
         additional_dependencies:
           - pixi>=0.59.0
-          - ripgrep
+          - ripgrep>=15
           - git
         files: "pixi.toml|pixi.lock|devtools/conda-envs/examples_env.yaml"
         pass_filenames: false

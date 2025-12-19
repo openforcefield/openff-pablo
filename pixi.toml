@@ -82,26 +82,27 @@ fulldev = { features = ["py312", "lint", "test", "doc", "example", "lint-tasks"]
 ci = { features = ["lint", "test"], solve-group = "default" }
 
 [feature.test-tasks.tasks.slowtest]
-cmd = "pytest -n auto"
+cmd = "pytest -n auto -rXsf"
 cwd = "."
-
 [feature.test-tasks.tasks.test]
-cmd = "pytest -n auto -m 'not slow'"
+cmd = "pytest -n auto -m 'not slow' -rXsf --timeout 5 -W ignore::DeprecationWarning"
 cwd = "."
-
 [feature.test-tasks.tasks.doctest]
 cmd = "pytest -n auto --doctest-glob 'docs/*.md' --doctest-glob 'docs/*.rst' --doctest-modules --ignore openff/pablo/_tests/ --ignore-glob docs/*.py openff/ docs/"
 cwd = "."
+
 [feature.doc-tasks.tasks.doc]
 cmd = "sphinx-build -j auto docs .docs-build/html"
 cwd = "."
-
+[feature.doc-tasks.tasks.servedocs]
+cmd = "sphinx-autobuild -j auto docs .docs-build/html"
+cwd = "."
 [feature.doc-tasks.tasks.watchdoc]
 cmd = "watchexec --on-busy-update restart -w openff -w docs --print-events 'sphinx-build -j auto docs .docs-build/html'"
 cwd = "."
 
 [feature.example-tasks.tasks.lab]
-cmd = "jupyter lab"
+cmd = "jupyter lab --ServerApp.iopub_data_rate_limit=10000000"
 cwd = "examples"
 
 [feature.lint-tasks.tasks.typecheck]
