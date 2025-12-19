@@ -1,0 +1,109 @@
+[workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64", "osx-64"]
+
+[dependencies]
+python = ">=3.12"
+openff-toolkit-base = ">=0.17.1"
+rdkit = "*"
+openmm = "*"
+numpy = "*"
+rustworkx = "*"
+pyxdg = "*"
+gemmi = "*"
+
+[pypi-dependencies]
+openff-pablo = { path = ".", editable = true }
+
+[feature.doc.dependencies]
+myst-parser = "*"
+sphinx = "==6.1.2"
+sphinx-notfound-page = "*"
+autodoc-pydantic = "*"
+sphinx-click = "*"
+myst-nb = "*"
+jupytext = "*"
+nglview = "==3.0.8"
+sphinx-autobuild = "*"
+
+[feature.doc.pypi-dependencies]
+openff-sphinx-theme = { git = "https://github.com/openforcefield/openff-sphinx-theme.git", rev = "main" }
+sphinx-hoverxref = "*"
+sphinx-paramlinks = "*"
+
+[feature.py312.dependencies]
+python = "3.12.*"
+[feature.py313.dependencies]
+python = "3.13.*"
+# [feature.py314.dependencies]
+# python = "3.14.*"
+
+[feature.test.dependencies]
+pytest = "*"
+pytest-xdist = "*"
+# pytest-cov = "*"
+# codecov = "*"
+pytest-socket = "*"
+pytest-timeout = "*"
+
+[feature.example.dependencies]
+jupyterlab = ">=4"
+ipywidgets = ">=8"
+jupyterlab_execute_time = "*"
+jupyterlab-lsp = "*"
+jupyterlab_rise = "*"
+jedi-language-server = "*"
+jupyterlab_code_formatter = "*"
+black = "*"
+isort = "*"
+snakeviz = "*"
+nglview = ">=3.0.6,<3.1.0"
+pdbfixer = "*"
+mdanalysis = "*"
+openff-interchange = "*"
+ambertools = "*"
+numpy = "*"
+pymol-open-source = "*"
+openff-nagl-base = ">=0.5.2"
+openff-nagl-models = "*"
+pytorch-cpu = ">=2.6"
+
+[feature.lint.dependencies]
+basedpyright = "*"
+ruff = "*"
+
+[environments]
+test = { features = ["py312", "test", "test-tasks"], solve-group = "default" }
+test-py313 = { features = ["py313","test"], solve-group = "py313" }
+# test-py314 = { features = ["py314", "test"], solve-group = "py314" }
+doc = { features = ["py312", "doc", "doc-tasks"], solve-group = "default" }
+example = { features = ["py312", "example", "example-tasks"], solve-group = "default" }
+fulldev = { features = ["py312", "lint", "test", "doc", "example", "lint-tasks"], solve-group = "default" }
+ci = { features = ["lint", "test"], solve-group = "default" }
+
+[feature.test-tasks.tasks.slowtest]
+cmd = "pytest -n auto"
+cwd = "."
+
+[feature.test-tasks.tasks.test]
+cmd = "pytest -n auto -m 'not slow'"
+cwd = "."
+
+[feature.test-tasks.tasks.doctest]
+cmd = "pytest -n auto --doctest-glob 'docs/*.md' --doctest-glob 'docs/*.rst' --doctest-modules --ignore openff/pablo/_tests/ --ignore-glob docs/*.py openff/ docs/"
+cwd = "."
+[feature.doc-tasks.tasks.doc]
+cmd = "sphinx-build -j auto docs .docs-build/html"
+cwd = "."
+
+[feature.doc-tasks.tasks.watchdoc]
+cmd = "watchexec --on-busy-update restart -w openff -w docs --print-events 'sphinx-build -j auto docs .docs-build/html'"
+cwd = "."
+
+[feature.example-tasks.tasks.lab]
+cmd = "jupyter lab"
+cwd = "examples"
+
+[feature.lint-tasks.tasks.typecheck]
+cmd = "basedpyright openff"
+cwd = "."

@@ -116,6 +116,9 @@ poetry.lock
 # zed
 .zed/
 
+# pixi
+.pixi/
+
 .ccd_cache/
 .docs-build/
 ty.toml

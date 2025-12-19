@@ -1,0 +1,35 @@
+name: pablo-examples
+channels:
+- conda-forge
+- nodefaults
+dependencies:
+- python 3.12.*
+- python >=3.12
+- jupyterlab >=4
+- ipywidgets >=8
+- jupyterlab_execute_time *
+- jupyterlab-lsp *
+- jupyterlab_rise *
+- jedi-language-server *
+- jupyterlab_code_formatter *
+- black *
+- isort *
+- snakeviz *
+- nglview >=3.0.6,<3.1.0
+- pdbfixer *
+- mdanalysis *
+- openff-interchange *
+- ambertools *
+- numpy *
+- pymol-open-source *
+- openff-nagl-base >=0.5.2
+- openff-nagl-models *
+- pytorch-cpu >=2.6
+- openff-toolkit-base >=0.17.1
+- rdkit *
+- openmm *
+- rustworkx *
+- pyxdg *
+- gemmi *
+- pip
+- pip:

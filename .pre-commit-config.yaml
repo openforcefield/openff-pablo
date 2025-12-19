@@ -6,6 +6,59 @@ ci:
   autoupdate_schedule: quarterly
 exclude: '^(\.tox|ci/templates|\.bumpversion\.cfg)(/|$)'
 repos:
+  - repo: local
+    hooks:
+      - id: export-docs-env
+        name: export docs_env.yaml from pixi
+        entry: |-
+          bash -c "
+            pixi workspace export conda-environment -e doc -n pablo-docs       \
+            | grep -v '^  - -e \.$'                                            \
+            | grep -v '^\s*$'                                                  \
+            > devtools/conda-envs/docs_env.yaml                                \
+            && git ls-files --error-unmatch devtools/conda-envs/docs_env.yaml
+          "
+        language: conda
+        additional_dependencies:
+          - pixi>=0.59.0
+          - grep
+          - git
+        files: "pixi.toml|pixi.lock|devtools/conda-envs/docs_env.yaml"
+        pass_filenames: false
+      - id: export-ci-env
+        name: export test_env.yaml from pixi
+        entry: |-
+          bash -c "
+            pixi workspace export conda-environment -e ci -n pablo-tests       \
+            | grep -v '^  - -e \.$'                                            \
+            | grep -v '^\s*$'                                                  \
+            > devtools/conda-envs/test_env.yaml                                \
+            && git ls-files --error-unmatch devtools/conda-envs/test_env.yaml
+          "
+        language: conda
+        additional_dependencies:
+          - pixi>=0.59.0
+          - grep
+          - git
+        files: "pixi.toml|pixi.lock|devtools/conda-envs/test_env.yaml"
+        pass_filenames: false
+      - id: export-example-env
+        name: export examples_env.yaml from pixi
+        entry: |-
+          bash -c "
+            pixi workspace export conda-environment -e example -n pablo-examples  \
+            | grep -v '^  - -e \.$'                                               \
+            | grep -v '^\s*$'                                                     \
+            > devtools/conda-envs/examples_env.yaml                               \
+            && git ls-files --error-unmatch devtools/conda-envs/examples_env.yaml
+          "
+        language: conda
+        additional_dependencies:
+          - pixi>=0.59.0
+          - grep
+          - git
+        files: "pixi.toml|pixi.lock|devtools/conda-envs/examples_env.yaml"
+        pass_filenames: false
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
