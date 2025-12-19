@@ -13,15 +13,15 @@ repos:
         entry: |-
           bash -c "
             pixi workspace export conda-environment -e doc -n pablo-docs       \
-            | grep -v '^  - -e \.$'                                            \
-            | grep -v '^\s*$'                                                  \
+            | rg -v '^  - -e \.$'                                              \
+            | rg -U '\A((:?.|\n)*?)(- pip:)?\n+\z' --replace '$1'              \
             > devtools/conda-envs/docs_env.yaml                                \
             && git ls-files --error-unmatch devtools/conda-envs/docs_env.yaml
           "
         language: conda
         additional_dependencies:
           - pixi>=0.59.0
-          - grep
+          - ripgrep
           - git
         files: "pixi.toml|pixi.lock|devtools/conda-envs/docs_env.yaml"
         pass_filenames: false
@@ -30,32 +30,32 @@ repos:
         entry: |-
           bash -c "
             pixi workspace export conda-environment -e ci -n pablo-tests       \
-            | grep -v '^  - -e \.$'                                            \
-            | grep -v '^\s*$'                                                  \
+            | rg -v '^  - -e \.$'                                              \
+            | rg -U '\A((:?.|\n)*?)(- pip:)?\n+\z' --replace '$1'              \
             > devtools/conda-envs/test_env.yaml                                \
             && git ls-files --error-unmatch devtools/conda-envs/test_env.yaml
           "
         language: conda
         additional_dependencies:
           - pixi>=0.59.0
-          - grep
+          - ripgrep
           - git
         files: "pixi.toml|pixi.lock|devtools/conda-envs/test_env.yaml"
         pass_filenames: false
-      - id: export-example-env
+      - id: export-examples-env
         name: export examples_env.yaml from pixi
         entry: |-
           bash -c "
             pixi workspace export conda-environment -e example -n pablo-examples  \
-            | grep -v '^  - -e \.$'                                               \
-            | grep -v '^\s*$'                                                     \
+            | rg -v '^  - -e \.$'                                                 \
+            | rg -U '\A((:?.|\n)*?)(- pip:)?\n+\z' --replace '$1'                 \
             > devtools/conda-envs/examples_env.yaml                               \
             && git ls-files --error-unmatch devtools/conda-envs/examples_env.yaml
           "
         language: conda
         additional_dependencies:
           - pixi>=0.59.0
-          - grep
+          - ripgrep
           - git
         files: "pixi.toml|pixi.lock|devtools/conda-envs/examples_env.yaml"
         pass_filenames: false
