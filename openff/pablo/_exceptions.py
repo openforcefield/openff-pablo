@@ -153,21 +153,27 @@ def create_pdb_residue_match_error(
                 expects = ", ".join(
                     flatten(
                         [
-                            ("crosslink",)
-                            if err.expects_crosslink
-                            and not all(expects_crosslinks)
-                            and any(expects_crosslinks)
-                            else (),
-                            ("posterior bond",)
-                            if err.expects_posterior_bond
-                            and not all(expects_posteriors)
-                            and any(expects_posteriors)
-                            else (),
-                            ("prior bond",)
-                            if err.expects_prior_bond
-                            and not all(expects_priors)
-                            and any(expects_priors)
-                            else (),
+                            (
+                                ("crosslink",)
+                                if err.expects_crosslink
+                                and not all(expects_crosslinks)
+                                and any(expects_crosslinks)
+                                else ()
+                            ),
+                            (
+                                ("posterior bond",)
+                                if err.expects_posterior_bond
+                                and not all(expects_posteriors)
+                                and any(expects_posteriors)
+                                else ()
+                            ),
+                            (
+                                ("prior bond",)
+                                if err.expects_prior_bond
+                                and not all(expects_priors)
+                                and any(expects_priors)
+                                else ()
+                            ),
                         ],
                     ),
                 )
@@ -240,11 +246,15 @@ def create_pdb_residue_match_error(
                     f"  {match.description}{'' if count == 1 else ' (matched ' + str(count) + ' times)'}",
                 )
 
+            max_print_unmatched_lines = 10
             if len(unmatched_atoms) == 0:
                 msg.append("All atoms were identified.")
-            elif len(unmatched_atoms) <= 100:
+            else:
                 atom_len = max(len(s) for s in unmatched_atoms)
                 batch_size = (80) // (atom_len + 2)
+                snipped_atoms = (
+                    len(unmatched_atoms) - max_print_unmatched_lines * batch_size
+                )
                 msg.extend(
                     [
                         "The following atoms were left unidentified:",
@@ -258,30 +268,43 @@ def create_pdb_residue_match_error(
                                     ),
                                 )
                                 for atom in atoms
-                            )  # nofmt
-                            for atoms in itertools.batched(
-                                unmatched_atoms,
-                                batch_size,
                             )
+                            for atoms in itertools.islice(
+                                itertools.batched(
+                                    unmatched_atoms,
+                                    batch_size,
+                                ),
+                                max_print_unmatched_lines,
+                            )
+                        ),
+                        *(
+                            (f"  ... and {snipped_atoms} more.",)
+                            if snipped_atoms > 0
+                            else ()
                         ),
                     ],
                 )
-            else:
-                msg.append("More than 100 atoms were left unidentified.")
 
-            max_print_unmatched_bonds = 200000
             if len(unmatched_bonds) == 0:
                 msg.append("All bonds between known atoms were identified")
-            elif len(unmatched_bonds) <= max_print_unmatched_bonds:
+            else:
+                snipped_bonds = len(unmatched_bonds) - max_print_unmatched_lines
                 msg.extend(
                     [
                         "The following bonds between known atoms were left unidentified:",
-                        *("  " + line for line in unmatched_bonds),
+                        *(
+                            "  " + line
+                            for line in itertools.islice(
+                                unmatched_bonds,
+                                max_print_unmatched_lines,
+                            )
+                        ),
+                        *(
+                            (f"  ... and {snipped_bonds} more.",)
+                            if snipped_bonds > 0
+                            else ()
+                        ),
                     ],
-                )
-            else:
-                msg.append(
-                    f"More than {max_print_unmatched_bonds} bonds between known atoms were left unidentified",
                 )
 
     if (
