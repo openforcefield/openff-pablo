@@ -14,7 +14,7 @@ repos:
       - id: end-of-file-fixer
       - id: debug-statements
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.0
+    rev: v3.21.2
     hooks:
       - id: pyupgrade
         args:
@@ -26,7 +26,7 @@ repos:
         files: "openff"
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.14.3
+    rev: v0.14.10
     hooks:
       # Run the linter.
       - id: ruff
@@ -43,7 +43,7 @@ repos:
   #       args: ["openff/pablo/", "-e", "openff/pablo/_tests/"]
   #       pass_filenames: false
   - repo: https://github.com/kynan/nbstripout
-    rev: 0.8.1
+    rev: 0.8.2
     hooks:
       - id: nbstripout
         files: ^examples
