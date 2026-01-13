@@ -1051,10 +1051,34 @@ class ResidueDefinition:
         return self.linking_bond.atom2
 
     @property
+    def _prior_bond_partner_atom(self) -> str:
+        if self.linking_bond is None:
+            raise PabloError("not a linking residue")
+        return self.linking_bond.atom1
+
+    @property
     def _posterior_bond_linking_atom(self) -> str:
         if self.linking_bond is None:
             raise PabloError("not a linking residue")
         return self.linking_bond.atom1
+
+    @property
+    def _posterior_bond_partner_atom(self) -> str:
+        if self.linking_bond is None:
+            raise PabloError("not a linking residue")
+        return self.linking_bond.atom2
+
+    @property
+    def _crosslink_linking_atom(self) -> str:
+        if self.crosslink is None:
+            raise PabloError("not a crosslinking residue")
+        return self.crosslink.atom1
+
+    @property
+    def _crosslink_partner_atom(self) -> str:
+        if self.crosslink is None:
+            raise PabloError("not a crosslinking residue")
+        return self.crosslink.atom2
 
     @property
     def _can_form_prior_bond(self) -> bool:
@@ -1476,10 +1500,11 @@ class ResidueDefinition:
 
         if crosslink is not None:
             crosslink_target = AtomDefinition.with_defaults(
-                crosslink.atom2,
+                crosslink.atom2 + "_CROSSLINK",
                 "",
                 leaving=True,
             )
+            assert crosslink_target.name not in {node.name for node in graph.nodes}
             graph.add_node(crosslink_target)
             graph.add_edge(
                 self.canonical_name_to_atom[crosslink.atom1],
@@ -1491,10 +1516,11 @@ class ResidueDefinition:
 
         if posterior_bond is not None:
             posterior_target = AtomDefinition.with_defaults(
-                posterior_bond.atom2,
+                posterior_bond.atom2 + "_POSTERIOR",
                 "",
                 leaving=True,
             )
+            assert posterior_target.name not in {node.name for node in graph.nodes}
             graph.add_node(posterior_target)
             graph.add_edge(
                 self.canonical_name_to_atom[posterior_bond.atom1],
@@ -1506,10 +1532,11 @@ class ResidueDefinition:
 
         if prior_bond is not None:
             prior_target = AtomDefinition.with_defaults(
-                prior_bond.atom1,
+                prior_bond.atom1 + "_PRIOR",
                 "",
                 leaving=True,
             )
+            assert prior_target.name not in {node.name for node in graph.nodes}
             graph.add_node(prior_target)
             graph.add_edge(
                 self.canonical_name_to_atom[prior_bond.atom2],

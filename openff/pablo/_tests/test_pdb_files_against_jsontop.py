@@ -107,7 +107,7 @@ def test_extended_atom_residue_numbering(
 @pytest.mark.slow
 @pytest.mark.parametrize(
     ("pdbfile", "jsontopfile", "additional_definitions"),
-    SLOW_PDBS,
+    [pytest.param(*args, marks=pytest.mark.slow) for args in SLOW_PDBS] + FAST_PDBS,
 )
 def test_topology_identical_to_jsontop_slow(
     pdbfile: str,
@@ -130,78 +130,44 @@ def test_topology_identical_to_jsontop_slow(
     )
 
 
-@pytest.mark.parametrize(
-    ("pdbfile", "jsontopfile", "additional_definitions"),
-    FAST_PDBS,
-)
-def test_topology_identical_to_jsontop_fast(
-    pdbfile: str,
-    jsontopfile: str,
-    additional_definitions: list[ResidueDefinition],
-    tmp_ccd_cache: CcdCache,
-):
-    tmp_ccd_cache.auto_download = True
+SLOW_POLYMERS = [
+    "8d1b.pdb",
+    "pnipam_modified-s49.pdb",
+    "7wcc.pdb",
+    "6cww.pdb",
+    "1lyd.pdb",
+    "PolyphenyleneIII.pdb",
+    "8f0x.pdb",
+    "polyethylene.pdb",
+    "polyphenyleneI.pdb",
+    "syntactic_styrene-s49.pdb",
+    "peg_modified-s49.pdb",
+    "polyethylmethacrylate-s81.pdb",
+    "7qt2.pdb",
+    "8e8i.pdb",
+    "polyphenylenesulfone-s16.pdb",
+    "7fse.pdb",
+    "polyethylene-s9.pdb",
+    "paam_modified-s64.pdb",
+    "atactic_styrene-s9.pdb",
+    "naturalrubber-s49.pdb",
+    "polyphenyleneII.pdb",
+    "8bhw.pdb",
+    "8fy3.pdb",
+    "7pvu.pdb",
+    "polyvinylchloride-s81.pdb",
+    "8gt9.pdb",
+]
 
-    pablo_top = topology_from_pdb(
-        get_test_data_path(pdbfile),
-        additional_definitions=additional_definitions,
-        residue_library=tmp_ccd_cache,
-    )
-    jsontop_top = Topology.from_json(get_test_data_path(jsontopfile).read_text())
 
-    topology_identical_to_jsontop(
-        pablo_top,
-        jsontop_top,
-    )
-
-
-@pytest.mark.slow
-@pytest.mark.skip  # Less good versino of test_polymers_smiles
 @pytest.mark.parametrize(
     "pdbfile",
     [
-        file
-        for dir in get_test_data_path("polymers/").iterdir()
-        if dir.is_dir()
-        for file in dir.iterdir()
-        if (
-            file.suffix.endswith(".pdb")
-            and file.with_suffix(".topology.json").exists()
-            and file.with_suffix(".monomers.json").exists()
+        (
+            pytest.param(file, marks=pytest.mark.slow)
+            if file.name in SLOW_POLYMERS
+            else file
         )
-    ],
-    ids=lambda pdbfile: pdbfile.name,
-)
-def test_polymers_smarts(
-    pdbfile: Path,
-    tmp_ccd_cache: CcdCache,
-    recwarn: pytest.WarningsRecorder,
-):
-    jsontopfile: Path = pdbfile.with_suffix(".topology.json")
-    monomersfile: Path = pdbfile.with_suffix(".monomers.json")
-    all_smarts = [
-        (key, smarts)
-        for key, smarts_list in json.loads(monomersfile.read_text()).items()
-        for smarts in smarts_list
-    ]
-    additional_definitions = [
-        ResidueDefinition._anon_from_smarts(smarts, description=key)
-        for key, smarts in all_smarts
-    ]
-    return polymers(
-        additional_definitions,
-        pdbfile,
-        jsontopfile,
-        tmp_ccd_cache,
-        recwarn,
-    )
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "pdbfile",
-    [
-        file
         for dir in get_test_data_path("polymers/").iterdir()
         if dir.is_dir()
         for file in dir.iterdir()

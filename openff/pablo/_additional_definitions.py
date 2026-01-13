@@ -326,6 +326,11 @@ class AdditionalDefMatch(ResidueMatch):
         resdef: ResidueDefinition,
     ) -> Self:
         """Compute the bond mapping for a particular atom mapping"""
+        n_unique_mapped_names = len(
+            {atomdef.name for atomdef in atom_mapping.values()},
+        )
+        assert n_unique_mapped_names == len(atom_mapping)
+
         neighbouring_atoms: dict[str, int] = {}
         matched_atoms: dict[str, int] = {}
         for i, atom in atom_mapping.items():
@@ -341,8 +346,8 @@ class AdditionalDefMatch(ResidueMatch):
             prior_bond = None
         elif resdef._prior_bond_leaving_atoms.isdisjoint(matched_atoms):
             prior_bond = (
-                neighbouring_atoms[resdef._prior_bond_linking_atom],
-                matched_atoms[resdef._posterior_bond_linking_atom],
+                neighbouring_atoms[resdef._prior_bond_partner_atom + "_PRIOR"],
+                matched_atoms[resdef._prior_bond_linking_atom],
             )
         else:
             assert False, "this is not a valid mapping"
@@ -354,8 +359,8 @@ class AdditionalDefMatch(ResidueMatch):
             posterior_bond = None
         elif resdef._posterior_bond_leaving_atoms.isdisjoint(matched_atoms):
             posterior_bond = (
-                matched_atoms[resdef._prior_bond_linking_atom],
-                neighbouring_atoms[resdef._posterior_bond_linking_atom],
+                matched_atoms[resdef._posterior_bond_linking_atom],
+                neighbouring_atoms[resdef._posterior_bond_partner_atom + "_POSTERIOR"],
             )
         else:
             assert False
@@ -367,8 +372,8 @@ class AdditionalDefMatch(ResidueMatch):
             crosslink = None
         elif resdef._crosslink_leaving_atoms.isdisjoint(matched_atoms):
             crosslink = (
-                matched_atoms[resdef.crosslink.atom1],
-                neighbouring_atoms[resdef.crosslink.atom2],
+                matched_atoms[resdef._crosslink_linking_atom],
+                neighbouring_atoms[resdef._crosslink_partner_atom + "_CROSSLINK"],
             )
         else:
             assert False
