@@ -1,5 +1,6 @@
 import itertools
 import logging
+import math
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
@@ -15,6 +16,8 @@ from .residue import AtomDefinition, BondDefinition, ResidueDefinition
 
 if TYPE_CHECKING:
     from openff.pablo._pdb_data import PdbData
+
+logger = logging.getLogger(__name__)
 
 
 def apply_additional_definitions(
@@ -35,9 +38,9 @@ def apply_additional_definitions(
         verified statically by the type checker. Any assert error in user code
         is a bug and may indicate that results are incorrect - please report it!
     """
-    logging.info("Generating graph of known info")
+    logger.info("Generating graph of known info")
     pdb_graph, atoms, bonds = _get_pdb_graph(data, matches)
-    logging.info(
+    logger.info(
         "  Generated graph with"
         + f" {len(atoms)} atoms"
         + f" ({sum(1 for atom in atoms.values() if atom is None)} unknown),"
@@ -47,7 +50,7 @@ def apply_additional_definitions(
 
     new_matches: list[AdditionalDefMatch] = []
     for resdef in additional_definitions:
-        logging.info(f"checking {resdef.description}")
+        logger.info(f"checking {resdef.description}")
         prev_n_new_matches = len(new_matches)
         new_matches.extend(
             _map_resdef_to_graph(
@@ -59,7 +62,7 @@ def apply_additional_definitions(
             ),
         )
         if prev_n_new_matches == len(new_matches):
-            logging.debug("  no matches")
+            logger.debug("  no matches")
 
     # Do the exhaustive o(n**2) check for ambiguity
     for mapping_a, mapping_b in itertools.combinations(new_matches, r=2):
@@ -128,8 +131,9 @@ def _get_pdb_graph(
 
 
 def _prettify_mapping(data: "PdbData", new_mapping: "AdditionalDefMatch") -> str:
+    pad = math.ceil(math.log10(max(len(data.line_no), *data.line_no)))
     return ", ".join(
-        f"{data.name[k]} (idx{k}@l{data.line_no[k]}): <{v.symbol}{v.name!r}{' (leaving)' if v.leaving else ''}>"
+        f"\n      {data.name[k]:>5} (idx{k:0>{pad}}@l{data.line_no[k]:0>{pad}}): <{v.symbol}{v.name!r}{' (leaving)' if v.leaving else ''}>"
         for k, v in sorted(new_mapping.index_to_atomdef.items())
     )
 
@@ -152,14 +156,14 @@ def _map_resdef_to_graph(
 
     mappings: list[AdditionalDefMatch] = []
     resdef_graphs = list(resdef._to_graphs())
-    logging.debug(
+    logger.debug(
         f"  {resdef.description} has {len(resdef_graphs)} graphs,"
         + f" {resdef.n_expected_atoms} expected atoms,"
         + f" {resdef.n_core_atoms} core atoms.",
     )
     n_successful_mappings = 0
     for i, resdef_graph in enumerate(resdef_graphs):
-        logging.debug(f"  Finding mappings for graph {i}")
+        logger.debug(f"  Finding mappings for graph {i}")
         for mapping in _get_all_mappings(data, pdb_graph, resdef_graph, atoms, bonds):
             n_successful_mappings += 1
             new_mapping = AdditionalDefMatch.from_mapping(
@@ -172,15 +176,15 @@ def _map_resdef_to_graph(
                 continue
 
             mapping_readable = _prettify_mapping(data, new_mapping)
-            logging.debug(f"    Found a new mapping: {mapping_readable}")
+            logger.debug(f"    Found a new mapping: {mapping_readable}")
             mappings.append(new_mapping)
 
-    logging.info(
+    logger.info(
         f"  Found {len(mappings)} unique mappings to {resdef.description} from"
         + f" {n_successful_mappings} total mappings",
     )
     # for mapping in mappings:
-    #     logging.info(f"    {_prettify_mapping(data, mapping)}")
+    #     logger.info(f"    {_prettify_mapping(data, mapping)}")
 
     return mappings
 
@@ -296,7 +300,7 @@ def _has_valid_connectivity(
 
         if resdef_atom.symbol == "":
             if data.name[pdb_idx] not in resdef_atom.names:
-                logging.debug(
+                logger.debug(
                     f"    MAPPING INVALID: invalid name {data.name[pdb_idx]} in PDB for {resdef_atom}",
                 )
                 return False
@@ -305,7 +309,7 @@ def _has_valid_connectivity(
         n_resdef_neighbours = n_resdef_neighbours_map[resdef_atom]
         n_pdb_neighbours = n_pdb_neighbours_map[pdb_idx]
         if n_resdef_neighbours != n_pdb_neighbours:
-            logging.debug(
+            logger.debug(
                 f"    MAPPING INVALID: {n_pdb_neighbours=} but {n_resdef_neighbours=} for {resdef_atom}",
             )
             return False

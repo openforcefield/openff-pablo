@@ -25,6 +25,8 @@ __all__ = [
     "topology_from_pdb",
 ]
 
+logger = logging.getLogger(__name__)
+
 
 def topology_from_pdb(
     file: PathLike[str] | str | IO[str] | TextIOBase,
@@ -201,7 +203,7 @@ def _build_topology(
     rdmol = data.matches_to_rdmol(matches, use_canonical_names=use_canonical_names)
 
     # Set positions
-    logging.debug("Setting conformer to PDB positions")
+    logger.debug("Setting conformer to PDB positions")
     rdmol_pdb_indices = [atom.properties["pdb_index"] for atom in rdmol.atoms]
     positions = np.stack([data.x, data.y, data.z], axis=-1) * unit.angstrom
     rdmol = rdmol.edit().add_conformer_and(positions[rdmol_pdb_indices]).freeze()
@@ -217,12 +219,12 @@ def _build_topology(
         offmol.add_default_hierarchy_schemes()
         molecules.append(offmol)
 
-    logging.debug("produce topology")
+    logger.debug("produce topology")
     topology = Topology.from_molecules(molecules)
 
     topology_pdb_indices = [atom.metadata["pdb_index"] for atom in topology.atoms]
     if topology_pdb_indices != sorted(topology_pdb_indices):
-        logging.debug(
+        logger.debug(
             "\n".join(
                 f"topology index {j: <7} has pdb index {i: <7}"
                 for j, i in enumerate(topology_pdb_indices)
@@ -245,16 +247,16 @@ def _check_all_conects(topology: Topology, data: PdbData):
         sort_tuple((bond.atom1.metadata["pdb_index"], bond.atom2.metadata["pdb_index"]))  # pyright: ignore[reportAssignmentType]
         for bond in topology.bonds
     }
-    logging.debug(f"checking bonds in topology: {sorted(all_bonds)}")
+    logger.debug(f"checking bonds in topology: {sorted(all_bonds)}")
 
     conect_bonds: set[tuple[int, int]] = set()
     for i, js in enumerate(data.conects):
         if data.model[i] != data.model[0]:
-            logging.debug("Only checking CONECT records from first model")
+            logger.debug("Only checking CONECT records from first model")
             break
         for j in js:
             conect_bonds.add(sort_tuple((i, j)))
-    logging.debug(f"against conects: {sorted(conect_bonds)}")
+    logger.debug(f"against conects: {sorted(conect_bonds)}")
     if not conect_bonds.issubset(all_bonds):
         unknown_conects = conect_bonds.difference(all_bonds)
         raise PabloError(

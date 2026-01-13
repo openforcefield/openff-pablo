@@ -9,6 +9,8 @@ from openff.pablo.exceptions import AmbiguousMatchError, PabloError
 
 from .residue import AtomDefinition, BondDefinition, ResidueDefinition
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class PossibleMatchProtocol(Protocol):
@@ -279,7 +281,7 @@ class ResidueMatch(MatchProtocol):
             if atom is not None and atom.symbol != ""
         }
         if self_identified_indices != other_identified_indices:
-            logging.debug(
+            logger.debug(
                 "    DISAGREE: Covers different indices"
                 + f" ({set(self.index_to_atomdef.keys())}"
                 + f" vs {set(other.index_to_atomdef.keys())})",
@@ -287,7 +289,7 @@ class ResidueMatch(MatchProtocol):
             return False
 
         if not isinstance(other, ResidueMatch):
-            logging.debug("  deferring to super class")
+            logger.debug("  deferring to super class")
             return super().agrees_with(other)
 
         # External connectivity graph should be identical
@@ -302,14 +304,14 @@ class ResidueMatch(MatchProtocol):
                 )
             )
         ):
-            logging.debug("  DISAGREES: external bonds differ")
+            logger.debug("  DISAGREES: external bonds differ")
             return False
 
         if (self.expects_prior_bond or self.expects_posterior_bond) and (
             self.residue_definition.linking_bond
             != other.residue_definition.linking_bond
         ):
-            logging.debug("  DISAGREES: linking bonds differ")
+            logger.debug("  DISAGREES: linking bonds differ")
             return False
 
         expect_same_bonds = (
@@ -318,13 +320,13 @@ class ResidueMatch(MatchProtocol):
             and self.expects_posterior_bond == other.expects_posterior_bond
         )
         if not expect_same_bonds:
-            logging.debug("  DISAGREES: Expects different linking bonds")
+            logger.debug("  DISAGREES: Expects different linking bonds")
             return False
 
         try:
             self.check_agrees_with_where_overlaps(other)
         except AmbiguousMatchError as e:
-            logging.debug(
+            logger.debug(
                 f"  DISAGREES: {' and '.join(e.reasons)}",
             )
             return False

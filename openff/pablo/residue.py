@@ -33,6 +33,8 @@ from openff.pablo.exceptions import PabloError, ResidueValidationError
 if TYPE_CHECKING:
     import IPython.core.display
 
+logger = logging.getLogger(__name__)
+
 __all__ = [
     "AtomDefinition",
     "BondDefinition",
@@ -1422,7 +1424,7 @@ class ResidueDefinition:
                         )
                         for i in range(len(leaving_atom_fragments) + 1)
                     ):
-                        logging.debug(
+                        logger.debug(
                             f"  Generating graph for {self.description}:"
                             + f" {crosslink=} {posterior_bond=} {prior_bond=} {leaving_atoms=}",
                         )

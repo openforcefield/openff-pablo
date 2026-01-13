@@ -41,6 +41,8 @@ __all__ = [
     "dbg",
 ]
 
+logger = logging.getLogger(__name__)
+
 
 class __UNSET__:
     """Reference value for an unset parameter."""
@@ -51,7 +53,7 @@ class __UNSET__:
 def dbg[T](o: T, msg: str = "{}") -> T:
     if "{}" not in msg:
         msg += ": {}"
-    logging.debug(msg.format(o))
+    logger.debug(msg.format(o))
     return o
 
 

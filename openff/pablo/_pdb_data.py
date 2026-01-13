@@ -53,6 +53,8 @@ __all__ = [
     "PdbData",
 ]
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class PdbData:
@@ -163,8 +165,8 @@ class PdbData:
             lines = [lines]
         block = unwrap(parse_cif("\n".join(lines)))
 
-        logging.warning(
-            "PDBx/mmCIF files include chemical information that Pablo ignores."
+        logger.warning(
+            "PDBx/mmCIF files may include chemical information that Pablo ignores."
             + " For details, see 'How Pablo loads PDB files' in the docs.",
         )
 
@@ -516,7 +518,7 @@ class PdbData:
         if len(res_atom_idcs) == 0:
             raise PabloError("cannot match empty res_atom_idcs")
 
-        logging.debug(f"  Attempting match against {residue_definition.description}")
+        logger.debug(f"  Attempting match against {residue_definition.description}")
 
         # Drop virtual sites
         unmatched_vsites = list(residue_definition.virtual_sites)
@@ -529,7 +531,7 @@ class PdbData:
                     unmatched_vsites.pop(unmatched_vsites.index(name))
                 except (ValueError, IndexError):
                     reason = f"Required virtual site {name} appeared too many times"
-                    logging.debug("    Match failed: " + reason)
+                    logger.debug("    Match failed: " + reason)
                     return ResidueMismatch(
                         residue_definition=residue_definition,
                         index_to_atomdef={j: None for j in res_atom_idcs},
@@ -541,17 +543,17 @@ class PdbData:
                 res_atom_idcs_without_vsites.append(i)
         if len(unmatched_vsites) != 0:
             reason = f"Required virtual sites not found in PDB file: {', '.join(unmatched_vsites)}"
-            logging.debug("    Match failed: " + reason)
+            logger.debug("    Match failed: " + reason)
             return ResidueMismatch(
                 residue_definition=residue_definition,
                 index_to_atomdef={i: None for i in res_atom_idcs},
                 reason=reason,
             )
         if len(matched_vsite_indices) != 0:
-            logging.info(
+            logger.info(
                 f"    Match to {residue_definition.description} dropped virtual sites on",
             )
-            logging.info(
+            logger.info(
                 f"    lines {', '.join(str(self.line_no[j]) for j in matched_vsite_indices)}",
             )
         res_atom_idcs = res_atom_idcs_without_vsites
@@ -559,7 +561,7 @@ class PdbData:
         # Skip definitions with too few atoms
         if len(residue_definition.atoms) < len(res_atom_idcs):
             reason = f"Too few atoms in residue definition ({len(residue_definition.atoms)} < {len(res_atom_idcs)})"
-            logging.debug("    Match failed: " + reason)
+            logger.debug("    Match failed: " + reason)
             return ResidueMismatch(
                 residue_definition=residue_definition,
                 index_to_atomdef={i: None for i in res_atom_idcs},
@@ -576,7 +578,7 @@ class PdbData:
             != len(res_atom_idcs)
         ):
             reason = "No links and wrong number of atoms"
-            logging.debug("    Match failed: " + reason)
+            logger.debug("    Match failed: " + reason)
             return ResidueMismatch(
                 residue_definition=residue_definition,
                 index_to_atomdef={i: None for i in res_atom_idcs},
@@ -629,7 +631,7 @@ class PdbData:
                 + ")"
             )
 
-            logging.debug("    Match failed: " + reason)
+            logger.debug("    Match failed: " + reason)
             return ResidueMismatch(
                 residue_definition=residue_definition,
                 index_to_atomdef=index_to_atomdef,
@@ -647,7 +649,7 @@ class PdbData:
         # Fail to match if any atoms in PDB file got matched to more than one name
         if len(matched_atoms) != len(res_atom_idcs):
             reason = "Atom definition matched multiple PDB coordinate records"
-            logging.debug("    Match failed: " + reason)
+            logger.debug("    Match failed: " + reason)
             return match.reject(reason)
 
         # This assert should be guaranteed by the above
@@ -659,7 +661,7 @@ class PdbData:
             for i, atom in index_to_atomdef.items()
         ):
             reason = "Element mismatch"
-            logging.debug("    Match failed: " + reason)
+            logger.debug("    Match failed: " + reason)
             return match.reject(reason)
 
         # PDB files can not be trusted; ignore charges.
@@ -668,7 +670,7 @@ class PdbData:
         #     self.charge[i] is not None and self.charge[i] != atom.charge
         #     for i, atom in index_to_atomdef.items()
         # ):
-        #     logging.debug("    Match failed: Charge mismatch")
+        #     logger.debug("    Match failed: Charge mismatch")
         #     return None
 
         missing_atoms = [
@@ -691,17 +693,17 @@ class PdbData:
                 reason += f" (unmatched atoms: {', '.join(self.name[i] for i in unmatched_indices)})"
             else:
                 reason += " (all present atoms were matched)"
-            logging.debug("    Match failed: " + reason)
+            logger.debug("    Match failed: " + reason)
             return match.reject(reason)
         elif residue_definition._missing_atoms_are_valid_leaving_atoms(
             missing_atom_names,
         ):
-            logging.debug("    Match succeeded!")
+            logger.debug("    Match succeeded!")
             self.set_linkages_from_conects(match)
             return match
         else:
             reason = "Expected atoms are missing:"
-            logging.debug("    Match failed: " + reason)
+            logger.debug("    Match failed: " + reason)
             return match.reject(reason)
 
     def set_linkages_from_conects(self, match: ResidueMatch) -> None:
@@ -737,7 +739,7 @@ class PdbData:
                 i = match.prototype_index
                 res = f"{self.chain_id[i]}:{self.res_name[i]}{self.res_seq[i]}"
                 line = self.line_no[i]
-                logging.info(
+                logger.info(
                     "    Multiple possible prior linking bond partners"
                     + f" found in CONECT records for residue {res} ({line});"
                     + " ignoring all and proceeding with standard linkage"
@@ -748,7 +750,7 @@ class PdbData:
                 continue
 
             ((_, partner_atom_idx),) = conect_partners
-            logging.debug(
+            logger.debug(
                 f"    Unique linking bond {(partner_atom_idx, linking_atom_idx)} found in CONECT records; setting with {set_func.__name__}",
             )
             if set_partner_first:
@@ -785,8 +787,8 @@ class PdbData:
         for res_atom_idcs in self.residue_indices:
             prototype_index = res_atom_idcs[0]
             res_name = self.res_name[prototype_index]
-            logging.info(f"Beginning name-based match of {res_name} {res_atom_idcs}")
-            logging.debug(
+            logger.info(f"Beginning name-based match of {res_name} {res_atom_idcs}")
+            logger.debug(
                 f"  Atom names are ({', '.join(self.name[i] for i in res_atom_idcs)})",
             )
 
@@ -858,7 +860,7 @@ class PdbData:
             yield from this_matches
             return
 
-        logging.info(
+        logger.info(
             f"Beginning link-based match of {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
         )
 
@@ -890,11 +892,11 @@ class PdbData:
                 continue
 
             resdef = match.residue_definition
-            logging.debug(f"  Attempting to rescue {resdef.description}")
+            logger.debug(f"  Attempting to rescue {resdef.description}")
             if len(resdef.virtual_sites) != 0:
                 # No CONECT-based matches for resdefs with virtual sites
                 # TODO: Implement this?
-                logging.debug("    REJECTED: Virtual sites not supported")
+                logger.debug("    REJECTED: Virtual sites not supported")
                 continue
 
             # Check that there are roughly the right number of atoms
@@ -902,14 +904,14 @@ class PdbData:
                 len(res_atom_idcs) < resdef.n_core_atoms
                 or len(res_atom_idcs) > resdef.n_expected_atoms
             ):
-                logging.debug(
+                logger.debug(
                     "    REJECTED: Wrong number of atoms "
                     + f"({len(res_atom_idcs)} should be in "
                     + f"[{resdef.n_core_atoms}, {resdef.n_expected_atoms}])",
                 )
                 continue
 
-            logging.debug("    Compiling bonds graph")
+            logger.debug("    Compiling bonds graph")
             # Build up a graph of the internal bonds we expect from the residue definition
             bonds = Graph[AtomDefinition, BondDefinition]()
             bonds.add_nodes_from(resdef.atoms)
@@ -918,14 +920,14 @@ class PdbData:
                 for bond in resdef.bonds
             )
 
-            logging.debug(f"    {bonds.n_nodes=} {conects.n_nodes=}")
+            logger.debug(f"    {bonds.n_nodes=} {conects.n_nodes=}")
             if bonds.is_subgraph_of(conects):
-                logging.debug("    subgraph exists without node matcher")
+                logger.debug("    subgraph exists without node matcher")
             else:
-                logging.debug("    subgraph does not exist without node matcher")
+                logger.debug("    subgraph does not exist without node matcher")
 
             # Iterate over subgraphs of bonds that match all of conects
-            logging.debug(
+            logger.debug(
                 "    Find matching subgraphs",
             )
             rescued: bool = False
@@ -948,7 +950,7 @@ class PdbData:
                 ),
             ):
                 mapping = {v: k for k, v in mapping.items()}
-                logging.debug(
+                logger.debug(
                     f"      mapping_{mapping_idx}={ {i: atom.name for i, atom in mapping.items()}!r}",
                 )
                 assert set(mapping) == set(match.res_atom_idcs)
@@ -961,7 +963,7 @@ class PdbData:
                     for atom in resdef.atoms
                     if atom not in mapping.values()
                 ):
-                    logging.debug(
+                    logger.debug(
                         "        REJECTED: Missing atoms are not leaving atoms",
                     )
                     continue
@@ -969,7 +971,7 @@ class PdbData:
                 missing_atoms = {
                     atom for atom in resdef.atoms if atom not in mapping.values()
                 }
-                logging.debug(f"      {missing_atoms=}")
+                logger.debug(f"      {missing_atoms=}")
 
                 if (
                     # Missing atoms must exactly define linking bonds
@@ -977,7 +979,7 @@ class PdbData:
                         {atom.name for atom in missing_atoms},
                     )
                 ):
-                    logging.debug(
+                    logger.debug(
                         "        REJECTED: Missing atoms are not a valid set of leaving atoms",
                     )
                     continue
@@ -997,12 +999,12 @@ class PdbData:
                 for pdb_idx, j in external_conects:
                     j_name = self.name[j]
                     i_name = mapping[pdb_idx].name
-                    logging.debug(
+                    logger.debug(
                         f"        {pdb_idx, j}: {(i_name, j_name)} {len(prev_matches)=} {len(next_matches)=}",
                     )
-                    logging.debug(f"          {resdef._possible_prior_bond_names=}")
-                    logging.debug(f"          {resdef._possible_posterior_bond_names=}")
-                    logging.debug(
+                    logger.debug(f"          {resdef._possible_prior_bond_names=}")
+                    logger.debug(f"          {resdef._possible_posterior_bond_names=}")
+                    logger.debug(
                         f"          {resdef._possible_crosslink_bond_names=}",
                     )
                     if (
@@ -1010,25 +1012,25 @@ class PdbData:
                         and j in prev_matches[0].res_atom_idcs
                         and (j_name, i_name) in resdef._possible_prior_bond_names
                     ):
-                        logging.debug("          prior")
+                        logger.debug("          prior")
                         prior_conects.append((j, pdb_idx))
                     elif (
                         len(next_matches) > 0
                         and j in next_matches[0].res_atom_idcs
                         and (i_name, j_name) in resdef._possible_posterior_bond_names
                     ):
-                        logging.debug("          posterior")
+                        logger.debug("          posterior")
                         posterior_conects.append((pdb_idx, j))
                     elif (i_name, j_name) in resdef._possible_crosslink_bond_names:
-                        logging.debug("          crosslink")
+                        logger.debug("          crosslink")
                         crosslink_conects.append((pdb_idx, j))
                     else:
-                        logging.debug("          unknown")
+                        logger.debug("          unknown")
                         unknown_conects.append((pdb_idx, j))
-                logging.debug(f"      {unknown_conects=}")
-                logging.debug(f"      {posterior_conects=}")
-                logging.debug(f"      {prior_conects=}")
-                logging.debug(f"      {crosslink_conects=}")
+                logger.debug(f"      {unknown_conects=}")
+                logger.debug(f"      {posterior_conects=}")
+                logger.debug(f"      {prior_conects=}")
+                logger.debug(f"      {crosslink_conects=}")
 
                 if (  # nofmt
                     # If there are conect records between this residue and another, match must agree
@@ -1040,7 +1042,7 @@ class PdbData:
                     or (bool(posterior_conects) and not match.expects_posterior_bond)
                     or (bool(prior_conects) and not match.expects_prior_bond)
                 ):
-                    logging.debug(
+                    logger.debug(
                         "        REJECTED: Interresidue CONECT records not compatible with missing leaving atoms",
                     )
                     continue
@@ -1055,12 +1057,12 @@ class PdbData:
                 # the remaining filters sort it out; if we end up with multiple
                 # matches at the end of filtering, then we couldn't
                 # unambiguously rescue this match
-                logging.debug("        ACCEPTED")
+                logger.debug("        ACCEPTED")
                 rescued = True
                 yield match
 
             if not rescued:
-                logging.debug("    REJECTED: no mappings matched")
+                logger.debug("    REJECTED: no mappings matched")
 
     def identify_polymer_linkages(
         self,
@@ -1088,7 +1090,7 @@ class PdbData:
 
         res_atom_idcs = this_matches[0].res_atom_idcs
         if len(list(only_matched(this_matches))) != 0:
-            logging.info(
+            logger.info(
                 f"Beginning link-based match of {self.res_name[this_matches[0].prototype_index]} {res_atom_idcs}",
             )
         else:
@@ -1147,23 +1149,23 @@ class PdbData:
         )
         this_residue_terminated = self.terminated[this_matches[0].prototype_index]
         if len(list(only_matched(this_matches))) != 0:
-            logging.debug(
+            logger.debug(
                 f"  {neighbour_supported_posterior_bonds=}",
             )
-            logging.debug(
+            logger.debug(
                 f"  {neighbour_supported_prior_bonds=}",
             )
-            logging.debug(
+            logger.debug(
                 f"  {neighbours_support_molecule_end=}",
             )
-            logging.debug(
+            logger.debug(
                 f"  {neighbours_support_molecule_start=}",
             )
         for match in this_matches:
             if not isinstance(match, ResidueMatch):
                 yield match
                 continue
-            logging.debug(
+            logger.debug(
                 f"  Attempting link-based match against {match.residue_definition.description}",
             )
             if match.expects_prior_bond:
@@ -1187,7 +1189,7 @@ class PdbData:
                         ]
                     )
                 ):
-                    logging.debug(
+                    logger.debug(
                         "    Valid bond to previous residue already set from CONECT records",
                     )
                 elif (
@@ -1195,12 +1197,12 @@ class PdbData:
                     not in neighbour_supported_prior_bonds
                 ):
                     reason = "Bond to previous residue expected but not supported by neighbor"
-                    logging.debug(f"    Match failed: {reason}")
+                    logger.debug(f"    Match failed: {reason}")
                     yield match.reject(reason)
                     continue
                 elif prev_residue_terminated:
                     reason = "Bond to previous residue expected but cannot form polymer bond across TER record"
-                    logging.debug(f"    Match failed: {reason}")
+                    logger.debug(f"    Match failed: {reason}")
                     yield match.reject(reason)
                     continue
                 else:
@@ -1219,7 +1221,7 @@ class PdbData:
                         reason = (
                             "Multiple inconsistent bonds to previous residue identified"
                         )
-                        logging.debug(f"    Match failed: {reason}")
+                        logger.debug(f"    Match failed: {reason}")
                         yield match.reject(reason)
                         continue
                     match.set_prior_bond(*bond_idcs)
@@ -1227,12 +1229,12 @@ class PdbData:
                 reason = (
                     "Bond to previous residue not expected but required by neighbor"
                 )
-                logging.debug(f"    Match failed: {reason}")
+                logger.debug(f"    Match failed: {reason}")
                 yield match.reject(reason)
                 continue
 
             if match.expects_posterior_bond:
-                logging.debug(
+                logger.debug(
                     f"    {match.posterior_bond_idcs=}",
                 )
 
@@ -1256,7 +1258,7 @@ class PdbData:
                         ]
                     )
                 ):
-                    logging.debug(
+                    logger.debug(
                         "    Valid bond to next residue already set from CONECT records",
                     )
                 elif (
@@ -1266,12 +1268,12 @@ class PdbData:
                     reason = (
                         "Bond to next residue expected but not supported by neighbor"
                     )
-                    logging.debug(f"    Match failed: {reason}")
+                    logger.debug(f"    Match failed: {reason}")
                     yield match.reject(reason)
                     continue
                 elif this_residue_terminated:
                     reason = "Bond to next residue expected but cannot form polymer bond across TER record"
-                    logging.debug(f"    Match failed: {reason}")
+                    logger.debug(f"    Match failed: {reason}")
                     yield match.reject(reason)
                     continue
                 else:
@@ -1290,17 +1292,17 @@ class PdbData:
                         reason = (
                             "Multiple inconsistent bonds to next residue identified"
                         )
-                        logging.debug(f"    Match failed: {reason}")
+                        logger.debug(f"    Match failed: {reason}")
                         yield match.reject(reason)
                         continue
                     match.set_posterior_bond(*bond_idcs)
             elif not neighbours_support_molecule_end:
                 reason = "Bond to next residue not expected but required by neighbor"
-                logging.debug(f"    Match failed: {reason}")
+                logger.debug(f"    Match failed: {reason}")
                 yield match.reject(reason)
                 continue
 
-            logging.debug("    Accepted")
+            logger.debug("    Accepted")
             yield match
 
     def filter_on_crosslinks(
@@ -1323,7 +1325,7 @@ class PdbData:
         # Check for crosslinks
         # TODO: This could be simplified if we required crosslinking atoms not to have synonyms
         if len(list(only_matched(this_matches))) != 0:
-            logging.info(
+            logger.info(
                 f"Assigning crosslinks for {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
             )
         else:
@@ -1333,18 +1335,18 @@ class PdbData:
             if not isinstance(match, ResidueMatch):
                 yield match
                 continue
-            logging.debug(
+            logger.debug(
                 f"  Attempting crosslink-based match against {match.residue_definition.description}",
             )
             if match.crosslink_idcs is not None:
                 # This match's crosslink has already been assigned
-                logging.debug(
+                logger.debug(
                     "    Skipping (crosslink already assigned)",
                 )
                 yield match
                 continue
             if not match.expects_crosslink:
-                logging.debug(
+                logger.debug(
                     "    Skipping (crosslink not expected)",
                 )
                 yield match
@@ -1352,7 +1354,7 @@ class PdbData:
             this_crosslink_def = match.residue_definition.crosslink
             if this_crosslink_def is None:
                 # No crosslink defined for this match
-                logging.debug(
+                logger.debug(
                     "    Skipping (crosslink not expected 2: electric boogaloo)",
                 )
                 yield match
@@ -1363,7 +1365,7 @@ class PdbData:
 
             this_crosslink_conects = self.conects[this_crosslink_atom_idx]
             for other_crosslink_atom_idx in this_crosslink_conects:
-                logging.debug(
+                logger.debug(
                     f"    checking possible partner {other_crosslink_atom_idx}",
                 )
                 other_crosslink_res_idx = self.atom_idx_to_res_idx[
@@ -1373,7 +1375,7 @@ class PdbData:
                 for other_match in other_matches:
                     if not isinstance(other_match, ResidueMatch):
                         continue
-                    logging.debug(
+                    logger.debug(
                         f"      in {other_match.residue_definition.description}",
                     )
                     other_crosslink_def = other_match.residue_definition.crosslink
@@ -1387,7 +1389,7 @@ class PdbData:
                         and other_crosslink_def.atom1
                         == other_crosslink_atom_canonical_name
                     ):
-                        logging.debug(
+                        logger.debug(
                             "        crosslink found!",
                         )
                         # We've found a crosslink!
@@ -1432,7 +1434,7 @@ class PdbData:
 
         yield from this_matches
         if not any(this_matches):
-            logging.info(
+            logger.info(
                 f"Matching additional_substructures to {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
             )
             res_atom_idcs = this_matches[0].res_atom_idcs
@@ -1441,7 +1443,7 @@ class PdbData:
                     res_atom_idcs,
                     residue_definition,
                 )
-            logging.debug(
+            logger.debug(
                 "  Done",
             )
 
@@ -1462,7 +1464,7 @@ class PdbData:
         """
         this_matches = all_matches[this_res_idx]
 
-        logging.info(
+        logger.info(
             f"Filtering matches on CONECT records for {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
         )
         for match in this_matches:
@@ -1470,7 +1472,7 @@ class PdbData:
                 yield match
                 continue
 
-            logging.debug(
+            logger.debug(
                 f"  Checking match {match.description}",
             )
 
@@ -1497,14 +1499,14 @@ class PdbData:
                 ),
             )
             if not found_conects.issubset(expected_bonds):
-                logging.debug(
+                logger.debug(
                     "    REJECTED: CONECT record but no bond",
                 )
                 yield match.reject(
                     "found CONECT record that could not be matched with a bond",
                 )
             else:
-                logging.debug(
+                logger.debug(
                     "    ACCEPTED",
                 )
                 yield match
@@ -1536,7 +1538,7 @@ class PdbData:
         prev_matches, next_matches = self._get_prev_next(this_res_idx, all_matches)
 
         # TODO: Nail down the definition of "Adjacent"
-        logging.info(
+        logger.info(
             f"Filtering matches for polymer linkages in {self.res_name[this_matches[0].prototype_index]} {this_matches[0].res_atom_idcs}",
         )
 
@@ -1585,16 +1587,16 @@ class PdbData:
             and not this_terminated
         )
 
-        logging.debug(
+        logger.debug(
             f"  {can_form_prior_bond=}",
         )
-        logging.debug(
+        logger.debug(
             f"  {can_form_posterior_bond=}",
         )
-        logging.debug(
+        logger.debug(
             f"  {prev_is_adjacent=}",
         )
-        logging.debug(
+        logger.debug(
             f"  {next_is_adjacent=}",
         )
 
@@ -1603,7 +1605,7 @@ class PdbData:
                 yield match
                 continue
 
-            logging.debug(
+            logger.debug(
                 f"  Checking {match.description}",
             )
 
@@ -1625,7 +1627,7 @@ class PdbData:
                 and not current_match_forms_prior_bond
             ):
                 reason = "adjacent residues in unterminated chain can be linked"
-                logging.debug(
+                logger.debug(
                     f"    REJECTED: {reason}",
                 )
                 yield match.reject(reason)
@@ -1636,7 +1638,7 @@ class PdbData:
                 and current_match_forms_prior_bond
             ):
                 reason = "non-adjacent residues in unterminated chain cannot be linked"
-                logging.debug(
+                logger.debug(
                     f"    REJECTED: {reason}",
                 )
                 yield match.reject(reason)
@@ -1647,7 +1649,7 @@ class PdbData:
                 and not current_match_forms_posterior_bond
             ):
                 reason = "adjacent residues in unterminated chain can be linked"
-                logging.debug(
+                logger.debug(
                     f"    REJECTED: {reason}",
                 )
                 yield match.reject(reason)
@@ -1658,13 +1660,13 @@ class PdbData:
                 and current_match_forms_posterior_bond
             ):
                 reason = "non-adjacent residues in unterminated chain cannot be linked"
-                logging.debug(
+                logger.debug(
                     f"    REJECTED: {reason}",
                 )
                 yield match.reject(reason)
                 continue
             if match:
-                logging.debug(
+                logger.debug(
                     "    ACCEPTED",
                 )
             yield match
@@ -1750,7 +1752,7 @@ class PdbData:
                 )
                 for i, _ in enumerate(matches)
             ]
-        logging.info("------")
+        logger.info("------")
         return matches
 
     def get_successful_matches(
@@ -1769,7 +1771,7 @@ class PdbData:
             Additional substructure definitions to match against the graph of
             unmatched atoms.
         """
-        logging.info(
+        logger.info(
             "Getting all residue matches",
         )
 
@@ -1785,7 +1787,7 @@ class PdbData:
             residue_library,
             additional_definitions,
         ):
-            logging.info(
+            logger.info(
                 f"  Checking errors for {self.res_name[possible_residue_matches[0].prototype_index]} {possible_residue_matches[0].res_atom_idcs}",
             )
 
@@ -1798,7 +1800,7 @@ class PdbData:
                     mismatches.append(possible_match)
 
             if len(matches) == 0:
-                logging.debug(
+                logger.debug(
                     "    POSSIBLE FAILURE: no successful matches",
                 )
                 # No matches, PDB loading has failed
@@ -1808,19 +1810,19 @@ class PdbData:
                     check_additional_definitions = True
                 errors.append(mismatches)
             elif len(matches) == 1:
-                logging.debug(
+                logger.debug(
                     "    SUCCESS: 1 successful match",
                 )
                 # 1 match, this residue has succeeded
                 residues.append(unwrap(matches))
             elif all(a.agrees_with(b) for a, b in itertools.pairwise(matches)):
-                logging.debug(
+                logger.debug(
                     "    SUCCESS: multiple matches with consistent chemistry",
                 )
                 # Multiple matches that specify identical chemistry, this residue has succeeded
                 residues.append(next(iter(matches)))
             else:
-                logging.debug(
+                logger.debug(
                     "    FAILURE: multiple matches with inconsistent chemistry; PDB loading has failed",
                 )
                 # Multiple matches that specify different chemistry, PDB loading has failed
@@ -1830,13 +1832,13 @@ class PdbData:
                 errors.append(matches)
 
         if all_residues_successful:
-            logging.info(
+            logger.info(
                 "All residues successfully matched",
             )
             return residues
 
         if check_additional_definitions:
-            logging.info(f"Checking additional definitions {additional_definitions}")
+            logger.info(f"Checking additional definitions {additional_definitions}")
             additional_matches = apply_additional_definitions(
                 self,
                 residues,
@@ -1849,13 +1851,23 @@ class PdbData:
                 if match.index_to_atomdef[i].symbol != ""
             }
             all_matches = residues + additional_matches
-            unmatched_bonds: set[tuple[int, int]] = {
+
+            expected_bonds = {
                 sort_tuple((i, j)) for i, js in enumerate(self.conects) for j in js
-            } - {
+            }
+            matched_bonds = {
                 sort_tuple((i, j))
                 for match in all_matches
                 for i, j in match.bond_indices()
             }
+            logging.debug(
+                f"expected bonds between lines: {[(self.line_no[i], self.line_no[j]) for i, j in sorted(expected_bonds)]}",
+            )
+            logging.debug(
+                f"found bonds between lines: {[(self.line_no[i], self.line_no[j]) for i, j in sorted(matched_bonds)]}",
+            )
+            unmatched_bonds: set[tuple[int, int]] = expected_bonds - matched_bonds
+
             if len(unmatched_atoms) == 0 and len(unmatched_bonds) == 0:
                 return all_matches
             else:
@@ -1892,9 +1904,9 @@ class PdbData:
         atoms: dict[int, tuple[AtomDefinition, SuccessfulMatch]] = {}
         """{pdb_idx: (atom_definition, match), ...}"""
 
-        logging.info("Begin collating chemical information from matches")
+        logger.info("Begin collating chemical information from matches")
         for match in matches:
-            logging.debug(
+            logger.debug(
                 f"  collating {match.residue_definition.description} with {match.canonical_atom_name_to_index}",
             )
             for vsite in match.vsite_idcs:
@@ -1944,7 +1956,7 @@ class PdbData:
                 f"Unidentified atoms: {pdb_idcs} (lines {', '.join(str(self.line_no[i]) for i in pdb_idcs)})",
             )
 
-        logging.debug("Begin adding atoms to RDMol")
+        logger.debug("Begin adding atoms to RDMol")
 
         # Add the atoms to the rdmol in PDB index order
         idx_pdb_to_rdmol: dict[int, int] = {}
@@ -1968,18 +1980,18 @@ class PdbData:
             == [idx_pdb_to_rdmol[k] for k in sorted(idx_pdb_to_rdmol.keys())]
         )
 
-        logging.debug("Begin adding bonds to RDMol")
+        logger.debug("Begin adding bonds to RDMol")
 
         # Add the bonds to the rdmol
         for (atom1, atom2), bond in bonds.items():
-            logging.debug(f"{atom1, atom2, bond.order}")
+            logger.debug(f"{atom1, atom2, bond.order}")
             rdmol.add_bond(idx_pdb_to_rdmol[atom1], idx_pdb_to_rdmol[atom2], bond.order)
 
-        logging.debug("Sanitizing...")
+        logger.debug("Sanitizing...")
         # Sanitize and apply edits
         rdmol = rdmol.sanitize_and().freeze()
 
-        logging.debug("Checking radicals")
+        logger.debug("Checking radicals")
 
         # Check for radicals to give more detailed error reporting
         def format_atom(atom: RdAtom) -> str:
@@ -1991,7 +2003,7 @@ class PdbData:
 
         for atom in rdmol.atoms:
             if atom.n_radical_electrons != 0:
-                logging.warning(
+                logger.warning(
                     f"Atom {format_atom(atom)} has {atom.n_radical_electrons} radical"
                     + f" electrons, formal charge {atom.formal_charge:+}, and"
                     + f" {atom.n_bonds} bonds.",
@@ -2001,11 +2013,11 @@ class PdbData:
                     atom2 = format_atom(bond.end_atom)
                     if atom2 == format_atom(atom):
                         atom1, atom2 = atom2, atom1
-                    logging.warning(
+                    logger.warning(
                         f"  {atom1} bonded to {atom2} with order {bond.order}",
                     )
 
-        logging.debug("Finished producing rdmol")
+        logger.debug("Finished producing rdmol")
         return rdmol
 
     def __getitem__(self, index: int) -> dict[str, Any]:
