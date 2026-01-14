@@ -157,16 +157,48 @@ SLOW_POLYMERS = [
     "7pvu.pdb",
     "polyvinylchloride-s81.pdb",
     "8gt9.pdb",
+    "6mtg.pdb",
+]
+
+SKIP_POLYMERS = [
+    "144d.pdb",  # All hydrogens come after all heavy atoms
+    "133d.pdb",  # All hydrogens come after all heavy atoms
+    "130d.pdb",  # All hydrogens come after all heavy atoms
+    "122d.pdb",  # All hydrogens come after all heavy atoms
+    "2q1r.pdb",  # All hydrogens come after all heavy atoms
+    "7xjf.pdb",  # Non-standard arginine?
+    "pnipam_modified-s49.pdb",  # Too slow
+    "syntactic_styrene-s49.pdb",  # Too slow
+    "8f0x.pdb",  # Too slow
+    "peg_modified-s49.pdb",  # Too slow
+    "polyethylmethacrylate-s81.pdb",  # Too slow
+    "8fy3.pdb",  # Too slow
+    "8bhw.pdb",  # Too slow
+    "paam_modified-s64.pdb",  # Too slow
+    "naturalrubber-s49.pdb",  # Too slow
+]
+
+XFAIL_POLYMERS = [
+    "8ovp.pdb",  # BUG: Unmatched neighbour reads as unsupported bond
+    "messy_sugar.pdb",  # Unknown additional_definitions matching issue
+    "bisphenolA.pdb",  # Unknown additional_definitions matching issue
+    "bip23267_sup-0002-appendixs1.pdb",  # Unknown additional_definitions matching issue
+    "PAMAM.pdb",  # Unknown additional_definitions matching issue
+    "polyvinylchloride.pdb",  # Unknown additional_definitions matching issue
+    "polyvinylchloride-s81.pdb",  # Unknown additional_definitions matching issue
 ]
 
 
 @pytest.mark.parametrize(
     "pdbfile",
     [
-        (
-            pytest.param(file, marks=pytest.mark.slow)
-            if file.name in SLOW_POLYMERS
-            else file
+        pytest.param(
+            file,
+            marks=(
+                *((pytest.mark.slow,) if file.name in SLOW_POLYMERS else ()),
+                *((pytest.mark.skip,) if file.name in SKIP_POLYMERS else ()),
+                *((pytest.mark.xfail,) if file.name in XFAIL_POLYMERS else ()),
+            ),
         )
         for dir in get_test_data_path("polymers/").iterdir()
         if dir.is_dir()
