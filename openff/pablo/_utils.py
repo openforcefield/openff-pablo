@@ -267,7 +267,7 @@ def charge_int_or_none(s: str, strict: bool = False):
             return int(s)
 
 
-def cryst_to_box_vectors(
+def cryst_to_box_vectors(  # pyright: ignore[reportUnknownParameterType]
     a: float,
     b: float,
     c: float,
