@@ -46,6 +46,10 @@ pytest-xdist = "*"
 pytest-socket = "*"
 pytest-timeout = "*"
 
+[feature.visualize.dependencies]
+nglview = ">=3.0.6,<3.1.0"
+ipython = "*"
+
 [feature.example.dependencies]
 jupyterlab = ">=4"
 ipywidgets = ">=8"
@@ -57,7 +61,6 @@ jupyterlab_code_formatter = "*"
 black = "*"
 isort = "*"
 snakeviz = "*"
-nglview = ">=3.0.6,<3.1.0"
 pdbfixer = "*"
 mdanalysis = "*"
 openff-interchange = "*"
@@ -74,12 +77,12 @@ ruff = "*"
 
 [environments]
 test = { features = ["py312", "test", "test-tasks"], solve-group = "default" }
-test-py313 = { features = ["py313","test"], solve-group = "py313" }
+test-py313 = { features = ["py313", "test"], solve-group = "py313" }
 # test-py314 = { features = ["py314", "test"], solve-group = "py314" }
 doc = { features = ["py312", "doc", "doc-tasks"], solve-group = "default" }
-example = { features = ["py312", "example", "example-tasks"], solve-group = "default" }
-fulldev = { features = ["py312", "lint", "test", "doc", "example", "lint-tasks"], solve-group = "default" }
-ci = { features = ["lint", "test"], solve-group = "default" }
+example = { features = ["py312", "example", "visualize", "example-tasks"], solve-group = "default" }
+fulldev = { features = ["py312", "lint", "test", "doc", "example", "visualize", "lint-tasks"], solve-group = "default" }
+ci = { features = ["lint", "test", "visualize"], solve-group = "default" }
 
 [feature.test-tasks.tasks.slowtest]
 cmd = "pytest -n auto -rXsf"

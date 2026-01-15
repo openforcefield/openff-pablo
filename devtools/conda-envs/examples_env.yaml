@@ -15,7 +15,6 @@ dependencies:
 - black *
 - isort *
 - snakeviz *
-- nglview >=3.0.6,<3.1.0
 - pdbfixer *
 - mdanalysis *
 - openff-interchange *
@@ -25,6 +24,8 @@ dependencies:
 - openff-nagl-base >=0.5.2
 - openff-nagl-models *
 - pytorch-cpu >=2.6
+- nglview >=3.0.6,<3.1.0
+- ipython *
 - openff-toolkit-base >=0.17.1
 - rdkit *
 - openmm *

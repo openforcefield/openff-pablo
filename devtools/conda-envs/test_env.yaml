@@ -9,6 +9,8 @@ dependencies:
 - pytest-xdist *
 - pytest-socket *
 - pytest-timeout *
+- nglview >=3.0.6,<3.1.0
+- ipython *
 - python >=3.12
 - openff-toolkit-base >=0.17.1
 - rdkit *
