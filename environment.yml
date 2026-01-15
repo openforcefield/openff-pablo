@@ -1,0 +1,10 @@
+# This environment is used only by pre-commit.
+# For environments to run Pablo in, see the devtools directory and pixi.toml
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - pixi>=0.59.0
+  - ripgrep>=15
+  - git
+  - bash
