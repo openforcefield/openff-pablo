@@ -63,15 +63,6 @@ FAST_PDBS: list[tuple[str, list[Molecule], list[ResidueDefinition]]] = [
 ]
 SLOW_PDBS: list[tuple[str, list[Molecule], list[ResidueDefinition]]] = [
     (
-        "5ap1_prepared.pdb",
-        [
-            Molecule.from_smiles(
-                "O=C([O-])Cn1cc(cn1)c2ccc(cc2OCC#N)Nc3ccc(c(n3)NC4CCCCC4)C#N",
-            ),
-        ],
-        [],
-    ),
-    (
         "prepared_pdbs/2hi7_prepared.pdb",
         [],
         [],

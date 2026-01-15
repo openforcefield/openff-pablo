@@ -217,17 +217,8 @@ def test_3ip9_loads_with_augmented_resdb(tmp_ccd_cache: CcdCache):
     )
     assert "DYE" in [res.identifier[3] for res in pablo_top.molecule(0).residues]
 
-    substructure_mol = Molecule.from_mapped_smiles(smiles, allow_undefined_stereo=True)
-    for i, atom in enumerate(substructure_mol.atoms, start=1):
-        if i in leavers:
-            atom.metadata["substructure_atom"] = False
-        else:
-            atom.metadata["substructure_atom"] = True
-    legacy_top: Topology = Topology.from_pdb(
-        get_test_data_path("prepared_pdbs/3ip9_dye_solvated.pdb"),
-        # _additional_substructures is a PROTOTYPE.
-        # Its behavior and input type are likely to change.
-        _additional_substructures=[substructure_mol],
+    legacy_top = Topology.from_json(
+        get_test_data_path("prepared_pdbs/3ip9_dye_solvated.json").read_text(),
     )
 
     assert pablo_top.n_molecules == legacy_top.n_molecules
@@ -303,11 +294,14 @@ def test_3ip9_loads_via_conects(tmp_ccd_cache: CcdCache):
     )
     assert "DYE" in [res.identifier[3] for res in pablo_top.molecule(0).residues]
 
-    legacy_top: Topology = Topology.from_pdb(
-        path,
-        # _additional_substructures is a PROTOTYPE.
-        # Its behavior and input type are likely to change.
-        _additional_substructures=[substructure_mol],
+    # legacy_top: Topology = Topology.from_pdb(
+    #     path,
+    #     # _additional_substructures is a PROTOTYPE.
+    #     # Its behavior and input type are likely to change.
+    #     _additional_substructures=[substructure_mol],
+    # )
+    legacy_top = Topology.from_json(
+        get_test_data_path("prepared_pdbs/3ip9_dye_solvated.json").read_text(),
     )
 
     assert pablo_top.n_molecules == legacy_top.n_molecules

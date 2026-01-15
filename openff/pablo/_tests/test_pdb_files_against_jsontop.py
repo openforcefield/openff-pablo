@@ -69,6 +69,15 @@ SLOW_PDBS: list[tuple[str, str, list[ResidueDefinition]]] = [
         "prepared_pdbs/5eil_fixed.json",
         [],
     ),
+    (
+        "5ap1_prepared.pdb",
+        "5ap1_prepared.json",
+        [
+            ResidueDefinition.anon_from_smiles(
+                "O=C([O-])Cn1cc(cn1)c2ccc(cc2OCC#N)Nc3ccc(c(n3)NC4CCCCC4)C#N",
+            ),
+        ],
+    ),
 ]
 
 
