@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Iterable, Mapping
+from collections.abc import Generator, Iterable, Mapping
 from dataclasses import dataclass
 from functools import cached_property, reduce
 from typing import ClassVar, Protocol, TypeAlias
@@ -8,6 +8,8 @@ from openff.pablo._utils import sort_tuple
 from openff.pablo.exceptions import AmbiguousMatchError, PabloError
 
 from .residue import AtomDefinition, BondDefinition, ResidueDefinition
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -108,6 +110,19 @@ class ResidueMatch(MatchProtocol):
         else:
             raise TypeError(f"unknown identifier type {type(identifier)}")
 
+    def bond_indices(self) -> Generator[tuple[int, int]]:
+        if self.prior_bond_idcs is not None:
+            yield self.prior_bond_idcs
+        if self.posterior_bond_idcs is not None:
+            yield self.posterior_bond_idcs
+        if self.crosslink_idcs is not None:
+            yield self.crosslink_idcs
+        for bonddef in self.residue_definition.bonds:
+            atom1_idx = self.canonical_atom_name_to_index.get(bonddef.atom1)
+            atom2_idx = self.canonical_atom_name_to_index.get(bonddef.atom2)
+            if atom1_idx is not None and atom2_idx is not None:
+                yield (atom1_idx, atom2_idx)
+
     def set_crosslink(self, atom1_idx: int, atom2_idx: int) -> None:
         """Set a match for crosslinking"""
         if (
@@ -168,6 +183,11 @@ class ResidueMatch(MatchProtocol):
     def canonical_atom_name_to_index(self) -> dict[str, int]:
         return {atom.name: i for i, atom in self.index_to_atomdef.items()}
 
+    def must_infer_prior_bond(self) -> bool:
+        if self.prior_bond_idcs is not None:
+            return False
+        return self.expects_prior_bond
+
     @cached_property
     def expects_prior_bond(self) -> bool:
         if self.residue_definition.linking_bond is None:
@@ -181,6 +201,11 @@ class ResidueMatch(MatchProtocol):
             and len(expected_leaving_atoms) > 0
             and expected_leaving_atoms.issubset(self.missing_leaving_atoms)
         )
+
+    def must_infer_posterior_bond(self) -> bool:
+        if self.posterior_bond_idcs is not None:
+            return False
+        return self.expects_posterior_bond
 
     @cached_property
     def expects_posterior_bond(self) -> bool:
@@ -245,17 +270,26 @@ class ResidueMatch(MatchProtocol):
 
         Matches are considered to assign the same chemistry if their
         connectivity graphs (ignoring bond order) and net formal charges are
-        identical."""
-        if set(self.index_to_atomdef.keys()) != set(other.index_to_atomdef.keys()):
-            logging.debug(
-                "  DISAGREE: Covers different indices"
+        identical. Matches that identify different atoms are never considered
+        to agree."""
+        self_identified_indices = {
+            i for i, atom in self.index_to_atomdef.items() if atom.symbol != ""
+        }
+        other_identified_indices = {
+            i
+            for i, atom in other.index_to_atomdef.items()
+            if atom is not None and atom.symbol != ""
+        }
+        if self_identified_indices != other_identified_indices:
+            logger.debug(
+                "    DISAGREE: Covers different indices"
                 + f" ({set(self.index_to_atomdef.keys())}"
                 + f" vs {set(other.index_to_atomdef.keys())})",
             )
             return False
 
         if not isinstance(other, ResidueMatch):
-            logging.debug("  deferring to super class")
+            logger.debug("  deferring to super class")
             return super().agrees_with(other)
 
         # External connectivity graph should be identical
@@ -270,14 +304,14 @@ class ResidueMatch(MatchProtocol):
                 )
             )
         ):
-            logging.debug("  DISAGREES: external bonds differ")
+            logger.debug("  DISAGREES: external bonds differ")
             return False
 
         if (self.expects_prior_bond or self.expects_posterior_bond) and (
             self.residue_definition.linking_bond
             != other.residue_definition.linking_bond
         ):
-            logging.debug("  DISAGREES: linking bonds differ")
+            logger.debug("  DISAGREES: linking bonds differ")
             return False
 
         expect_same_bonds = (
@@ -286,14 +320,14 @@ class ResidueMatch(MatchProtocol):
             and self.expects_posterior_bond == other.expects_posterior_bond
         )
         if not expect_same_bonds:
-            logging.debug("  DISAGREES: Expects different linking bonds")
+            logger.debug("  DISAGREES: Expects different linking bonds")
             return False
 
         try:
             self.check_agrees_with_where_overlaps(other)
         except AmbiguousMatchError as e:
-            logging.debug(
-                f"  DISAGREES: {''.join(f'\n  {reason}' for reason in e.reasons)}",
+            logger.debug(
+                f"  DISAGREES: {' and '.join(e.reasons)}",
             )
             return False
         return True
@@ -303,6 +337,7 @@ class ResidueMatch(MatchProtocol):
             i: (self_atom, other.index_to_atomdef[i])
             for i, self_atom in self.index_to_atomdef.items()
             if i in other.index_to_atomdef
+            and "" not in [self_atom.symbol, other.index_to_atomdef[i].symbol]
         }
 
         # All atoms should have the same element

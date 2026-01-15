@@ -14,6 +14,7 @@ from openff.pablo._matching import SuccessfulMatch
 from openff.pablo._pdb_data import PdbData
 from openff.pablo._std_ccd_cache import STD_CCD_CACHE
 from openff.pablo._utils import (
+    coerce_or_leave,
     cryst_to_box_vectors,
     sort_tuple,
 )
@@ -23,6 +24,8 @@ from openff.pablo.residue import ResidueDefinition
 __all__ = [
     "topology_from_pdb",
 ]
+
+logger = logging.getLogger(__name__)
 
 
 def topology_from_pdb(
@@ -168,12 +171,12 @@ def topology_from_pdb(
     """
     if hasattr(file, "readlines"):
         if format is None and hasattr(file, "filename"):
-            format = Path(file.name).suffix[1:].upper()  # type: ignore
-        elif format is None or format == "":  # type: ignore
+            format = Path(file.filename).suffix[1:].upper()  # pyright: ignore[reportAssignmentType, reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownArgumentType]
+        elif format is None or format == "":
             format = "PDB"
-        data = PdbData.from_file_object(file, format=format)  # type: ignore
+        data = PdbData.from_file_object(file, format=format)  # pyright: ignore[reportArgumentType]
     else:
-        data = PdbData.from_file(file, format=format)  # type: ignore
+        data = PdbData.from_file(file, format=format)  # pyright: ignore[reportArgumentType]
 
     matches = data.get_successful_matches(
         residue_library,
@@ -200,7 +203,7 @@ def _build_topology(
     rdmol = data.matches_to_rdmol(matches, use_canonical_names=use_canonical_names)
 
     # Set positions
-    logging.debug("Setting conformer to PDB positions")
+    logger.debug("Setting conformer to PDB positions")
     rdmol_pdb_indices = [atom.properties["pdb_index"] for atom in rdmol.atoms]
     positions = np.stack([data.x, data.y, data.z], axis=-1) * unit.angstrom
     rdmol = rdmol.edit().add_conformer_and(positions[rdmol_pdb_indices]).freeze()
@@ -216,12 +219,12 @@ def _build_topology(
         offmol.add_default_hierarchy_schemes()
         molecules.append(offmol)
 
-    logging.debug("produce topology")
+    logger.debug("produce topology")
     topology = Topology.from_molecules(molecules)
 
     topology_pdb_indices = [atom.metadata["pdb_index"] for atom in topology.atoms]
     if topology_pdb_indices != sorted(topology_pdb_indices):
-        logging.debug(
+        logger.debug(
             "\n".join(
                 f"topology index {j: <7} has pdb index {i: <7}"
                 for j, i in enumerate(topology_pdb_indices)
@@ -241,21 +244,32 @@ def _build_topology(
 
 def _check_all_conects(topology: Topology, data: PdbData):
     all_bonds: set[tuple[int, int]] = {
-        sort_tuple((bond.atom1.metadata["pdb_index"], bond.atom2.metadata["pdb_index"]))  # type:ignore
+        sort_tuple((bond.atom1.metadata["pdb_index"], bond.atom2.metadata["pdb_index"]))  # pyright: ignore[reportAssignmentType]
         for bond in topology.bonds
     }
+    logger.debug(f"checking bonds in topology: {sorted(all_bonds)}")
 
     conect_bonds: set[tuple[int, int]] = set()
     for i, js in enumerate(data.conects):
+        if data.model[i] != data.model[0]:
+            logger.debug("Only checking CONECT records from first model")
+            break
         for j in js:
             conect_bonds.add(sort_tuple((i, j)))
+    logger.debug(f"against conects: {sorted(conect_bonds)}")
     if not conect_bonds.issubset(all_bonds):
+        unknown_conects = conect_bonds.difference(all_bonds)
         raise PabloError(
-            "CONECT records without chemical information not supported",
+            f"{len(unknown_conects)} bonds in CONECT records were not assigned chemical information:",
             sorted(
                 {
-                    sort_tuple((data.serial[a], data.serial[b]))
-                    for a, b in conect_bonds.difference(all_bonds)
+                    sort_tuple(
+                        (
+                            coerce_or_leave(data.serial[a], int),
+                            coerce_or_leave(data.serial[b], int),
+                        ),
+                    )
+                    for a, b in unknown_conects
                 },
             ),
         )

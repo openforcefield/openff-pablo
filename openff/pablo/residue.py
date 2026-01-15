@@ -19,6 +19,7 @@ from openff.toolkit.utils import RDKitToolkitWrapper
 from openff.units import elements, unit
 
 from openff.pablo._graph import Graph
+from openff.pablo._rdkit import PERIODIC_TABLE, RdSmarts
 from openff.pablo._utils import (
     __UNSET__,
     draw_molecule,
@@ -31,6 +32,8 @@ from openff.pablo.exceptions import PabloError, ResidueValidationError
 
 if TYPE_CHECKING:
     import IPython.core.display
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "AtomDefinition",
@@ -135,6 +138,14 @@ class AtomDefinition:
         return (
             f"AtomDefinition(name={self.name!r}"
             + (f", synonyms={self.synonyms!r}" if self.synonyms else "")
+            + (
+                f", symbol={self.symbol!r}"
+                if (
+                    self.symbol == ""
+                    or not self.name.upper().startswith(self.symbol.upper())
+                )
+                else ""
+            )
             + ", ...)"
         )
 
@@ -496,7 +507,7 @@ class ResidueDefinition:
                     synonyms=(),
                     symbol=atom.symbol,
                     leaving=bool(atom.metadata.get("leaving_atom")),
-                    charge=atom.formal_charge.m_as(unit.elementary_charge),  # type: ignore
+                    charge=atom.formal_charge.m_as(unit.elementary_charge),  # pyright: ignore[reportArgumentType]
                     stereo=atom.stereochemistry,
                     aromatic=atom.is_aromatic,
                 ),
@@ -604,7 +615,7 @@ class ResidueDefinition:
                     synonyms=tuple(synonyms_str.split()),
                     symbol=atom.symbol,
                     leaving=bool(atom.metadata.get("leaving_atom")),
-                    charge=atom.formal_charge.m_as(unit.elementary_charge),  # type: ignore
+                    charge=atom.formal_charge.m_as(unit.elementary_charge),  # pyright: ignore[reportArgumentType]
                     stereo=atom.stereochemistry,
                     aromatic=atom.is_aromatic,
                 ),
@@ -782,6 +793,52 @@ class ResidueDefinition:
         for i in molecule.properties["atom_map"]:
             atom = molecule.atom(i)
             atom.metadata["leaving_atom"] = True
+
+        return cls.anon_from_molecule(
+            molecule=molecule,
+            description=smiles if description is None else description,
+            virtual_sites=virtual_sites,
+        )
+
+    @classmethod
+    def anon_from_smiles_marked_nonleaving(
+        cls,
+        smiles: str,
+        *,
+        virtual_sites: Collection[str] = (),
+        description: str | None = None,
+    ) -> Self:
+        """
+        Create an anonymous ``ResidueDefinition`` from a partially mapped SMILES.
+
+        All non-mapped atoms are treated as leaving atoms.
+
+        Parameters
+        ----------
+        smiles
+            The SMILES string. All atoms except leaving atoms should be mapped.
+            All leaving atoms must not be.
+        virtual_sites
+            Virtual sites expected by the residue. See
+            :py:data:`openff.pablo.ResidueDefinition.virtual_sites`
+        description
+            An optional string describing the residue. See
+            :py:data:`openff.pablo.ResidueDefinition.description`
+        """
+        molecule = Molecule.from_smiles(
+            smiles,
+            allow_undefined_stereo=True,
+        )
+
+        neighbours: DefaultDict[int, set[int]] = defaultdict(set)
+        for atom1, atom2 in molecule.nth_degree_neighbors(1):
+            neighbours[atom1.molecule_atom_index].add(atom2.molecule_atom_index)
+            neighbours[atom2.molecule_atom_index].add(atom1.molecule_atom_index)
+
+        for i in range(molecule.n_atoms):
+            if i not in molecule.properties["atom_map"]:
+                atom = molecule.atom(i)
+                atom.metadata["leaving_atom"] = True
 
         return cls.anon_from_molecule(
             molecule=molecule,
@@ -994,10 +1051,34 @@ class ResidueDefinition:
         return self.linking_bond.atom2
 
     @property
+    def _prior_bond_partner_atom(self) -> str:
+        if self.linking_bond is None:
+            raise PabloError("not a linking residue")
+        return self.linking_bond.atom1
+
+    @property
     def _posterior_bond_linking_atom(self) -> str:
         if self.linking_bond is None:
             raise PabloError("not a linking residue")
         return self.linking_bond.atom1
+
+    @property
+    def _posterior_bond_partner_atom(self) -> str:
+        if self.linking_bond is None:
+            raise PabloError("not a linking residue")
+        return self.linking_bond.atom2
+
+    @property
+    def _crosslink_linking_atom(self) -> str:
+        if self.crosslink is None:
+            raise PabloError("not a crosslinking residue")
+        return self.crosslink.atom1
+
+    @property
+    def _crosslink_partner_atom(self) -> str:
+        if self.crosslink is None:
+            raise PabloError("not a crosslinking residue")
+        return self.crosslink.atom2
 
     @property
     def _can_form_prior_bond(self) -> bool:
@@ -1367,8 +1448,8 @@ class ResidueDefinition:
                         )
                         for i in range(len(leaving_atom_fragments) + 1)
                     ):
-                        logging.debug(
-                            f"Generating graph for {self.description}:"
+                        logger.debug(
+                            f"  Generating graph for {self.description}:"
                             + f" {crosslink=} {posterior_bond=} {prior_bond=} {leaving_atoms=}",
                         )
                         yield self._to_graph(
@@ -1402,14 +1483,13 @@ class ResidueDefinition:
             ]
             if len(linking_bonds) == 0:
                 continue
-            target_name = f"NON_MATCHING_ATOM_{name}"
-            link_target = AtomDefinition.with_defaults(target_name, "", leaving=True)
+            link_target = AtomDefinition.with_defaults(name, "", leaving=True)
             graph.add_node(link_target)
             graph.add_edges_from(
                 (
                     link_target,
                     self.name_to_atom[bond.atom2],
-                    bond.replace(atom1=target_name),
+                    bond,
                 )
                 for bond in linking_bonds
             )
@@ -1420,10 +1500,11 @@ class ResidueDefinition:
 
         if crosslink is not None:
             crosslink_target = AtomDefinition.with_defaults(
-                crosslink.atom2,
+                crosslink.atom2 + "_CROSSLINK",
                 "",
                 leaving=True,
             )
+            assert crosslink_target.name not in {node.name for node in graph.nodes}
             graph.add_node(crosslink_target)
             graph.add_edge(
                 self.canonical_name_to_atom[crosslink.atom1],
@@ -1435,10 +1516,11 @@ class ResidueDefinition:
 
         if posterior_bond is not None:
             posterior_target = AtomDefinition.with_defaults(
-                posterior_bond.atom2,
+                posterior_bond.atom2 + "_POSTERIOR",
                 "",
                 leaving=True,
             )
+            assert posterior_target.name not in {node.name for node in graph.nodes}
             graph.add_node(posterior_target)
             graph.add_edge(
                 self.canonical_name_to_atom[posterior_bond.atom1],
@@ -1450,10 +1532,11 @@ class ResidueDefinition:
 
         if prior_bond is not None:
             prior_target = AtomDefinition.with_defaults(
-                prior_bond.atom1,
+                prior_bond.atom1 + "_PRIOR",
                 "",
                 leaving=True,
             )
+            assert prior_target.name not in {node.name for node in graph.nodes}
             graph.add_node(prior_target)
             graph.add_edge(
                 self.canonical_name_to_atom[prior_bond.atom2],
@@ -1504,6 +1587,7 @@ class ResidueDefinition:
         width: int = -1,
         height: int = 300,
         highlight: Iterable[str] = (),
+        label_atoms: bool | None = None,
     ) -> "IPython.core.display.SVG":
         from IPython.display import SVG
 
@@ -1518,16 +1602,21 @@ class ResidueDefinition:
 
         legend_elements: list[str] = []
 
-        if self.is_anonymous:
-            atom_notes = {}
-            legend_elements.append("Anonymous Residue Definition")
-            if len(deemphasize_atoms) != 0:
-                legend_elements.append("(leaving atoms drawn in light grey)")
-        else:
+        if label_atoms is None:
+            label_atoms = not self.is_anonymous
+        if label_atoms:
             atom_notes = {
                 i: f"{'|'.join([atom.name, *atom.synonyms])}{'*' if atom.leaving else ''}"
                 for i, atom in enumerate(self.atoms)
             }
+        else:
+            atom_notes = {}
+
+        if self.is_anonymous:
+            legend_elements.append("Anonymous Residue Definition")
+            if len(deemphasize_atoms) != 0:
+                legend_elements.append("(leaving atoms drawn in light grey)")
+        else:
             if self.description:
                 legend_elements.append(f"{self.residue_name}: {self.description}")
             else:
@@ -1734,3 +1823,108 @@ class ResidueDefinition:
             )
             for products in all_products
         ]
+
+    @classmethod
+    def _anon_from_smarts(cls, smarts: str, *, description: str = "") -> Self:
+        rdsmarts = RdSmarts(smarts)
+        atoms: list[AtomDefinition] = []
+        atom_degrees: list[int | None] = []
+        atom_available_valences: list[list[int]] = []
+        for i, atom in enumerate(rdsmarts.atoms):
+            assert i == atom.index
+
+            # Leaving atoms can have a stand-in charge of 0, but non-leaving
+            # atoms must have explicit charge
+            try:
+                formal_charge = atom.formal_charge
+            except PabloError as e:
+                if atom.symbol is None:
+                    formal_charge = 0
+                else:
+                    raise e
+
+            atoms.append(
+                AtomDefinition.with_defaults(
+                    name=str(i),
+                    symbol="" if atom.symbol is None else atom.symbol,
+                    charge=formal_charge,
+                    leaving=True if atom.symbol is None else False,
+                ),
+            )
+            atom_degrees.append(atom.degree)
+
+            available_valences: list[int] = []
+            if atom.symbol is not None:
+                available_valences.extend(PERIODIC_TABLE.GetValenceList(atom.symbol))
+            atom_available_valences.append(available_valences)
+        bonds: list[BondDefinition] = []
+        for bond in rdsmarts.bonds:
+            assert bond.order == int(bond.order), "non-integral bond order"
+            atom1_idx = bond.begin_atom.index
+            atom2_idx = bond.end_atom.index
+            bonds.append(
+                BondDefinition.with_defaults(
+                    atom1=atoms[atom1_idx].name,
+                    atom2=atoms[atom2_idx].name,
+                    order=int(bond.order),
+                ),
+            )
+
+            for i in (atom1_idx, atom2_idx):
+                degree = atom_degrees[i]
+                if degree is not None:
+                    degree -= 1
+                atom_degrees[i] = degree
+                atom_available_valences[i] = [
+                    j - int(bond.order) for j in atom_available_valences[i]
+                ]
+        # Now add more dummy atoms to fill out degrees
+        for atom, degree, available_valences in zip(
+            atoms,
+            atom_degrees,
+            atom_available_valences,
+        ):
+            if atom.leaving or degree == 0:
+                continue
+            if degree is None:
+                raise PabloError("Undefined degree not supported")
+            available_valence: int = unwrap(
+                (v for v in available_valences if v >= degree),
+                f"Cannot uniquely satisfy valence from among {available_valences} for atom with degree {degree}",
+            )
+
+            dummy_bond_orders = [available_valence // degree] * degree
+            if available_valence == sum(dummy_bond_orders) + 1:
+                dummy_bond_orders[0] += 1
+            else:
+                raise PabloError(
+                    f"Cannot uniquely satisfy valence from among {available_valences} for atom with degree {degree}",
+                )
+
+            for order in dummy_bond_orders:
+                dummy_idx = len(atoms)
+                dummy_name = str(dummy_idx)
+                atoms.append(
+                    AtomDefinition.with_defaults(
+                        name=dummy_name,
+                        symbol="",
+                        leaving=True,
+                    ),
+                )
+                bonds.append(
+                    BondDefinition.with_defaults(
+                        atom1=atom.name,
+                        atom2=dummy_name,
+                        order=order,
+                    ),
+                )
+
+        return cls(
+            residue_name=None,
+            description=description,
+            linking_bond=None,
+            crosslink=None,
+            atoms=tuple(atoms),
+            bonds=tuple(bonds),
+            virtual_sites=(),
+        )

@@ -1,13 +1,12 @@
 import itertools
 import logging
-from collections import defaultdict
+import math
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
 from openff.pablo._graph import Graph
 from openff.pablo._utils import flatten, sort_tuple
-from openff.pablo.exceptions import AmbiguousMatchError
 
 from ._matching import (
     ResidueMatch,
@@ -17,6 +16,8 @@ from .residue import AtomDefinition, BondDefinition, ResidueDefinition
 
 if TYPE_CHECKING:
     from openff.pablo._pdb_data import PdbData
+
+logger = logging.getLogger(__name__)
 
 
 def apply_additional_definitions(
@@ -37,10 +38,10 @@ def apply_additional_definitions(
         verified statically by the type checker. Any assert error in user code
         is a bug and may indicate that results are incorrect - please report it!
     """
-    logging.debug("Generating graph of known info")
+    logger.info("Generating graph of known info")
     pdb_graph, atoms, bonds = _get_pdb_graph(data, matches)
-    logging.debug(
-        "Generated graph with"
+    logger.info(
+        "  Generated graph with"
         + f" {len(atoms)} atoms"
         + f" ({sum(1 for atom in atoms.values() if atom is None)} unknown),"
         + f" {len(bonds)} bonds"
@@ -49,10 +50,10 @@ def apply_additional_definitions(
 
     new_matches: list[AdditionalDefMatch] = []
     for resdef in additional_definitions:
-        logging.debug(f"checking {resdef.description}")
+        logger.info(f"checking {resdef.description}")
         prev_n_new_matches = len(new_matches)
         new_matches.extend(
-            _apply_resdef_to_graph(
+            _map_resdef_to_graph(
                 data,
                 resdef,
                 pdb_graph,
@@ -61,7 +62,11 @@ def apply_additional_definitions(
             ),
         )
         if prev_n_new_matches == len(new_matches):
-            logging.debug("  no matches")
+            logger.debug("  no matches")
+
+    # Do the exhaustive o(n**2) check for ambiguity
+    for mapping_a, mapping_b in itertools.combinations(new_matches, r=2):
+        mapping_a.check_agrees_with_where_overlaps(mapping_b)
 
     return new_matches
 
@@ -125,7 +130,15 @@ def _get_pdb_graph(
     return (graph, atoms, bonds)
 
 
-def _apply_resdef_to_graph(
+def _prettify_mapping(data: "PdbData", new_mapping: "AdditionalDefMatch") -> str:
+    pad = math.ceil(math.log10(max(len(data.line_no), *data.line_no)))
+    return ", ".join(
+        f"\n      {data.name[k]:>5} (idx{k:0>{pad}}@l{data.line_no[k]:0>{pad}}): <{v.symbol}{v.name!r}{' (leaving)' if v.leaving else ''}>"
+        for k, v in sorted(new_mapping.index_to_atomdef.items())
+    )
+
+
+def _map_resdef_to_graph(
     data: "PdbData",
     resdef: ResidueDefinition,
     pdb_graph: Graph[int, tuple[int, int]],
@@ -143,61 +156,40 @@ def _apply_resdef_to_graph(
 
     mappings: list[AdditionalDefMatch] = []
     resdef_graphs = list(resdef._to_graphs())
-    logging.debug(
-        f"{resdef.description} has {len(resdef_graphs)} graphs,"
+    logger.debug(
+        f"  {resdef.description} has {len(resdef_graphs)} graphs,"
         + f" {resdef.n_expected_atoms} expected atoms,"
-        + f" {resdef.n_core_atoms} core atoms. Finding mappings...",
+        + f" {resdef.n_core_atoms} core atoms.",
     )
     n_successful_mappings = 0
-    for resdef_graph in resdef_graphs:
-        for mapping in _get_mappings(data, pdb_graph, resdef_graph, atoms, bonds):
+    for i, resdef_graph in enumerate(resdef_graphs):
+        logger.debug(f"  Finding mappings for graph {i}")
+        for mapping in _get_all_mappings(data, pdb_graph, resdef_graph, atoms, bonds):
             n_successful_mappings += 1
             new_mapping = AdditionalDefMatch.from_mapping(
                 mapping,
                 resdef,
             )
-            # Discard the mapping if it would assign the same chemistry as an
-            # existing mapping
-            if not any(mapping.agrees_with(new_mapping) for mapping in mappings):
-                mappings.append(new_mapping)
+            # Discard the new mapping if it would assign the same chemistry as
+            # an existing mapping
+            if any(mapping.agrees_with(new_mapping) for mapping in mappings):
+                continue
 
-    logging.debug(
-        f"Found {len(mappings)} unique mappings to {resdef.description} from"
+            mapping_readable = _prettify_mapping(data, new_mapping)
+            logger.debug(f"    Found a new mapping: {mapping_readable}")
+            mappings.append(new_mapping)
+
+    logger.info(
+        f"  Found {len(mappings)} unique mappings to {resdef.description} from"
         + f" {n_successful_mappings} total mappings",
     )
-
-    if len(mappings) == 0:
-        return []
-
-    # if there are multiple mappings covering the same indices, the mapping is
-    # certainly ambiguous, since mappings that assign the same chemistry have
-    # already been pruned
-    # this is o(n) in the number of mappings so it's worth checking as an optimization
-    mappings_clash_counts: defaultdict[tuple[int, ...], int] = defaultdict(int)
-    for mapping in mappings:
-        indices = tuple(sorted(mapping.index_to_atomdef.keys()))
-        mappings_clash_counts[indices] += 1
-    mappings_clash_counts_multiple = [
-        (indices, count)
-        for indices, count in mappings_clash_counts.items()
-        if count > 1
-    ]
-    if len(mappings_clash_counts_multiple) != 0:
-        raise AmbiguousMatchError(
-            [
-                f"indices {indices} are covered in {count} conflicting ways"
-                for indices, count in mappings_clash_counts_multiple
-            ],
-        )
-
-    # Do the exhaustive o(n**2) check for ambiguity
-    for mapping_a, mapping_b in itertools.combinations(mappings, r=2):
-        mapping_a.check_agrees_with_where_overlaps(mapping_b)
+    # for mapping in mappings:
+    #     logger.info(f"    {_prettify_mapping(data, mapping)}")
 
     return mappings
 
 
-def _get_mappings(
+def _get_all_mappings(
     data: "PdbData",
     pdb_graph: Graph[int, tuple[int, int]],
     resdef_graph: Graph[AtomDefinition, BondDefinition],
@@ -253,8 +245,15 @@ def _get_mappings(
         for pdb_idx in pdb_graph.nodes
     }
 
-    for desymm_mapping in pdb_graph.desymmetrize_leaf_nodes().get_mappings(
-        resdef_graph.desymmetrize_leaf_nodes(),
+    pdb_graph_desymm = pdb_graph.desymmetrize_leaf_nodes(
+        key=lambda pdb_idx: data.element[pdb_idx].upper(),
+    )
+    resdef_desymm = resdef_graph.desymmetrize_leaf_nodes(
+        key=lambda atom: atom.symbol,
+    )
+
+    for desymm_mapping in pdb_graph_desymm.get_mappings(
+        resdef_desymm,
         node_matcher=node_matcher,
         edge_matcher=edge_matcher,
         subgraph=True,
@@ -288,25 +287,21 @@ def _has_valid_connectivity(
 
     1. Any atom whose elemental symbol in ``resdef_graph`` is not the empty
     string has the same number of neighbours in both graphs
-    2. Any atom whose (a) elemental symbol in ``resdef_graph`` is the empty
-    string and whose (b) name does not begin with ``"NON_MATCHING_ATOM_"`` has a
-    name in the PDB file that is either the canonical name of the atom
-    definition or one of its synonyms.
+    2. Any atom whose elemental symbol in ``resdef_graph`` is not the empty
+    string has a name in the PDB file that is either the canonical name of the
+    atom definition or one of its synonyms.
     3. All atoms have the same number of neighbours in the PDB graph as the
     residue definition
 
     """
     for pdb_idx, resdef_atom in mapping.items():
-        if (  # nofmt
-            resdef_atom.symbol == ""
-            and resdef_atom.name.startswith("NON_MATCHING_ATOM_")
-        ):
+        if resdef_atom.symbol == "":
             continue
 
         if resdef_atom.symbol == "":
             if data.name[pdb_idx] not in resdef_atom.names:
-                logging.debug(
-                    f"  MAPPING INVALID: invalid name {data.name[pdb_idx]} in PDB for {resdef_atom}",
+                logger.debug(
+                    f"    MAPPING INVALID: invalid name {data.name[pdb_idx]} in PDB for {resdef_atom}",
                 )
                 return False
             continue
@@ -314,8 +309,8 @@ def _has_valid_connectivity(
         n_resdef_neighbours = n_resdef_neighbours_map[resdef_atom]
         n_pdb_neighbours = n_pdb_neighbours_map[pdb_idx]
         if n_resdef_neighbours != n_pdb_neighbours:
-            logging.debug(
-                f"  MAPPING INVALID: {n_pdb_neighbours=} but {n_resdef_neighbours=} for {resdef_atom}",
+            logger.debug(
+                f"    MAPPING INVALID: {n_pdb_neighbours=} but {n_resdef_neighbours=} for {resdef_atom}",
             )
             return False
 
@@ -331,6 +326,11 @@ class AdditionalDefMatch(ResidueMatch):
         resdef: ResidueDefinition,
     ) -> Self:
         """Compute the bond mapping for a particular atom mapping"""
+        n_unique_mapped_names = len(
+            {atomdef.name for atomdef in atom_mapping.values()},
+        )
+        assert n_unique_mapped_names == len(atom_mapping)
+
         neighbouring_atoms: dict[str, int] = {}
         matched_atoms: dict[str, int] = {}
         for i, atom in atom_mapping.items():
@@ -346,8 +346,8 @@ class AdditionalDefMatch(ResidueMatch):
             prior_bond = None
         elif resdef._prior_bond_leaving_atoms.isdisjoint(matched_atoms):
             prior_bond = (
-                neighbouring_atoms[resdef._prior_bond_linking_atom],
-                matched_atoms[resdef._posterior_bond_linking_atom],
+                neighbouring_atoms[resdef._prior_bond_partner_atom + "_PRIOR"],
+                matched_atoms[resdef._prior_bond_linking_atom],
             )
         else:
             assert False, "this is not a valid mapping"
@@ -359,8 +359,8 @@ class AdditionalDefMatch(ResidueMatch):
             posterior_bond = None
         elif resdef._posterior_bond_leaving_atoms.isdisjoint(matched_atoms):
             posterior_bond = (
-                matched_atoms[resdef._prior_bond_linking_atom],
-                neighbouring_atoms[resdef._posterior_bond_linking_atom],
+                matched_atoms[resdef._posterior_bond_linking_atom],
+                neighbouring_atoms[resdef._posterior_bond_partner_atom + "_POSTERIOR"],
             )
         else:
             assert False
@@ -372,15 +372,15 @@ class AdditionalDefMatch(ResidueMatch):
             crosslink = None
         elif resdef._crosslink_leaving_atoms.isdisjoint(matched_atoms):
             crosslink = (
-                matched_atoms[resdef.crosslink.atom1],
-                neighbouring_atoms[resdef.crosslink.atom2],
+                matched_atoms[resdef._crosslink_linking_atom],
+                neighbouring_atoms[resdef._crosslink_partner_atom + "_CROSSLINK"],
             )
         else:
             assert False
 
         return cls(
             residue_definition=resdef,
-            index_to_atomdef={k: v for k, v in atom_mapping.items() if v.symbol != ""},
+            index_to_atomdef={k: v for k, v in atom_mapping.items()},
             vsite_idcs=(),
             prior_bond_idcs=prior_bond,
             posterior_bond_idcs=posterior_bond,

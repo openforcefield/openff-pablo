@@ -1,6 +1,6 @@
 import logging
 from collections import defaultdict
-from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Sequence
 from typing import (
     Any,
     DefaultDict,
@@ -9,7 +9,6 @@ from typing import (
     no_type_check,
     overload,
 )
-from collections.abc import Sequence
 
 import rdkit
 import rdkit.Chem
@@ -42,6 +41,8 @@ __all__ = [
     "dbg",
 ]
 
+logger = logging.getLogger(__name__)
+
 
 class __UNSET__:
     """Reference value for an unset parameter."""
@@ -52,7 +53,7 @@ class __UNSET__:
 def dbg[T](o: T, msg: str = "{}") -> T:
     if "{}" not in msg:
         msg += ": {}"
-    logging.debug(msg.format(o))
+    logger.debug(msg.format(o))
     return o
 
 
@@ -109,7 +110,7 @@ def unwrap_or_none[T](container: Iterable[T]) -> T | None:
 
 
 def sort_tuple[*Ts](tup: tuple[*Ts]) -> tuple[*Ts]:
-    return tuple(sorted(tup))  # type: ignore
+    return tuple(sorted(tup))  # pyright: ignore[reportArgumentType, reportUnknownVariableType, reportUnknownArgumentType]
 
 
 def flatten[T](container: Iterable[Iterable[T]]) -> Iterator[T]:
@@ -146,6 +147,13 @@ def coerce_or_none[T](value: Any, func: Callable[[Any], T]) -> T | None:
         return func(value)
     except Exception:
         return None
+
+
+def coerce_or_leave[T, U](value: T, func: Callable[[Any], U]) -> T | U:
+    try:
+        return func(value)
+    except Exception:
+        return value
 
 
 def with_neighbours[T, U](
@@ -247,7 +255,11 @@ def charge_int_or_none(s: str, strict: bool = False):
     if s == "" or s == "?":
         return 0 if strict else None
     else:
-        if s.endswith("+"):
+        if s.strip() == "+" and not strict:
+            return 1
+        elif s.strip() == "-" and not strict:
+            return -1
+        elif s.endswith("+"):
             return int(s[:-1])
         elif s.endswith("-"):
             return -int(s[:-1])
@@ -255,7 +267,7 @@ def charge_int_or_none(s: str, strict: bool = False):
             return int(s)
 
 
-def cryst_to_box_vectors(
+def cryst_to_box_vectors(  # pyright: ignore[reportUnknownParameterType]
     a: float,
     b: float,
     c: float,
@@ -279,7 +291,7 @@ def cryst_to_box_vectors(
         )
         return box_vectors.value_in_unit(openmm_unit_nanometer) * unit.nanometer
 
-    return inner(a, b, c, alpha, beta, gamma)  # type: ignore
+    return inner(a, b, c, alpha, beta, gamma)  # pyright: ignore[reportUnknownVariableType]
 
 
 def assign_stereochemistry_from_3d(molecule: MoleculeLike):
@@ -432,7 +444,7 @@ def draw_molecule(
             old: new
             for new, old in enumerate(
                 a.GetIdx()
-                for a in rdmol.GetAtoms()  # type: ignore
+                for a in rdmol.GetAtoms()
                 if a.GetAtomicNum() != 1 and a.GetMass() != 1
             )
         }

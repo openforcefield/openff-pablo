@@ -1,47 +1,22 @@
-name: pablo-test
+name: pablo-tests
 channels:
-  - conda-forge
+- conda-forge
+- nodefaults
 dependencies:
-  # Base depends (runtime and imports)
-  - pip
-  - python>=3.12
-  - openff-toolkit-base>=0.17.1
-  - rdkit
-  - openmm
-  - pyxdg
-  - rustworkx
-  - gemmi
-
-  # Lints
-  - basedpyright
-  - ruff
-
-  # Testing
-  - pytest
-  - pytest-xdist
-  - pytest-socket
-  - pytest-timeout
-  # - pytest-cov
-  # - codecov
-
-  # Examples
-  - jupyterlab>=4
-  - ipywidgets>=8
-  - jupyterlab_execute_time
-  - jupyterlab-lsp
-  - jupyterlab_rise
-  - jedi-language-server
-  - jupyterlab_code_formatter
-  - black
-  - isort
-  - snakeviz
-  - nglview>=3.0.6,<3.1.0
-  - pdbfixer
-  - mdanalysis
-  - openff-interchange
-  - ambertools
-  - numpy
-  - pymol-open-source
-  - openff-nagl-base >= 0.5.2
-  - openff-nagl-models
-  - pytorch-cpu >= 2.6
+- basedpyright *
+- ruff *
+- pytest *
+- pytest-xdist *
+- pytest-socket *
+- pytest-timeout *
+- nglview >=3.0.6,<3.1.0
+- ipython *
+- python >=3.12
+- openff-toolkit-base >=0.17.1
+- rdkit *
+- openmm *
+- numpy *
+- rustworkx *
+- pyxdg *
+- gemmi *
+- pip

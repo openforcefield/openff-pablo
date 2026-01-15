@@ -3,6 +3,7 @@ from collections.abc import Mapping, Sequence
 
 import pytest
 from openff.toolkit import Molecule, Topology, unit
+from openff.toolkit.topology import Atom
 
 from openff.pablo import STD_CCD_CACHE
 from openff.pablo._pdb import topology_from_pdb
@@ -30,13 +31,14 @@ def test_2zuq_cross_chain_disulfide_discontinuous(tmp_ccd_cache: CcdCache):
         for elem, mol_idx in zip(topology.chains, [0, 0, 1, 2])
     )
     # All molecules represent a single molecule
-    assert not topology.molecule(0)._has_multiple_molecules()  # type: ignore
-    assert not topology.molecule(1)._has_multiple_molecules()  # type: ignore
-    assert not topology.molecule(2)._has_multiple_molecules()  # type: ignore
+    assert not topology.molecule(0)._has_multiple_molecules()  # pyright: ignore[reportCallIssue]
+    assert not topology.molecule(1)._has_multiple_molecules()  # pyright: ignore[reportCallIssue]
+    assert not topology.molecule(2)._has_multiple_molecules()  # pyright: ignore[reportCallIssue]
     # First molecule's pdb_index values are contiguous except for one discontinuity
     index_offset = 0
     for i, atom in enumerate(topology.molecule(0).atoms):
-        pdb_index: int = atom.metadata["pdb_index"]  # type: ignore
+        pdb_index = atom.metadata["pdb_index"]
+        assert isinstance(pdb_index, int)
         if pdb_index != i and index_offset == 0:
             index_offset = pdb_index - i
 
@@ -46,14 +48,14 @@ def test_2zuq_cross_chain_disulfide_discontinuous(tmp_ccd_cache: CcdCache):
         i == atom.metadata["pdb_index"]
         for i, atom in enumerate(
             topology.molecule(1).atoms,
-            start=topology.molecule(1).atom(0).metadata["pdb_index"],  # type: ignore
+            start=topology.molecule(1).atom(0).metadata["pdb_index"],  #  pyright: ignore[reportArgumentType]
         )
     )
     assert all(
         i == atom.metadata["pdb_index"]
         for i, atom in enumerate(
             topology.molecule(2).atoms,
-            start=topology.molecule(2).atom(0).metadata["pdb_index"],  # type: ignore
+            start=topology.molecule(2).atom(0).metadata["pdb_index"],  #  pyright: ignore[reportArgumentType]
         )
     )
 
@@ -65,22 +67,9 @@ def test_2mum_neutralized_has_all_neutral_aas(
     pdbfn = get_test_data_path("prepared_pdbs/2MUM_neutralized.pdb")
     topology = topology_from_pdb(pdbfn, residue_library=tmp_ccd_cache)
     assert {residue.identifier[3] for residue in topology.residues} == all_aa_resnames
-    print(
-        *[
-            (
-                atom.name,
-                atom.metadata["residue_name"],
-                atom.metadata["res_seq"],
-                atom.formal_charge.m,
-            )
-            for atom in topology.atoms
-            if atom.formal_charge.m != 0
-        ],
-        sep="\n",
-    )
     assert {
         atom.formal_charge.m_as("elementary_charge")
-        for atom in topology.atoms  # type: ignore
+        for atom in topology.atoms  # pyright: ignore[reportUnhashable]
     } == {0}
 
 
@@ -99,18 +88,18 @@ def test_1p3q_loads_chains_without_ter(tmp_ccd_cache: CcdCache):
         for elem, mol_idx in zip(topology.chains, [0, 1, 2, 3, 4])
     )
     # All molecules represent a single molecule
-    assert not topology.molecule(0)._has_multiple_molecules()  # type: ignore
-    assert not topology.molecule(1)._has_multiple_molecules()  # type: ignore
-    assert not topology.molecule(2)._has_multiple_molecules()  # type: ignore
-    assert not topology.molecule(3)._has_multiple_molecules()  # type: ignore
-    assert not topology.molecule(4)._has_multiple_molecules()  # type: ignore
+    assert not topology.molecule(0)._has_multiple_molecules()  # pyright: ignore[reportCallIssue]
+    assert not topology.molecule(1)._has_multiple_molecules()  # pyright: ignore[reportCallIssue]
+    assert not topology.molecule(2)._has_multiple_molecules()  # pyright: ignore[reportCallIssue]
+    assert not topology.molecule(3)._has_multiple_molecules()  # pyright: ignore[reportCallIssue]
+    assert not topology.molecule(4)._has_multiple_molecules()  # pyright: ignore[reportCallIssue]
     # All molecule's pdb_index values are contiguous
     for molecule in topology.molecules:
         assert all(
             i == atom.metadata["pdb_index"]
             for i, atom in enumerate(
                 molecule.atoms,
-                start=molecule.atom(0).metadata["pdb_index"],  # type: ignore
+                start=molecule.atom(0).metadata["pdb_index"],  # pyright: ignore[reportArgumentType]
             )
         )
 
@@ -129,14 +118,16 @@ def test_5eil_is_three_proteins_with_ncaa_plus_fe3_and_water(tmp_ccd_cache: CcdC
     protein_c = topology.molecule(2)
 
     fe = topology.molecule(3)
-    assert [atom.symbol for atom in fe.atoms] == ["Fe"]
-    assert fe.atom(0).formal_charge == 3 * unit.elementary_charge  # type: ignore
+    fe_atom = unwrap(fe.atoms)
+    assert isinstance(fe_atom, Atom)
+    assert fe_atom.symbol == "Fe"
+    assert fe_atom.formal_charge == 3 * unit.elementary_charge
 
     assert all([mol.n_atoms == 3 for mol in topology.molecules][4:])
 
-    assert not protein_a._has_multiple_molecules()  # type: ignore
-    assert not protein_b._has_multiple_molecules()  # type: ignore
-    assert not protein_c._has_multiple_molecules()  # type: ignore
+    assert not protein_a._has_multiple_molecules()  # pyright: ignore[reportCallIssue]
+    assert not protein_b._has_multiple_molecules()  # pyright: ignore[reportCallIssue]
+    assert not protein_c._has_multiple_molecules()  # pyright: ignore[reportCallIssue]
 
     assert "BP5" in [res.identifier[3] for res in protein_a.residues]
     assert "BP5" in [res.identifier[3] for res in protein_b.residues]
@@ -226,17 +217,8 @@ def test_3ip9_loads_with_augmented_resdb(tmp_ccd_cache: CcdCache):
     )
     assert "DYE" in [res.identifier[3] for res in pablo_top.molecule(0).residues]
 
-    substructure_mol = Molecule.from_mapped_smiles(smiles, allow_undefined_stereo=True)
-    for i, atom in enumerate(substructure_mol.atoms, start=1):
-        if i in leavers:
-            atom.metadata["substructure_atom"] = False
-        else:
-            atom.metadata["substructure_atom"] = True
-    legacy_top: Topology = Topology.from_pdb(
-        get_test_data_path("prepared_pdbs/3ip9_dye_solvated.pdb"),
-        # _additional_substructures is a PROTOTYPE.
-        # Its behavior and input type are likely to change.
-        _additional_substructures=[substructure_mol],
+    legacy_top = Topology.from_json(
+        get_test_data_path("prepared_pdbs/3ip9_dye_solvated.json").read_text(),
     )
 
     assert pablo_top.n_molecules == legacy_top.n_molecules
@@ -268,8 +250,8 @@ def test_3ip9_loads_with_augmented_resdb(tmp_ccd_cache: CcdCache):
     for pablo_res, legacy_res in zip(pablo_top.residues, legacy_top.residues):
         pablo_res_charge, legacy_res_charge = 0, 0
         for pablo_atom, legacy_atom in zip(pablo_res.atoms, legacy_res.atoms):
-            pablo_res_charge += pablo_atom.formal_charge  # type:ignore
-            legacy_res_charge += legacy_atom.formal_charge  # type:ignore
+            pablo_res_charge += pablo_atom.formal_charge.m_as("elementary_charge")
+            legacy_res_charge += legacy_atom.formal_charge.m_as("elementary_charge")
         assert pablo_res_charge == legacy_res_charge
 
 
@@ -312,11 +294,14 @@ def test_3ip9_loads_via_conects(tmp_ccd_cache: CcdCache):
     )
     assert "DYE" in [res.identifier[3] for res in pablo_top.molecule(0).residues]
 
-    legacy_top: Topology = Topology.from_pdb(
-        path,
-        # _additional_substructures is a PROTOTYPE.
-        # Its behavior and input type are likely to change.
-        _additional_substructures=[substructure_mol],
+    # legacy_top: Topology = Topology.from_pdb(
+    #     path,
+    #     # _additional_substructures is a PROTOTYPE.
+    #     # Its behavior and input type are likely to change.
+    #     _additional_substructures=[substructure_mol],
+    # )
+    legacy_top = Topology.from_json(
+        get_test_data_path("prepared_pdbs/3ip9_dye_solvated.json").read_text(),
     )
 
     assert pablo_top.n_molecules == legacy_top.n_molecules
@@ -348,8 +333,8 @@ def test_3ip9_loads_via_conects(tmp_ccd_cache: CcdCache):
     for pablo_res, legacy_res in zip(pablo_top.residues, legacy_top.residues):
         pablo_res_charge, legacy_res_charge = 0, 0
         for pablo_atom, legacy_atom in zip(pablo_res.atoms, legacy_res.atoms):
-            pablo_res_charge += pablo_atom.formal_charge  # type:ignore
-            legacy_res_charge += legacy_atom.formal_charge  # type:ignore
+            pablo_res_charge += pablo_atom.formal_charge.m_as("elementary_charge")
+            legacy_res_charge += legacy_atom.formal_charge.m_as("elementary_charge")
         assert pablo_res_charge == legacy_res_charge
 
 
@@ -469,8 +454,8 @@ def test_3ip9_trimmed_loads_via_conects_like_legacy(tmp_ccd_cache: CcdCache):
     for pablo_res, legacy_res in zip(pablo_top.residues, legacy_top.residues):
         pablo_res_charge, legacy_res_charge = 0, 0
         for pablo_atom, legacy_atom in zip(pablo_res.atoms, legacy_res.atoms):
-            pablo_res_charge += pablo_atom.formal_charge  # type:ignore
-            legacy_res_charge += legacy_atom.formal_charge  # type:ignore
+            pablo_res_charge += pablo_atom.formal_charge.m_as("elementary_charge")
+            legacy_res_charge += legacy_atom.formal_charge.m_as("elementary_charge")
         assert pablo_res_charge == legacy_res_charge
 
 
@@ -813,7 +798,7 @@ def test_unknown_residue_gives_clear_error(tmp_ccd_cache: CcdCache):
                 "A topology cannot be created without chemical information for every",
                 "atom and bond. The following residues present in PDB file",
                 str(path),
-                "could not be identified from the provided chemical library:",
+                "could not be identified from the provided residue library:",
                 "  C:UNK#1 (l4980-5038): No residue definitions",
             ],
         )
@@ -840,7 +825,7 @@ def test_unmatched_residues_give_clear_error(
                 "A topology cannot be created without chemical information for every",
                 "atom and bond. The following residues present in PDB file",
                 str(path),
-                "could not be identified from the provided chemical library:",
+                "could not be identified from the provided residue library:",
                 "  A:CYS#221 (l1-11): No matching residue definitions:",
                 "    ╰─ CYSTEINE didn't match: found CONECT record that could not be matched with a bond",
                 "",
@@ -1080,7 +1065,7 @@ def test_complex_pdb_1flr(tmp_ccd_cache: CcdCache):
 
     with pytest.warns(
         UserWarning,
-        match="Alt locs not supported; only empty or 'A' alt locs will be read",
+        match="Alt loc support is limited; only empty or 'A' alt locs will be read",
     ):
         topology = topology_from_pdb(
             get_test_data_path("prepared_pdbs/1FLR_prepared.pdb"),
@@ -1141,6 +1126,62 @@ def test_7yv1_peptide_using_sdf(tmp_ccd_cache: CcdCache):
         residue_library=tmp_ccd_cache,
         additional_definitions=[ligand],
     )
+
+
+def test_two_butanols_fails_with_no_additional_definitions(tmp_ccd_cache: CcdCache):
+    with pytest.raises(PdbResidueMatchError):
+        topology_from_pdb(
+            get_test_data_path("two_butanols.pdb"),
+            residue_library=tmp_ccd_cache,
+            additional_definitions=[],
+        )
+
+
+def test_two_butanols_fails_with_wrong_additional_definitions(tmp_ccd_cache: CcdCache):
+    with pytest.raises(PdbResidueMatchError):
+        topology_from_pdb(
+            get_test_data_path("two_butanols.pdb"),
+            residue_library=tmp_ccd_cache,
+            additional_definitions=[ResidueDefinition.anon_from_smiles("CCC")],
+        )
+
+
+def test_1csa_maestro_loads(tmp_ccd_cache: CcdCache):
+    tmp_ccd_cache.auto_download = True
+    maestro_top = topology_from_pdb(
+        get_test_data_path("prepared_pdbs/1csa_maestro.pdb"),
+        residue_library=tmp_ccd_cache,
+    )
+    json_top_peptide_only = Topology.from_json(
+        get_test_data_path("1CSA.topology.json").read_text(),
+    )
+    for maestro_mol, json_mol in zip(
+        maestro_top.molecules,
+        json_top_peptide_only.molecules,
+    ):
+        assert maestro_mol.is_isomorphic_with(json_mol)
+
+    assert maestro_top.n_molecules == 2016
+    assert maestro_top.n_unique_molecules == 4
+
+
+def test_1csa_maestro_waterfirst_loads(tmp_ccd_cache: CcdCache):
+    """Test cyclic peptide after monomeric residue with PDB file with first (cyclic peptide) molecule moved to end"""
+    tmp_ccd_cache.auto_download = True
+    maestro_top = topology_from_pdb(
+        get_test_data_path("prepared_pdbs/1csa_maestro_waterfirst.pdb"),
+        residue_library=tmp_ccd_cache,
+    )
+    json_top_peptide_only = Topology.from_json(
+        get_test_data_path("1CSA.topology.json").read_text(),
+    )
+
+    json_peptide = json_top_peptide_only.molecule(0)
+    maestro_peptide = maestro_top.molecule(-1)
+    assert maestro_peptide.is_isomorphic_with(json_peptide)
+
+    assert maestro_top.n_molecules == 2016
+    assert maestro_top.n_unique_molecules == 4
 
 
 # TODO: Test that the correct atom metadata are written out (as documented in topology_from_pdb())

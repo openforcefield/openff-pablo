@@ -12,9 +12,10 @@ def test_auto_download_off_raises_clear_error_5eil(tmp_ccd_cache: CcdCache):
         match="\n".join(
             [
                 "",
-                "Some missing residues are likely to be in the CCD; you can download",
-                "them automatically by setting `residue_library.auto_download = True`",
-                "or manually with the get_from_ccd method.",
+                "Some missing residues are likely to be in the CCD; if the CCD",
+                "form is what you intend, you can download them automatically",
+                "by setting `residue_library.auto_download = True` or manually",
+                "with the get_from_ccd method.",
             ],
         ),
     ):

@@ -1,3 +1,5 @@
+# pyright: basic
+import re
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -25,9 +27,12 @@ from rdkit.Chem import (
     GetMolFrags,
     GetPeriodicTable,
     Mol,
+    MolFromSmarts,
     MolFromSmiles,
     MolToSmiles,
     PeriodicTable,
+    QueryAtom,
+    QueryBond,
     SanitizeFlags,
     SanitizeMol,
 )
@@ -372,6 +377,10 @@ class RdAtom:
     def atomic_number(self) -> int:
         return self._atom.GetAtomicNum()
 
+    @property
+    def symbol(self) -> str:
+        return PERIODIC_TABLE.GetElementSymbol(self.atomic_number)
+
     def with_formal_charge(self, formal_charge: int) -> Self:
         new = self._copy()
         new._atom.SetFormalCharge(formal_charge)
@@ -490,3 +499,150 @@ class RdBond:
                 raise PabloError(
                     f"Expected RDKit bond stereochemistry of E or Z, got {tag} instead",
                 )
+
+
+@dataclass(frozen=True, init=False)
+class RdQueryAtom:
+    _atom: QueryAtom
+    _smarts: str
+
+    def __init__(self, atom: QueryAtom):
+        object.__setattr__(self, "_atom", atom)
+        object.__setattr__(
+            self,
+            "_smarts",
+            self._atom.GetSmarts().replace(";", "&"),
+        )
+
+        if "," in self._smarts:
+            raise PabloError("OR (,) not yet supported in SMARTS")
+        if "!" in self._smarts:
+            raise PabloError("NOT (!) not yet supported in SMARTS")
+        if "a" in self._smarts:
+            raise PabloError("Explicit aromaticity not yet supported in SMARTS")
+
+    @property
+    def atomic_number(self) -> int:
+        assert self._smarts.count("#") <= 1
+        return self._atom.GetAtomicNum()
+
+    @property
+    def symbol(self) -> None | str:
+        if self.atomic_number == 0:
+            return None
+        else:
+            return PERIODIC_TABLE.GetElementSymbol(self.atomic_number)
+
+    @property
+    def formal_charge(self) -> int:
+        formal_charge = 0
+        int_found: bool = False
+        lone_sign_found: bool = False
+        for sign, charge in re.findall(r"([-+])([0-9]*)", self._smarts):
+            match sign, charge:
+                case "+", "":
+                    formal_charge += 1
+                    lone_sign_found = True
+                case "-", "":
+                    formal_charge -= 1
+                    lone_sign_found = True
+                case "+", charge:
+                    formal_charge = int(charge)
+                    int_found = True
+                case "-", charge:
+                    formal_charge = -int(charge)
+                    int_found = True
+                case _, _:
+                    assert False, "unreachable"
+
+        if (
+            (self._smarts.count("+") + self._smarts.count("-") == 0)
+            or (self._smarts.count("+") != 0 and self._smarts.count("-") != 0)
+            or (int_found and lone_sign_found)
+        ):
+            raise PabloError(
+                f"ambiguous charge on atom: {self._smarts}",
+            )
+        return formal_charge
+
+    @property
+    def degree(self) -> int | None:
+        degrees = re.findall(r"D([0-9]*)", self._smarts)
+        match len(degrees):
+            case 0:
+                return None
+            case 1:
+                return int(degrees[0])
+            case _:
+                raise PabloError("degree multiply defined on atom")
+
+    @property
+    def index(self) -> int:
+        return self._atom.GetIdx()
+
+
+@dataclass(frozen=True, init=False)
+class RdQueryBond:
+    _bond: QueryBond
+    _smarts: str
+
+    def __init__(self, bond: QueryBond):
+        object.__setattr__(self, "_bond", bond)
+        object.__setattr__(
+            self,
+            "_smarts",
+            self._bond.GetSmarts().replace(";", "&"),
+        )
+
+        if "," in self._smarts:
+            raise PabloError("OR (,) not yet supported in SMARTS")
+        if "!" in self._smarts:
+            raise PabloError("NOT (!) not yet supported in SMARTS")
+        if ":" in self._smarts:
+            raise PabloError("Explicit aromaticity not yet supported in SMARTS")
+
+    @property
+    def begin_atom(self) -> RdQueryAtom:
+        return RdQueryAtom(self._bond.GetBeginAtom())
+
+    @property
+    def end_atom(self) -> RdQueryAtom:
+        return RdQueryAtom(self._bond.GetEndAtom())
+
+    @property
+    def order(self) -> float:
+        if (
+            self._smarts.count("-")
+            + self._smarts.count("=")
+            + self._smarts.count("#")
+            + self._smarts.count("$")
+            > 1
+        ):
+            raise PabloError("Ambiguous bond type")
+        return self._bond.GetBondTypeAsDouble()
+
+
+@dataclass(frozen=True, init=False)
+class RdSmarts:
+    _mol: Mol
+    _smarts: str
+
+    def __init__(self, smarts: str):
+        object.__setattr__(self, "_mol", MolFromSmarts(smarts))
+        object.__setattr__(self, "_smarts", smarts)
+
+    @property
+    def atoms(self) -> Iterator[RdQueryAtom]:
+        for atom in self._mol.GetAtoms():
+            yield RdQueryAtom(atom)
+
+    @property
+    def n_atoms(self) -> int:
+        return self._mol.GetNumAtoms(onlyExplicit=False)
+
+    @property
+    def bonds(self) -> Iterator[RdQueryBond]:
+        yield from (RdQueryBond(bond) for bond in self._mol.GetBonds())
+
+    def atom(self, idx: int) -> RdQueryAtom:
+        return RdQueryAtom(self._mol.GetAtomWithIdx(idx))

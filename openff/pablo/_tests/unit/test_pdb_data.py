@@ -608,6 +608,7 @@ def test_filter_on_polymer_linkages_rejects_unsupported_prior_bond(
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[False] * (len(gly_def_neutral.atoms) * 2),
         conects=[set()] * (len(gly_def_neutral.atoms) * 2),
+        res_idx=[0] * len(gly_def_neutral.atoms) + [1] * len(gly_def_neutral.atoms),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -650,6 +651,7 @@ def test_filter_on_polymer_linkages_rejects_prior_bond_across_ter(
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[True] * (len(gly_def_neutral.atoms) * 2),
         conects=[set()] * (len(gly_def_neutral.atoms) * 2),
+        res_idx=[0] * len(gly_def_neutral.atoms) + [1] * len(gly_def_neutral.atoms),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -697,6 +699,7 @@ def test_filter_on_polymer_linkages_sets_prior_bond(
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[False] * (len(gly_def_neutral.atoms) * 2),
         conects=[set()] * (len(gly_def_neutral.atoms) * 2),
+        res_idx=[0] * len(gly_def_neutral.atoms) + [1] * len(gly_def_neutral.atoms),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -743,6 +746,7 @@ def test_filter_on_polymer_linkages_rejects_no_prior_bond_without_molecule_start
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[False] * (len(gly_def_neutral.atoms) * 2),
         conects=[set()] * (len(gly_def_neutral.atoms) * 2),
+        res_idx=[0] * len(gly_def_neutral.atoms) + [1] * len(gly_def_neutral.atoms),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -788,6 +792,7 @@ def test_filter_on_polymer_linkages_rejects_unsupported_posterior_bond(
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[False] * (len(gly_def_neutral.atoms) * 2),
         conects=[set()] * (len(gly_def_neutral.atoms) * 2),
+        res_idx=[0] * len(gly_def_neutral.atoms) + [1] * len(gly_def_neutral.atoms),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -833,6 +838,7 @@ def test_filter_on_polymer_linkages_rejects_posterior_bond_across_ter(
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[True] * (len(gly_def_neutral.atoms) * 2),
         conects=[set()] * (len(gly_def_neutral.atoms) * 2),
+        res_idx=[0] * len(gly_def_neutral.atoms) + [1] * len(gly_def_neutral.atoms),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -880,6 +886,7 @@ def test_filter_on_polymer_linkages_sets_posterior_bond(
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[False] * (len(gly_def_neutral.atoms) * 2),
         conects=[set()] * (len(gly_def_neutral.atoms) * 2),
+        res_idx=[0] * len(gly_def_neutral.atoms) + [1] * len(gly_def_neutral.atoms),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,
@@ -926,6 +933,7 @@ def test_filter_on_polymer_linkages_rejects_no_posterior_bond_without_molecule_s
         res_name=["GLY"] * (len(gly_def_neutral.atoms) * 2),
         terminated=[False] * (len(gly_def_neutral.atoms) * 2),
         conects=[set()] * (len(gly_def_neutral.atoms) * 2),
+        res_idx=[0] * len(gly_def_neutral.atoms) + [1] * len(gly_def_neutral.atoms),
     )
     neighbour_match = ResidueMatch(
         residue_definition=gly_def_neutral,

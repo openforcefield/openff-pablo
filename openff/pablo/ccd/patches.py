@@ -87,7 +87,7 @@ BASIC_ATOMS: dict[str, list[tuple[str, str]]] = {
     "LYS": [("N", "H3")],
     "MET": [("N", "H3")],
     "PHE": [("N", "H3")],
-    "PRO": [],
+    "PRO": [("N", "H2")],
     "SER": [("N", "H3")],
     "THR": [("N", "H3")],
     "TRP": [("N", "H3")],

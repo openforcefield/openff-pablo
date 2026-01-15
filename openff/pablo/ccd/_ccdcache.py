@@ -748,7 +748,7 @@ LINKING_TYPES: dict[str, BondDefinition | None] = {
     # "D-gamma-peptide, C-delta linking".upper(): [],
     # "D-peptide COOH carboxy terminus".upper(): [],
     # "D-peptide NH3 amino terminus".upper(): [],
-    # "D-peptide linking".upper(): [],
+    "D-peptide linking".upper(): PEPTIDE_BOND,
     # "D-saccharide".upper(): [],
     # "D-saccharide, alpha linking".upper(): [],
     # "D-saccharide, beta linking".upper(): [],
