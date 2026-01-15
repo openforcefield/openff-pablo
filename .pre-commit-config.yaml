@@ -4,6 +4,10 @@
 #   pre-commit install-hooks
 ci:
   autoupdate_schedule: quarterly
+  skip:
+    - export-docs-env
+    - export-ci-env
+    - export-examples-env
 exclude: '^(\.tox|ci/templates|\.bumpversion\.cfg)(/|$)'
 repos:
   - repo: local
