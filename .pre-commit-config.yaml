@@ -23,6 +23,7 @@ repos:
           - pixi>=0.59.0
           - ripgrep>=15
           - git
+          - bash
         files: "pixi.toml|pixi.lock|devtools/conda-envs/docs_env.yaml"
         pass_filenames: false
       - id: export-ci-env
@@ -40,6 +41,7 @@ repos:
           - pixi>=0.59.0
           - ripgrep>=15
           - git
+          - bash
         files: "pixi.toml|pixi.lock|devtools/conda-envs/test_env.yaml"
         pass_filenames: false
       - id: export-examples-env
@@ -57,6 +59,7 @@ repos:
           - pixi>=0.59.0
           - ripgrep>=15
           - git
+          - bash
         files: "pixi.toml|pixi.lock|devtools/conda-envs/examples_env.yaml"
         pass_filenames: false
   - repo: https://github.com/pre-commit/pre-commit-hooks
