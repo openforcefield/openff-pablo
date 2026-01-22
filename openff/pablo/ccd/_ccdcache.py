@@ -2,7 +2,8 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from copy import deepcopy
 from io import StringIO
 from pathlib import Path
-from typing import Self, no_type_check
+from typing import Literal, Self, no_type_check, overload
+from collections.abc import Collection
 from urllib.error import URLError
 from urllib.request import HTTPError, urlopen
 
@@ -603,6 +604,125 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
                 flatten(patch(resdef) for resdef in new._definitions[residue_name]),
             )
         return new
+
+    @overload
+    def with_crosslink(
+        self,
+        *,
+        residues: tuple[str],
+        linking_atoms: tuple[str],
+        leaving_atoms: tuple[Collection[str]],
+        bond_order: int,
+        aromatic: bool = False,
+        stereo: Literal["E", "Z"] | None = None,
+    ) -> Self: ...
+
+    @overload
+    def with_crosslink(
+        self,
+        *,
+        residues: tuple[str, str],
+        linking_atoms: tuple[str, str],
+        leaving_atoms: tuple[Collection[str], Collection[str]],
+        bond_order: int,
+        aromatic: bool = False,
+        stereo: Literal["E", "Z"] | None = None,
+    ) -> Self: ...
+
+    def with_crosslink(
+        self,
+        *,
+        residues: tuple[str, ...],
+        linking_atoms: tuple[str, ...],
+        leaving_atoms: tuple[Collection[str], ...],
+        bond_order: int = 1,
+        aromatic: bool = False,
+        stereo: Literal["E", "Z"] | None = None,
+    ) -> Self:
+        """
+        Add a custom crosslink between residues.
+
+        Parameters
+        ==========
+        residues
+            The names of the residues the crosslink should be formed between.
+            May have 1 entry for a homodimer or 2 entries for a heterodimer.
+        linking_atoms
+            The atom names between which the crosslink bond is formed. Should
+            have one corresponding entry for each residue.
+        leaving_atoms
+            The atom names that are absent from the PDB file when the crosslink
+            is in place. These atom names are replaced by the crosslink bond.
+            Should have 1 entry for a homodimer or 2 entries for a heterodimer.
+            Each entry should include all atom names that are absent when the
+            crosslink exists. For example, for a disulfide bond between two
+            cysteines, the leaving atoms are ``[["HG"]]``. For a peptide bond
+            between two alpha amino acids, the leaving atoms are
+            ``[["H2"], ["OXT", "HXT"]]``, though peptide bonds are typically
+            modelled with linking bonds rather than crosslinks.
+        bond_order
+            The bond order of the crosslink; 1 for a single bond, 2 for a double
+            bond, etc.
+        aromatic
+            ``True`` if the bond is aromatic; ``False`` otherwise.
+        stereo
+            The stereochemistry of the crosslink bond. For a bond without
+            stereochemistry, choose ``None``.
+        """
+        if len(residues) != len(linking_atoms):
+            raise PabloError(
+                "residues and linking_atoms arguments should have same number of entries",
+            )
+        if len(residues) != len(leaving_atoms):
+            raise PabloError(
+                "residues and leaving_atoms arguments should have same number of entries",
+            )
+
+        if len(residues) == 1:
+            res_a, res_b = residues[0], residues[0]
+            link_a, link_b = linking_atoms[0], linking_atoms[0]
+            leavers_a, leavers_b = leaving_atoms[0], leaving_atoms[0]
+        elif len(residues) == 2:
+            res_a, res_b = residues
+            link_a, link_b = linking_atoms
+            leavers_a, leavers_b = leaving_atoms
+        else:
+            raise PabloError("residues argument should have 1 or 2 entries")
+
+        bond_a = BondDefinition(
+            atom1=link_a,
+            atom2=link_b,
+            order=bond_order,
+            aromatic=aromatic,
+            stereo=stereo,
+        )
+        bond_b = bond_a.flipped()
+
+        modified_residues: list[ResidueDefinition] = []
+        for res_name, bond, leavers in (
+            (res_a, bond_a, leavers_a),
+            (res_b, bond_b, leavers_b),
+        ):
+            for residue in self[res_name]:
+                if residue.crosslink is not None:
+                    raise PabloError(
+                        f"{residue.residue_name} not supported: existing crosslink",
+                    )
+
+                modified_residues.append(
+                    residue.replace(
+                        crosslink=bond,
+                        atoms=tuple(
+                            (
+                                atom.replace(leaving=True)
+                                if atom.name in leavers
+                                else atom
+                            )
+                            for atom in residue.atoms
+                        ),
+                    ),
+                )
+        return self.with_replaced(modified_residues)
 
     def with_virtual_sites(
         self,
