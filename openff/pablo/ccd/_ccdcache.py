@@ -1,15 +1,12 @@
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from copy import deepcopy
-from io import StringIO
 from pathlib import Path
-from typing import Literal, Self, no_type_check, overload
-from collections.abc import Collection
+from typing import Literal, Self, overload
 from urllib.error import URLError
 from urllib.request import HTTPError, urlopen
 
-from openmm.app.internal.pdbx.reader.PdbxReader import PdbxReader
-
-from openff.pablo._utils import flatten
+from openff.pablo._cif import cif_ints, cif_str, cif_strs, parse_cif
+from openff.pablo._utils import flatten, unwrap
 from openff.pablo.exceptions import PabloError
 
 from ..chem import PEPTIDE_BOND, PHOSPHODIESTER_BOND
@@ -351,87 +348,87 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
 
     @staticmethod
     def _res_def_from_ccd_str(s: str) -> ResidueDefinition:
-        @no_type_check
-        def inner(s):
-            # TODO: Handle residues like CL with a single atom properly (no tables)
-            data = []
-            with StringIO(s) as file:
-                PdbxReader(file).read(data)
-            block = data[0]
+        # TODO: Handle residues like CL with a single atom properly (no tables)
+        data = parse_cif(s)
+        block = data[0]
 
-            parent_residue_name = (
-                block.getObj("chem_comp").getValue("mon_nstd_parent_comp_id").upper()
+        residueName = cif_str(unwrap(block["_chem_comp.id"])).upper()
+        residue_description = cif_str(unwrap(block["_chem_comp.name"]))
+        linking_type = cif_str(unwrap(block["_chem_comp.type"]))
+        linking_bond = LINKING_TYPES[linking_type]
+
+        atoms = [
+            AtomDefinition(
+                name=atom_name,
+                synonyms=tuple(
+                    [alt_atom_name] if alt_atom_name != atom_name else [],
+                ),
+                symbol=symbol[0:1].upper() + symbol[1:].lower(),
+                leaving=leaving_flag == "Y",
+                charge=charge,
+                aromatic=aromatic_flag == "Y",
+                stereo=None if stereo == "N" else stereo,  # pyright: ignore[reportArgumentType]
             )
-            parent_residue_name = (
-                None if parent_residue_name == "?" else parent_residue_name
+            for atom_name, alt_atom_name, symbol, leaving_flag, (
+                charge,
+                aromatic_flag,
+                stereo,
+            ) in zip(
+                cif_strs(block["_chem_comp_atom.atom_id"]),
+                cif_strs(block["_chem_comp_atom.alt_atom_id"]),
+                cif_strs(block["_chem_comp_atom.type_symbol"]),
+                cif_strs(block["_chem_comp_atom.pdbx_leaving_atom_flag"]),
+                zip(  # Keep zip invocations to <=5 arguments to keep types attached
+                    cif_ints(block["_chem_comp_atom.charge"]),
+                    cif_strs(block["_chem_comp_atom.pdbx_aromatic_flag"]),
+                    cif_strs(block["_chem_comp_atom.pdbx_stereo_config"]),
+                    strict=True,
+                ),
+                strict=True,
             )
-            residueName = block.getObj("chem_comp").getValue("id").upper()
-            residue_description = block.getObj("chem_comp").getValue("name")
-            linking_type = block.getObj("chem_comp").getValue("type").upper()
-            linking_bond = LINKING_TYPES[linking_type]
+        ]
 
-            atomData = block.getObj("chem_comp_atom")
-            atomNameCol = atomData.getAttributeIndex("atom_id")
-            altAtomNameCol = atomData.getAttributeIndex("alt_atom_id")
-            symbolCol = atomData.getAttributeIndex("type_symbol")
-            leavingCol = atomData.getAttributeIndex("pdbx_leaving_atom_flag")
-            chargeCol = atomData.getAttributeIndex("charge")
-            aromaticCol = atomData.getAttributeIndex("pdbx_aromatic_flag")
-            stereoCol = atomData.getAttributeIndex("pdbx_stereo_config")
-
-            atoms = [
-                AtomDefinition(
-                    name=row[atomNameCol],
-                    synonyms=tuple(
-                        [row[altAtomNameCol]]
-                        if row[altAtomNameCol] != row[atomNameCol]
-                        else [],
-                    ),
-                    symbol=row[symbolCol][0:1].upper() + row[symbolCol][1:].lower(),
-                    leaving=row[leavingCol] == "Y",
-                    charge=int(row[chargeCol]),
-                    aromatic=row[aromaticCol] == "Y",
-                    stereo=None if row[stereoCol] == "N" else row[stereoCol],
+        # If chem_comp_bond.atom_id_1 is missing, we need to make sure the
+        # entire chem_comp_bond loop is missing before we conclude that there
+        # are no bonds. If the loop is present, we need to raise an error.
+        # Typically, chem_comp_bond.atom_id_1 will be present,
+        # and the `or` will short circuit, or else the loop will be missing,
+        # in which case the `any` has nothing to do.
+        if "_chem_comp_bond.atom_id_1" in block or any(
+            key.startswith("_chem_comp_bond.") for key in block.keys()
+        ):
+            bonds = [
+                BondDefinition(
+                    atom1=atom1,
+                    atom2=atom2,
+                    order={"SING": 1, "DOUB": 2, "TRIP": 3, "QUAD": 4}[order],
+                    aromatic=aromatic_flag == "Y",
+                    stereo=None if stereo_flag == "N" else stereo_flag,  # pyright: ignore[reportArgumentType]
                 )
-                for row in atomData.getRowList()
+                for atom1, atom2, order, aromatic_flag, stereo_flag in zip(
+                    cif_strs(block["_chem_comp_bond.atom_id_1"]),
+                    cif_strs(block["_chem_comp_bond.atom_id_2"]),
+                    cif_strs(block["_chem_comp_bond.value_order"]),
+                    cif_strs(block["_chem_comp_bond.pdbx_aromatic_flag"]),
+                    cif_strs(block["_chem_comp_bond.pdbx_stereo_config"]),
+                    strict=True,
+                )
             ]
+        else:
+            bonds = []
 
-            bondData = block.getObj("chem_comp_bond")
-            if bondData is not None:
-                atom1Col = bondData.getAttributeIndex("atom_id_1")
-                atom2Col = bondData.getAttributeIndex("atom_id_2")
-                orderCol = bondData.getAttributeIndex("value_order")
-                aromaticCol = bondData.getAttributeIndex("pdbx_aromatic_flag")
-                stereoCol = bondData.getAttributeIndex("pdbx_stereo_config")
-                bonds = [
-                    BondDefinition(
-                        atom1=row[atom1Col],
-                        atom2=row[atom2Col],
-                        order={"SING": 1, "DOUB": 2, "TRIP": 3, "QUAD": 4}[
-                            row[orderCol]
-                        ],
-                        aromatic=row[aromaticCol] == "Y",
-                        stereo=None if row[stereoCol] == "N" else row[stereoCol],
-                    )
-                    for row in bondData.getRowList()
-                ]
-            else:
-                bonds = []
+        with _skip_residue_definition_validation():
+            residue_definition = ResidueDefinition(
+                residue_name=residueName,
+                description=residue_description,
+                linking_bond=linking_bond,
+                crosslink=None,
+                atoms=tuple(atoms),
+                bonds=tuple(bonds),
+                virtual_sites=(),
+            )
 
-            with _skip_residue_definition_validation():
-                residue_definition = ResidueDefinition(
-                    residue_name=residueName,
-                    description=residue_description,
-                    linking_bond=linking_bond,
-                    crosslink=None,
-                    atoms=tuple(atoms),
-                    bonds=tuple(bonds),
-                    virtual_sites=(),
-                )
-
-            return residue_definition
-
-        return inner(s)
+        return residue_definition
 
     def __contains__(self, value: object) -> bool:
         if not isinstance(value, str):
