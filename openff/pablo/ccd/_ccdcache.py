@@ -141,7 +141,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
             ]
         ] = [dict(d) for d in patches]
 
-        for path in self._glob("*.cif"):
+        for path in self._library_cifs():
             try:
                 self._add_definition_from_str(path.read_text(), patch=True)
             except Exception:
@@ -157,6 +157,12 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
 
         for resname, resdefs in extra_definitions.items():
             self._add_definitions(resdefs, resname)
+
+    def _library_cifs(self) -> Iterable[Path]:
+        for path in self._library_paths:
+            if path.exists() and path.is_file():
+                yield path
+        yield from self._glob("*.cif")
 
     def __getitem__(self, key: str) -> tuple[ResidueDefinition, ...]:
         res_name = key.upper()
