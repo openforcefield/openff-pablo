@@ -143,7 +143,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
 
         for path in self._library_cifs():
             try:
-                self._add_definition_from_str(path.read_text(), patch=True)
+                self._add_definitions_from_str(path.read_text(), patch=True)
             except Exception:
                 # If adding a file fails, skip it - we want an error at runtime, not importtime
                 pass
@@ -185,7 +185,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         # another CcdCache - but this is done by _add_definition_from_ccd()
         if self.auto_download:
             try:
-                return tuple(self._add_definition_from_ccd(res_name))
+                return tuple(self._add_definitions_from_ccd(res_name))
             except HTTPError:
                 raise KeyError(res_name, "unknown and absent from CCD")
             except URLError:
@@ -215,14 +215,14 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
             If ``False``, do not apply patches.
         """
         s = self._download_cif(res_name)
-        return self._add_definition_from_str(
+        return self._add_definitions_from_str(
             s,
             res_name=res_name,
             patch=patch,
             return_old_definitions=False,
         )
 
-    def _add_definition_from_ccd(self, res_name: str) -> list[ResidueDefinition]:
+    def _add_definitions_from_ccd(self, res_name: str) -> list[ResidueDefinition]:
         """Add a definition by retrieving it from the CCD (or the cache)"""
         if self._cache_path is None:
             s = self._download_cif(res_name)
@@ -233,7 +233,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
             else:
                 s = self._download_cif(res_name)
 
-        return self._add_definition_from_str(s, res_name=res_name, patch=True)
+        return self._add_definitions_from_str(s, res_name=res_name, patch=True)
 
     def _apply_patches(
         self,
@@ -260,27 +260,31 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
 
         return definitions
 
-    def _add_definition_from_str(
+    def _add_definitions_from_str(
         self,
         s: str,
         res_name: str | None = None,
         patch: bool = False,
         return_old_definitions: bool = True,
     ) -> list[ResidueDefinition]:
-        definition = self._res_def_from_ccd_str(s)
-        if res_name is None:
-            if definition.residue_name is None:
-                raise PabloError(
-                    "Anonymous residue definitions cannot be added to a CcdCache",
-                )
-            res_name = definition.residue_name.upper()
+        definitions: list[ResidueDefinition] = []
+        for definition in self._res_defs_from_ccd_str(s):
+            if res_name is None:
+                if definition.residue_name is None:
+                    raise PabloError(
+                        "Anonymous residue definitions cannot be added to a CcdCache",
+                    )
+                res_name = definition.residue_name.upper()
 
-        return self._add_definitions(
-            (definition,),
-            res_name,
-            patch=patch,
-            return_old_definitions=return_old_definitions,
-        )
+            definitions.extend(
+                self._add_definitions(
+                    (definition,),
+                    res_name,
+                    patch=patch,
+                    return_old_definitions=return_old_definitions,
+                ),
+            )
+        return definitions
 
     def _add_definitions(
         self,
@@ -353,88 +357,87 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
             yield from path.glob(pattern)
 
     @staticmethod
-    def _res_def_from_ccd_str(s: str) -> ResidueDefinition:
+    def _res_defs_from_ccd_str(s: str) -> Iterator[ResidueDefinition]:
         # TODO: Handle residues like CL with a single atom properly (no tables)
         data = parse_cif(s)
-        block = data[0]
+        for block in data:
+            residueName = cif_str(unwrap(block["_chem_comp.id"])).upper()
+            residue_description = cif_str(unwrap(block["_chem_comp.name"]))
+            linking_type = cif_str(unwrap(block["_chem_comp.type"]))
+            linking_bond = LINKING_TYPES[linking_type]
 
-        residueName = cif_str(unwrap(block["_chem_comp.id"])).upper()
-        residue_description = cif_str(unwrap(block["_chem_comp.name"]))
-        linking_type = cif_str(unwrap(block["_chem_comp.type"]))
-        linking_bond = LINKING_TYPES[linking_type]
-
-        atoms = [
-            AtomDefinition(
-                name=atom_name,
-                synonyms=tuple(
-                    [alt_atom_name] if alt_atom_name != atom_name else [],
-                ),
-                symbol=symbol[0:1].upper() + symbol[1:].lower(),
-                leaving=leaving_flag == "Y",
-                charge=charge,
-                aromatic=aromatic_flag == "Y",
-                stereo=None if stereo == "N" else stereo,  # pyright: ignore[reportArgumentType]
-            )
-            for atom_name, alt_atom_name, symbol, leaving_flag, (
-                charge,
-                aromatic_flag,
-                stereo,
-            ) in zip(
-                cif_strs(block["_chem_comp_atom.atom_id"]),
-                cif_strs(block["_chem_comp_atom.alt_atom_id"]),
-                cif_strs(block["_chem_comp_atom.type_symbol"]),
-                cif_strs(block["_chem_comp_atom.pdbx_leaving_atom_flag"]),
-                zip(  # Keep zip invocations to <=5 arguments to keep types attached
-                    cif_ints(block["_chem_comp_atom.charge"]),
-                    cif_strs(block["_chem_comp_atom.pdbx_aromatic_flag"]),
-                    cif_strs(block["_chem_comp_atom.pdbx_stereo_config"]),
-                    strict=True,
-                ),
-                strict=True,
-            )
-        ]
-
-        # If chem_comp_bond.atom_id_1 is missing, we need to make sure the
-        # entire chem_comp_bond loop is missing before we conclude that there
-        # are no bonds. If the loop is present, we need to raise an error.
-        # Typically, chem_comp_bond.atom_id_1 will be present,
-        # and the `or` will short circuit, or else the loop will be missing,
-        # in which case the `any` has nothing to do.
-        if "_chem_comp_bond.atom_id_1" in block or any(
-            key.startswith("_chem_comp_bond.") for key in block.keys()
-        ):
-            bonds = [
-                BondDefinition(
-                    atom1=atom1,
-                    atom2=atom2,
-                    order={"SING": 1, "DOUB": 2, "TRIP": 3, "QUAD": 4}[order],
+            atoms = [
+                AtomDefinition(
+                    name=atom_name,
+                    synonyms=tuple(
+                        [alt_atom_name] if alt_atom_name != atom_name else [],
+                    ),
+                    symbol=symbol[0:1].upper() + symbol[1:].lower(),
+                    leaving=leaving_flag == "Y",
+                    charge=charge,
                     aromatic=aromatic_flag == "Y",
-                    stereo=None if stereo_flag == "N" else stereo_flag,  # pyright: ignore[reportArgumentType]
+                    stereo=None if stereo == "N" else stereo,  # pyright: ignore[reportArgumentType]
                 )
-                for atom1, atom2, order, aromatic_flag, stereo_flag in zip(
-                    cif_strs(block["_chem_comp_bond.atom_id_1"]),
-                    cif_strs(block["_chem_comp_bond.atom_id_2"]),
-                    cif_strs(block["_chem_comp_bond.value_order"]),
-                    cif_strs(block["_chem_comp_bond.pdbx_aromatic_flag"]),
-                    cif_strs(block["_chem_comp_bond.pdbx_stereo_config"]),
+                for atom_name, alt_atom_name, symbol, leaving_flag, (
+                    charge,
+                    aromatic_flag,
+                    stereo,
+                ) in zip(
+                    cif_strs(block["_chem_comp_atom.atom_id"]),
+                    cif_strs(block["_chem_comp_atom.alt_atom_id"]),
+                    cif_strs(block["_chem_comp_atom.type_symbol"]),
+                    cif_strs(block["_chem_comp_atom.pdbx_leaving_atom_flag"]),
+                    zip(  # Keep zip invocations to <=5 arguments to keep types attached
+                        cif_ints(block["_chem_comp_atom.charge"]),
+                        cif_strs(block["_chem_comp_atom.pdbx_aromatic_flag"]),
+                        cif_strs(block["_chem_comp_atom.pdbx_stereo_config"]),
+                        strict=True,
+                    ),
                     strict=True,
                 )
             ]
-        else:
-            bonds = []
 
-        with _skip_residue_definition_validation():
-            residue_definition = ResidueDefinition(
-                residue_name=residueName,
-                description=residue_description,
-                linking_bond=linking_bond,
-                crosslink=None,
-                atoms=tuple(atoms),
-                bonds=tuple(bonds),
-                virtual_sites=(),
-            )
+            # If chem_comp_bond.atom_id_1 is missing, we need to make sure the
+            # entire chem_comp_bond loop is missing before we conclude that there
+            # are no bonds. If the loop is present, we need to raise an error.
+            # Typically, chem_comp_bond.atom_id_1 will be present,
+            # and the `or` will short circuit, or else the loop will be missing,
+            # in which case the `any` has nothing to do.
+            if "_chem_comp_bond.atom_id_1" in block or any(
+                key.startswith("_chem_comp_bond.") for key in block.keys()
+            ):
+                bonds = [
+                    BondDefinition(
+                        atom1=atom1,
+                        atom2=atom2,
+                        order={"SING": 1, "DOUB": 2, "TRIP": 3, "QUAD": 4}[order],
+                        aromatic=aromatic_flag == "Y",
+                        stereo=None if stereo_flag == "N" else stereo_flag,  # pyright: ignore[reportArgumentType]
+                    )
+                    for atom1, atom2, order, aromatic_flag, stereo_flag in zip(
+                        cif_strs(block["_chem_comp_bond.atom_id_1"]),
+                        cif_strs(block["_chem_comp_bond.atom_id_2"]),
+                        cif_strs(block["_chem_comp_bond.value_order"]),
+                        cif_strs(block["_chem_comp_bond.pdbx_aromatic_flag"]),
+                        cif_strs(block["_chem_comp_bond.pdbx_stereo_config"]),
+                        strict=True,
+                    )
+                ]
+            else:
+                bonds = []
 
-        return residue_definition
+            with _skip_residue_definition_validation():
+                residue_definition = ResidueDefinition(
+                    residue_name=residueName,
+                    description=residue_description,
+                    linking_bond=linking_bond,
+                    crosslink=None,
+                    atoms=tuple(atoms),
+                    bonds=tuple(bonds),
+                    virtual_sites=(),
+                )
+
+            yield residue_definition
 
     def __contains__(self, value: object) -> bool:
         if not isinstance(value, str):
