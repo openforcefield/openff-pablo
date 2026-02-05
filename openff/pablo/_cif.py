@@ -4,12 +4,15 @@ from collections.abc import Iterable
 import gemmi
 
 from openff.pablo._utils import flatten
-from openff.pablo.exceptions import PabloError
+from openff.pablo.exceptions import GemmiError, PabloError
 
 
 def cif_float(s: str) -> float:
     """Convert a CIF value to a float; raise error if missing or invalid"""
-    n = gemmi.cif.as_number(s)
+    try:
+        n = gemmi.cif.as_number(s)
+    except Exception as e:
+        raise GemmiError(e)
     if math.isnan(n):
         raise PabloError(f"cannot convert {s!r} to float")
     return n
@@ -17,12 +20,20 @@ def cif_float(s: str) -> float:
 
 def cif_str(s: str) -> str:
     """Convert a CIF value to a str; return empty string if missing or invalid"""
-    return gemmi.cif.as_string(s)
+    try:
+        ret = gemmi.cif.as_string(s)
+    except Exception as e:
+        raise GemmiError(e)
+    return ret
 
 
 def cif_int(s: str) -> int:
     """Convert a CIF value to an int; raise error if missing or invalid"""
-    return gemmi.cif.as_int(s)
+    try:
+        ret = gemmi.cif.as_int(s)
+    except Exception as e:
+        raise GemmiError(e)
+    return ret
 
 
 def cif_opt_float(s: str) -> float | None:
@@ -31,6 +42,8 @@ def cif_opt_float(s: str) -> float | None:
         return cif_float(s)
     except ValueError:
         return None
+    except Exception as e:
+        raise GemmiError(e)
 
 
 def cif_opt_str(s: str) -> str | None:
@@ -39,6 +52,8 @@ def cif_opt_str(s: str) -> str | None:
         s = cif_str(s)
     except ValueError:
         return None
+    except Exception as e:
+        raise GemmiError(e)
     if s == "":
         return None
 

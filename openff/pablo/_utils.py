@@ -72,6 +72,12 @@ def no_none_in_values[K: Hashable, V](
     return None not in d.values()
 
 
+def no_none_in_set[K: Hashable](
+    s: set[K | None],
+) -> TypeGuard[set[K]]:
+    return None not in s
+
+
 def option_to_iter[T](option: T | None) -> Iterator[T]:
     if option is not None:
         yield option
