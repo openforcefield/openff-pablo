@@ -102,7 +102,7 @@ class PdbData:
 
     def __repr__(self) -> str:
         return (
-            f"PdbData.from_file({self.src_filename})"
+            f"PdbData.from_file({self.src_filename!r})"
             if self.src_filename is not None
             else f"<PdbData with {len(self.name)} records>"
         )
@@ -299,6 +299,108 @@ class PdbData:
         )
 
         return data
+
+    def to_pdb_str(self) -> str:
+        lines: list[str] = []
+        if self.cryst1_a is not None:
+            lines.append(
+                f"CRYST1{self.cryst1_a:>9.3f}{self.cryst1_b:>9.3f}{self.cryst1_c:>9.3f}"
+                + f"{self.cryst1_alpha:>7.2f}{self.cryst1_beta:>7.2f}{self.cryst1_gamma:>7.2f}"
+                + " P 1           1",
+            )
+        prev_model = None
+        prev_res = None
+        prev_term = False
+        for (
+            (model, serial, name, alt_loc),
+            (res_name, chain_id, res_seq, i_code),
+            (x, y, z, occupancy, temp_factor),
+            (element, charge, terminated),
+        ) in zip(
+            zip(self.model, self.serial, self.name, self.alt_loc),
+            zip(self.res_name, self.chain_id, self.res_seq, self.i_code),
+            zip(self.x, self.y, self.z, self.occupancy, self.temp_factor),
+            zip(self.element, self.charge, self.terminated),
+        ):
+            residue_info = (model, res_name, chain_id, res_seq, i_code)
+            if residue_info != prev_res and prev_term:
+                lines.append("TER")
+            if model != prev_model:
+                if prev_model is not None:
+                    lines.append("ENDMDL")
+                lines.append(f"MODEL     {model}")
+
+            if charge is None or charge == 0:
+                formatted_charge = "  "
+            elif 0 < charge < 10:
+                formatted_charge = f"+{charge}"
+            elif -10 < charge < 0:
+                formatted_charge = f"-{-charge}"
+            else:
+                raise ValueError(f"cannot format charge {charge}")
+
+            if len(name) < 4:
+                name = " " + name
+
+            assert len(element) <= 2
+
+            if res_name in {
+                "ALA",
+                "ARG",
+                "ASN",
+                "ASP",
+                "CYS",
+                "GLN",
+                "GLU",
+                "GLY",
+                "HIS",
+                "ILE",
+                "LEU",
+                "LYS",
+                "MET",
+                "PHE",
+                "PRO",
+                "SER",
+                "THR",
+                "TRP",
+                "TYR",
+                "VAL",
+                "DG",
+                "DA",
+                "DT",
+                "DC",
+                "G",
+                "A",
+                "U",
+                "C",
+            }:
+                record = "ATOM"
+            else:
+                record = "HETATM"
+
+            lines.append(
+                f"{record:<6.6}{serial:>5} {name:<4.4s}{alt_loc:1.1s}"
+                + f"{res_name:<4.4s}{chain_id:1.1s}{res_seq:>4}{i_code:1.1s}"
+                + f"   {x:>8.3f}{y:>8.3f}{z:>8.3f}{occupancy:>6.2f}{temp_factor:>6.2f}"
+                + f"          {element:>2.2s}{formatted_charge}",
+            )
+
+            prev_model = model
+            prev_res = residue_info
+            prev_term = terminated
+
+        if prev_model is not None:
+            lines.append("ENDMDL")
+        if prev_term:
+            lines.append("TER")
+
+        for a, bs in enumerate(self.conects):
+            if len(bs) != 0:
+                b1, b2, b3, b4, *_ = [*(self.serial[b] for b in bs), "", "", "", ""]
+                lines.append(f"CONECT{self.serial[a]:>5}{b1:>5}{b2:>5}{b3:>5}{b4:>5}")
+
+        lines.append("END\n")
+        return "\n".join(lines)
 
     @property
     def n_atoms(self) -> int:
