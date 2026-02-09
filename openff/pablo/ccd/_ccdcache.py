@@ -25,6 +25,8 @@ __all__ = [
     "CcdCache",
 ]
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class LazyPatch:
@@ -114,7 +116,10 @@ class LazyPatch:
             return
 
         with _skip_residue_definition_validation():
-            definitions: list[ResidueDefinition] = self._resdefs
+            logger.debug(
+                f"patching {len(self._resdefs)} {self.residue_name} resdefs...",
+            )
+            definitions: list[ResidueDefinition] = list(self._resdefs)
             for patch_dict in patches:
                 star_patch = patch_dict.get("*", lambda x: [x])
                 res_patch = patch_dict.get(
@@ -127,10 +132,17 @@ class LazyPatch:
                         patched_definitions.extend(res_patch(star_patched_res))
                 definitions = patched_definitions
 
+        logger.debug(
+            f"validating {len(definitions)} just-patched {self.residue_name} resdefs...",
+        )
+
         for definition in definitions:
             definition._validate()
             if definition.residue_name != self.residue_name:
                 raise PabloError("Patches cannot change residue name")
+        logger.debug(
+            f"{len(definitions)} patched {self.residue_name} resdefs successfully validated!",
+        )
 
         self._resdefs = definitions
         self.patch = False
@@ -211,6 +223,10 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         If ``True``, automatically attempt to download unknown residues from the
         CCD. If ``False``, raise ``KeyError`` when residues absent from the
         cache are requested.
+    fail_on_error
+        If ``True``, errors related to internet connectivity, CIF parsing, or
+        residue definition construction are raised. If ``False``, these errors
+        are converted to warnings.
     """
 
     # TODO: remove library_paths in favour of loading pre-patched entries
@@ -237,6 +253,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         ] = {},
         extra_definitions: Mapping[str, Iterable[ResidueDefinition]] = {},
         auto_download: bool = False,
+        fail_on_error: bool = True,
     ):
         self.auto_download = auto_download
 
@@ -256,21 +273,29 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         ] = [dict(d) for d in patches]
 
         for path in self._library_cifs():
-            logging.debug(f"Loading {path} to new CcdCache")
-            try:
-                self._add_definitions_from_str(path.read_text(), patch=True)
-            except Exception as e:
-                # If adding a file fails, skip it and print the error as a warning
-                # otherwise this will cause an importtime exception
-                warnings.warn(
-                    f"Loading library file {path} failed:\n    {'    '.join(traceback.format_exception(e))}",
-                )
-                pass
+            logger.debug(f"Loading {path} from library to new CcdCache")
+            self._add_definitions_from_str(
+                path.read_text(),
+                patch=True,
+                fail_on_error=fail_on_error,
+                cif_desc=f"library file {path}",
+            )
+
+        for path in self._cached_cifs():
+            logger.debug(f"Loading {path} from cache to new CcdCache")
+            self._add_definitions_from_str(
+                path.read_text(),
+                patch=True,
+                fail_on_error=fail_on_error,
+                cif_desc=f"cached file {path}",
+            )
 
         for resname in set(preload) - set(self._definitions):
             try:
                 self.get_from_ccd(resname)
             except Exception as e:
+                if fail_on_error:
+                    raise e
                 # If a preload fails, skip it and print the error as a warning
                 # otherwise this will cause an importtime exception
                 warnings.warn(
@@ -279,14 +304,18 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
                 pass
 
         for resname, resdefs in extra_definitions.items():
-            self._add_definitions(resdefs, resname)
+            self._add_definitions(list(resdefs), resname)
 
     def _library_cifs(self) -> Iterable[Path]:
         """Get all .cif files in the library paths"""
         for path in self._library_paths:
             if path.exists() and path.is_file():
                 yield path
-        yield from self._glob("*.cif")
+        yield from self._glob("*.cif", library=True, cached=False)
+
+    def _cached_cifs(self) -> Iterable[Path]:
+        """Get all .cif files in the cache"""
+        yield from self._glob("*.cif", library=False, cached=True)
 
     def __getitem__(self, key: str) -> tuple[ResidueDefinition, ...]:
         res_name = key.upper()
@@ -363,6 +392,8 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         s: str,
         res_name: str | None = None,
         patch: bool = False,
+        fail_on_error: bool = True,
+        cif_desc: str = "CIF",
     ) -> list[LazyPatch]:
         """Add the definitions to the cache, optionally patching them.
 
@@ -371,40 +402,53 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         Returns
         =======
         The added definitions in a ``LazyPatch``"""
-        definitions: list[LazyPatch] = []
-        for definition in self._res_defs_from_ccd_str(s):
-            if res_name is None:
-                if definition.residue_name is None:
-                    raise PabloError(
-                        "Anonymous residue definitions cannot be added to a CcdCache",
-                    )
-                this_res_name = definition.residue_name.upper()
+        try:
+            definitions = self._res_defs_from_ccd_str(s)
+        except Exception as e:
+            if fail_on_error:
+                raise e
             else:
-                if (
-                    definition.residue_name is None
-                    or definition.residue_name.upper() != res_name.upper()
-                ):
-                    raise PabloError(
-                        f"Cannot add definition with residue name {definition.residue_name}"
-                        + f" to the cache under residue name {res_name}. Set the"
-                        + " res_name argument to None to take residue name from CIF string.",
-                    )
-                this_res_name = res_name
+                warnings.warn(
+                    f"Loading {cif_desc} failed:\n    {'    '.join(traceback.format_exception(e))}",
+                )
+                return []
 
-            definitions.extend(
-                self._add_definitions(
+        all_added_definitions: list[LazyPatch] = []
+        for definition in definitions:
+            if isinstance(definition, Exception):
+                if fail_on_error:
+                    raise definition
+                else:
+                    warnings.warn(
+                        f"Loading definition from {cif_desc} failed:\n    "
+                        + "    ".join(traceback.format_exception(definition)),
+                    )
+                    continue
+
+            try:
+                added_definitions = self._add_definitions(
                     (definition,),
-                    this_res_name,
+                    res_name,
                     patch=patch,
-                ),
-            )
-        logging.debug(f"Found {len(definitions)} residue definitions")
-        return definitions
+                )
+            except Exception as e:
+                if fail_on_error:
+                    raise e
+                else:
+                    warnings.warn(
+                        f"Adding definition from {cif_desc} failed:\n    {'    '.join(traceback.format_exception(e))}",
+                    )
+                    continue
+            all_added_definitions.extend(added_definitions)
+        logger.debug(
+            f"Found {len(all_added_definitions)} residue definitions in {cif_desc}",
+        )
+        return all_added_definitions
 
     def _add_definitions(
         self,
-        definitions: Iterable[ResidueDefinition],
-        res_name: str,
+        definitions: Sequence[ResidueDefinition],
+        res_name: str | None = None,
         patch: bool = False,
     ) -> tuple[LazyPatch, ...]:
         """Add the definitions to the cache, optionally patching them.
@@ -414,6 +458,31 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         Returns
         =======
         The added definitions in a ``LazyPatch``"""
+        # Ensure all definitions have the same, non-None name, and that if the
+        # res_name argument was given, the definitions match that too.
+        if len(definitions) == 0:
+            return ()
+
+        for definition in definitions:
+            if definition.residue_name is None:
+                raise PabloError(
+                    "Anonymous residue definitions cannot be added to a CcdCache",
+                )
+            if res_name is None:
+                res_name = definition.residue_name.upper()
+            if definition.residue_name.upper() != res_name.upper():
+                raise PabloError(
+                    f"Cannot add definition with residue name {definition.residue_name}"
+                    + f" to the cache under residue name {res_name}. Set the"
+                    + " res_name argument to None to take residue name from CIF string.",
+                )
+
+        # If there were no definitions, we've already returned
+        # If there were any definitions with residue name None, we've already raised
+        # Therefore, the first definition must exist with a non-None name
+        # Therefore, res_name was set to a non-None string in the above loop
+        assert res_name is not None, "res_name guaranteed to have been set by now"
+
         patched: list[LazyPatch]
         if patch:
             patched = list(map(LazyPatch, definitions))
@@ -463,7 +532,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
             yield from path.glob(pattern)
 
     @staticmethod
-    def _res_defs_from_ccd_str(s: str) -> Iterator[ResidueDefinition]:
+    def _res_defs_from_ccd_str(s: str) -> Iterator[ResidueDefinition | GemmiError]:
         """Create definitions from the text of a CCD Cif file"""
         # TODO: Handle residues like CL with a single atom properly (no tables)
         # TODO: Check if the above todo is complete
@@ -471,6 +540,18 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         for block in data:
             try:
                 residueName = cif_str(unwrap(block["_chem_comp.id"])).upper()
+
+                if residueName == "UNK":
+                    warnings.warn(
+                        "Skipping block with residue name UNK as it is reserved for unknown amino acid residues",
+                    )
+                    continue
+                if residueName == "UNL":
+                    warnings.warn(
+                        "Skipping block with residue name UNL as it is reserved for unknown ligands",
+                    )
+                    continue
+
                 residue_description = cif_str(unwrap(block["_chem_comp.name"]))
                 linking_type = cif_str(unwrap(block["_chem_comp.type"])).upper()
                 if linking_type not in LINKING_TYPES:
@@ -553,10 +634,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
 
                 yield residue_definition
             except GemmiError as e:
-                warnings.warn(
-                    "Invalid CIF block or essential information missing, skipping:"
-                    + f"\n     {'    '.join(traceback.format_exception(e))}",
-                )
+                yield e
 
     def __contains__(self, value: object) -> bool:
         if not isinstance(value, str):

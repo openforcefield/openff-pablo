@@ -2,6 +2,8 @@
 Patches to add essential features to the CCD.
 """
 
+from collections.abc import Callable
+
 from openff.pablo.chem import DISULFIDE_BOND
 from openff.pablo.exceptions import PabloError
 
@@ -447,3 +449,44 @@ def strip_linkless_leavers(
         return [res.replace(atoms=[atom.replace(leaving=False) for atom in res.atoms])]
     else:
         return [res]
+
+
+DEFAULT_PATCHES: list[
+    dict[str, Callable[[ResidueDefinition], list[ResidueDefinition]]]
+] = [
+    {
+        "ACE": fix_caps,
+        "NME": fix_caps,
+        "NH2": fix_caps,
+        "CYS": add_disulfide_crosslink,
+    },
+    {"*": add_protonation_variants},
+    {
+        "U": add_dephosphorylated_5p_terminus,
+        "G": add_dephosphorylated_5p_terminus,
+        "C": add_dephosphorylated_5p_terminus,
+        "A": add_dephosphorylated_5p_terminus,
+        "DT": add_dephosphorylated_5p_terminus,
+        "DG": add_dephosphorylated_5p_terminus,
+        "DC": add_dephosphorylated_5p_terminus,
+        "DA": add_dephosphorylated_5p_terminus,
+        "NH2": add_nh2_leaving_atom,
+    },
+    {
+        "U": set_hop3_leaving,
+        "G": set_hop3_leaving,
+        "C": set_hop3_leaving,
+        "A": set_hop3_leaving,
+        "DT": set_hop3_leaving,
+        "DG": set_hop3_leaving,
+        "DC": set_hop3_leaving,
+        "DA": set_hop3_leaving,
+    },
+    {"*": disambiguate_alt_ids},
+    {"*": add_synonyms},
+    {"*": strip_linkless_leavers},
+    {
+        "HIS": patch_his_sidechain_zwitterion,
+        "ARG": delete_doubly_deprotonated_arginine,
+    },
+]

@@ -41,7 +41,9 @@ def test_ccdcache_can_load_residues_with_internet(
     tmp_ccd_cache.auto_download = True
 
     resdefs = tmp_ccd_cache[resname]
-    assert len(resdefs) > 0
+    assert len(resdefs) > 00
+    assert all(isinstance(residue, ResidueDefinition) for residue in resdefs)
+    assert all(residue._validate() for residue in resdefs)
 
 
 @pytest.mark.parametrize(
@@ -56,6 +58,8 @@ def test_ccdcache_can_manually_download_residues(tmp_ccd_cache: CcdCache, resnam
 
     resdefs = tmp_ccd_cache.get_from_ccd(resname)
     assert len(resdefs) > 0
+    assert all(isinstance(residue, ResidueDefinition) for residue in resdefs)
+    assert all(residue._validate() for residue in resdefs)
 
 
 @pytest.mark.disable_socket
@@ -109,7 +113,12 @@ def test_ccdcache_can_load_common_residues_without_internet(
     tmp_ccd_cache: CcdCache,
     resname: str,
 ):
-    tmp_ccd_cache[resname]
+    residues = tmp_ccd_cache[resname]
+    print(
+        f"{resname} has {len(residues)} residues after patching: {[resdef.description for resdef in residues]}",
+    )
+    assert all(isinstance(residue, ResidueDefinition) for residue in residues)
+    assert all(residue._validate() for residue in residues)
 
 
 @pytest.mark.parametrize(
