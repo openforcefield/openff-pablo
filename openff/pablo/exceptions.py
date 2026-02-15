@@ -8,10 +8,18 @@ __all__ = [
     "PdbResidueMatchError",
     "UnknownOrAmbiguousSerialInConectError",
     "MissingAtomError",
+    "GemmiError",
 ]
 
 
 from collections.abc import Collection
+
+
+class GemmiError(Exception):
+    """Wrapper for exceptions raised by Gemmi"""
+
+    def __init__(self, parent: Exception):
+        super().__init__(f"{type(parent)}: {parent}")
 
 
 class PabloError(ValueError):

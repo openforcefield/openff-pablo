@@ -1,16 +1,17 @@
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+import logging
+import traceback
+import warnings
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from copy import deepcopy
-from io import StringIO
+from dataclasses import InitVar, dataclass, field
 from pathlib import Path
-from typing import Literal, Self, no_type_check, overload
-from collections.abc import Collection
+from typing import Literal, Self, overload
 from urllib.error import URLError
 from urllib.request import HTTPError, urlopen
 
-from openmm.app.internal.pdbx.reader.PdbxReader import PdbxReader
-
-from openff.pablo._utils import flatten
-from openff.pablo.exceptions import PabloError
+from openff.pablo._cif import cif_ints, cif_str, cif_strs, parse_cif
+from openff.pablo._utils import flatten, unwrap
+from openff.pablo.exceptions import GemmiError, PabloError
 
 from ..chem import PEPTIDE_BOND, PHOSPHODIESTER_BOND
 from ..residue import (
@@ -23,6 +24,128 @@ from ..residue import (
 __all__ = [
     "CcdCache",
 ]
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class LazyPatch:
+    resdef: InitVar[ResidueDefinition]
+    residue_name: str = field(init=False)
+    _resdefs: list[ResidueDefinition] = field(
+        init=False,
+        default_factory=list[ResidueDefinition],
+    )
+    patch: bool = field(default=True)
+
+    def __post_init__(self, resdef: ResidueDefinition):
+        if resdef.residue_name is None:
+            raise PabloError(
+                "Anonymous residue definitions cannot be added to a CcdCache",
+            )
+        self._resdefs = [resdef]
+        self.residue_name = resdef.residue_name
+
+    @classmethod
+    def do_not_patch(cls, resdef: ResidueDefinition) -> Self:
+        """Create a LazyPatch that does no patching"""
+        return cls(resdef, patch=False)
+
+    @classmethod
+    def consolidate_and_patch(
+        cls,
+        lazys: Sequence[Self],
+        patches: Sequence[
+            Mapping[
+                str,
+                Callable[[ResidueDefinition], Sequence[ResidueDefinition]],
+            ]
+        ],
+    ) -> Self:
+        """Consolidate several LazyPatch objects into one.
+
+        To reliably ensure consistency of which elements must be patched,
+        all LazyPatch objects have their patches applied when this is called."""
+        self = cls(lazys[0]._resdefs[0], patch=False)
+        for lazy in lazys:
+            assert self.residue_name == lazy.residue_name
+            # Deduplicate via a dict[T, None] to preserve insertion order
+            self._resdefs = list(
+                {
+                    resdef: None
+                    for resdef in (*self._resdefs, *lazy.get_patched(patches))
+                },
+            )
+        return self
+
+    def cached_get_patched(self) -> tuple[ResidueDefinition, ...]:
+        """
+        Get the patched definitions iff the patches have already been applied.
+
+        Raises AssertionError if the patches have not been applied
+        """
+        assert not self.patch
+        return tuple(self._resdefs)
+
+    def get_patched(
+        self,
+        patches: Sequence[
+            Mapping[
+                str,
+                Callable[[ResidueDefinition], Sequence[ResidueDefinition]],
+            ]
+        ],
+        force: bool = False,
+    ) -> tuple[ResidueDefinition, ...]:
+        """Apply the patches in place and return the resulting definitions"""
+        self.patch_in_place(patches, force)
+        return tuple(self._resdefs)
+
+    def patch_in_place(
+        self,
+        patches: Sequence[
+            Mapping[
+                str,
+                Callable[[ResidueDefinition], Sequence[ResidueDefinition]],
+            ]
+        ],
+        force: bool = False,
+    ) -> None:
+        """Apply the patches in place"""
+        if not (self.patch or force):
+            return
+
+        with _skip_residue_definition_validation():
+            logger.debug(
+                f"patching {len(self._resdefs)} {self.residue_name} resdefs...",
+            )
+            definitions: list[ResidueDefinition] = list(self._resdefs)
+            for patch_dict in patches:
+                star_patch = patch_dict.get("*", lambda x: [x])
+                res_patch = patch_dict.get(
+                    self.residue_name.upper(),
+                    lambda x: [x],
+                )
+                patched_definitions: list[ResidueDefinition] = []
+                for definition in definitions:
+                    for star_patched_res in star_patch(definition):
+                        patched_definitions.extend(res_patch(star_patched_res))
+                definitions = patched_definitions
+
+        logger.debug(
+            f"validating {len(definitions)} just-patched {self.residue_name} resdefs...",
+        )
+
+        for definition in definitions:
+            definition._validate()
+            if definition.residue_name != self.residue_name:
+                raise PabloError("Patches cannot change residue name")
+        logger.debug(
+            f"{len(definitions)} patched {self.residue_name} resdefs successfully validated!",
+        )
+
+        self._resdefs = definitions
+        self.patch = False
 
 
 class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
@@ -100,6 +223,10 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         If ``True``, automatically attempt to download unknown residues from the
         CCD. If ``False``, raise ``KeyError`` when residues absent from the
         cache are requested.
+    fail_on_error
+        If ``True``, errors related to internet connectivity, CIF parsing, or
+        residue definition construction are raised. If ``False``, these errors
+        are converted to warnings.
     """
 
     # TODO: remove library_paths in favour of loading pre-patched entries
@@ -126,6 +253,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         ] = {},
         extra_definitions: Mapping[str, Iterable[ResidueDefinition]] = {},
         auto_download: bool = False,
+        fail_on_error: bool = True,
     ):
         self.auto_download = auto_download
 
@@ -136,7 +264,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
             self._cache_path.mkdir(parents=True, exist_ok=True)
         self._library_paths = {Path(path).resolve() for path in library_paths}
 
-        self._definitions: dict[str, list[ResidueDefinition]] = {}
+        self._definitions: dict[str, tuple[LazyPatch, ...]] = {}
         self._patches: list[
             dict[
                 str,
@@ -144,22 +272,50 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
             ]
         ] = [dict(d) for d in patches]
 
-        for path in self._glob("*.cif"):
-            try:
-                self._add_definition_from_str(path.read_text(), patch=True)
-            except Exception:
-                # If adding a file fails, skip it - we want an error at runtime, not importtime
-                pass
+        for path in self._library_cifs():
+            logger.debug(f"Loading {path} from library to new CcdCache")
+            self._add_definitions_from_str(
+                path.read_text(),
+                patch=True,
+                fail_on_error=fail_on_error,
+                cif_desc=f"library file {path}",
+            )
+
+        for path in self._cached_cifs():
+            logger.debug(f"Loading {path} from cache to new CcdCache")
+            self._add_definitions_from_str(
+                path.read_text(),
+                patch=True,
+                fail_on_error=fail_on_error,
+                cif_desc=f"cached file {path}",
+            )
 
         for resname in set(preload) - set(self._definitions):
             try:
                 self.get_from_ccd(resname)
-            except Exception:
-                # If a preload fails, skip it - we want an error at runtime, not importtime
+            except Exception as e:
+                if fail_on_error:
+                    raise e
+                # If a preload fails, skip it and print the error as a warning
+                # otherwise this will cause an importtime exception
+                warnings.warn(
+                    f"Pre-loading residue {resname} failed:\n    {'    '.join(traceback.format_exception(e))}",
+                )
                 pass
 
         for resname, resdefs in extra_definitions.items():
-            self._add_definitions(resdefs, resname)
+            self._add_definitions(list(resdefs), resname)
+
+    def _library_cifs(self) -> Iterable[Path]:
+        """Get all .cif files in the library paths"""
+        for path in self._library_paths:
+            if path.exists() and path.is_file():
+                yield path
+        yield from self._glob("*.cif", library=True, cached=False)
+
+    def _cached_cifs(self) -> Iterable[Path]:
+        """Get all .cif files in the cache"""
+        yield from self._glob("*.cif", library=False, cached=True)
 
     def __getitem__(self, key: str) -> tuple[ResidueDefinition, ...]:
         res_name = key.upper()
@@ -168,9 +324,17 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
             raise KeyError(res_name, "reserved residue name")
         # Check the loaded definitions
         try:
-            return tuple(self._definitions[res_name])
+            definitions = self._definitions[res_name]
         except KeyError:
             pass
+        else:
+            # Apply any lazy patches now and deduplicate results
+            patched = LazyPatch.consolidate_and_patch(
+                definitions,
+                self._patches,
+            )
+            self._definitions[res_name] = (patched,)
+            return patched.cached_get_patched()
 
         # Don't check the library; it was loaded in __init__, and
         # trying to hot-load a definition that's already in self._definitions
@@ -182,7 +346,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         # another CcdCache - but this is done by _add_definition_from_ccd()
         if self.auto_download:
             try:
-                return tuple(self._add_definition_from_ccd(res_name))
+                return self.get_from_ccd(res_name)
             except HTTPError:
                 raise KeyError(res_name, "unknown and absent from CCD")
             except URLError:
@@ -194,7 +358,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         self,
         res_name: str,
         patch: bool = True,
-    ) -> list[ResidueDefinition]:
+    ) -> tuple[ResidueDefinition, ...]:
         """
         Retrieve a residue definition from the CCD, adding it to the cache.
 
@@ -212,109 +376,127 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
             If ``False``, do not apply patches.
         """
         s = self._download_cif(res_name)
-        return self._add_definition_from_str(
-            s,
-            res_name=res_name,
-            patch=patch,
-            return_old_definitions=False,
+        return tuple(
+            flatten(
+                resdef.get_patched(self._patches)
+                for resdef in self._add_definitions_from_str(
+                    s,
+                    res_name=res_name,
+                    patch=patch,
+                )
+            ),
         )
 
-    def _add_definition_from_ccd(self, res_name: str) -> list[ResidueDefinition]:
-        """Add a definition by retrieving it from the CCD (or the cache)"""
-        if self._cache_path is None:
-            s = self._download_cif(res_name)
-        else:
-            cache_path = self._cache_path / f"{res_name}.cif"
-            if cache_path.is_file():
-                s = cache_path.read_text()
-            else:
-                s = self._download_cif(res_name)
-
-        return self._add_definition_from_str(s, res_name=res_name, patch=True)
-
-    def _apply_patches(
-        self,
-        residue_definition: ResidueDefinition,
-    ) -> list[ResidueDefinition]:
-        assert residue_definition.residue_name is not None
-
-        with _skip_residue_definition_validation():
-            definitions: list[ResidueDefinition] = [residue_definition]
-            for patch_dict in self._patches:
-                star_patch = patch_dict.get("*", lambda x: [x])
-                res_patch = patch_dict.get(
-                    residue_definition.residue_name.upper(),
-                    lambda x: [x],
-                )
-                patched_definitions: list[ResidueDefinition] = []
-                for definition in definitions:
-                    for star_patched_res in star_patch(definition):
-                        patched_definitions.extend(res_patch(star_patched_res))
-                definitions = patched_definitions
-
-        for definition in definitions:
-            definition._validate()
-
-        return definitions
-
-    def _add_definition_from_str(
+    def _add_definitions_from_str(
         self,
         s: str,
         res_name: str | None = None,
         patch: bool = False,
-        return_old_definitions: bool = True,
-    ) -> list[ResidueDefinition]:
-        definition = self._res_def_from_ccd_str(s)
-        if res_name is None:
-            if definition.residue_name is None:
-                raise PabloError(
-                    "Anonymous residue definitions cannot be added to a CcdCache",
-                )
-            res_name = definition.residue_name.upper()
+        fail_on_error: bool = True,
+        cif_desc: str = "CIF",
+    ) -> list[LazyPatch]:
+        """Add the definitions to the cache, optionally patching them.
 
-        return self._add_definitions(
-            (definition,),
-            res_name,
-            patch=patch,
-            return_old_definitions=return_old_definitions,
+        Patching is done lazily when the definition is accessed.
+
+        Returns
+        =======
+        The added definitions in a ``LazyPatch``"""
+        try:
+            definitions = self._res_defs_from_ccd_str(s)
+        except Exception as e:
+            if fail_on_error:
+                raise e
+            else:
+                warnings.warn(
+                    f"Loading {cif_desc} failed:\n    {'    '.join(traceback.format_exception(e))}",
+                )
+                return []
+
+        all_added_definitions: list[LazyPatch] = []
+        for definition in definitions:
+            if isinstance(definition, Exception):
+                if fail_on_error:
+                    raise definition
+                else:
+                    warnings.warn(
+                        f"Loading definition from {cif_desc} failed:\n    "
+                        + "    ".join(traceback.format_exception(definition)),
+                    )
+                    continue
+
+            try:
+                added_definitions = self._add_definitions(
+                    (definition,),
+                    res_name,
+                    patch=patch,
+                )
+            except Exception as e:
+                if fail_on_error:
+                    raise e
+                else:
+                    warnings.warn(
+                        f"Adding definition from {cif_desc} failed:\n    {'    '.join(traceback.format_exception(e))}",
+                    )
+                    continue
+            all_added_definitions.extend(added_definitions)
+        logger.debug(
+            f"Found {len(all_added_definitions)} residue definitions in {cif_desc}",
         )
+        return all_added_definitions
 
     def _add_definitions(
         self,
-        definitions: Iterable[ResidueDefinition],
-        res_name: str,
+        definitions: Sequence[ResidueDefinition],
+        res_name: str | None = None,
         patch: bool = False,
-        return_old_definitions: bool = True,
-    ) -> list[ResidueDefinition]:
-        if patch:
-            definitions = list(flatten(map(self._apply_patches, definitions)))
-        else:
-            definitions = list(definitions)
+    ) -> tuple[LazyPatch, ...]:
+        """Add the definitions to the cache, optionally patching them.
+
+        Patching is done lazily when the definition is accessed.
+
+        Returns
+        =======
+        The added definitions in a ``LazyPatch``"""
+        # Ensure all definitions have the same, non-None name, and that if the
+        # res_name argument was given, the definitions match that too.
+        if len(definitions) == 0:
+            return ()
 
         for definition in definitions:
             if definition.residue_name is None:
                 raise PabloError(
                     "Anonymous residue definitions cannot be added to a CcdCache",
                 )
-            if res_name != definition.residue_name.upper():
+            if res_name is None:
+                res_name = definition.residue_name.upper()
+            if definition.residue_name.upper() != res_name.upper():
                 raise PabloError(
-                    f"ResidueDefinition {definition.residue_name}"
-                    + f" ({definition.description}) must have residue name {res_name}",
+                    f"Cannot add definition with residue name {definition.residue_name}"
+                    + f" to the cache under residue name {res_name}. Set the"
+                    + " res_name argument to None to take residue name from CIF string.",
                 )
 
-        stored_definitions = self._definitions.setdefault(res_name, [])
-        # Using a dict comprehension here rather than simple
-        # set(definitions) - set(stored_definitions) to preserve ordering
-        old_definitions = set(stored_definitions)
-        stored_definitions.extend(
-            {k: None for k in definitions if k not in old_definitions},
-        )
-        if return_old_definitions:
-            return stored_definitions
+        # If there were no definitions, we've already returned
+        # If there were any definitions with residue name None, we've already raised
+        # Therefore, the first definition must exist with a non-None name
+        # Therefore, res_name was set to a non-None string in the above loop
+        assert res_name is not None, "res_name guaranteed to have been set by now"
+
+        patched: list[LazyPatch]
+        if patch:
+            patched = list(map(LazyPatch, definitions))
         else:
-            return definitions
+            patched = list(map(LazyPatch.do_not_patch, definitions))
+
+        self._definitions[res_name] = (
+            *self._definitions.get(res_name, ()),
+            *patched,
+        )
+        return tuple(patched)
 
     def _download_cif(self, resname: str) -> str:
+        """Download the cif file for the requested residue from the CCD"""
         with urlopen(
             f"https://files.rcsb.org/ligands/download/{resname.upper()}.cif",
         ) as stream:
@@ -350,88 +532,109 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
             yield from path.glob(pattern)
 
     @staticmethod
-    def _res_def_from_ccd_str(s: str) -> ResidueDefinition:
-        @no_type_check
-        def inner(s):
-            # TODO: Handle residues like CL with a single atom properly (no tables)
-            data = []
-            with StringIO(s) as file:
-                PdbxReader(file).read(data)
-            block = data[0]
+    def _res_defs_from_ccd_str(s: str) -> Iterator[ResidueDefinition | GemmiError]:
+        """Create definitions from the text of a CCD Cif file"""
+        # TODO: Handle residues like CL with a single atom properly (no tables)
+        # TODO: Check if the above todo is complete
+        data = parse_cif(s)
+        for block in data:
+            try:
+                residueName = cif_str(unwrap(block["_chem_comp.id"])).upper()
 
-            parent_residue_name = (
-                block.getObj("chem_comp").getValue("mon_nstd_parent_comp_id").upper()
-            )
-            parent_residue_name = (
-                None if parent_residue_name == "?" else parent_residue_name
-            )
-            residueName = block.getObj("chem_comp").getValue("id").upper()
-            residue_description = block.getObj("chem_comp").getValue("name")
-            linking_type = block.getObj("chem_comp").getValue("type").upper()
-            linking_bond = LINKING_TYPES[linking_type]
-
-            atomData = block.getObj("chem_comp_atom")
-            atomNameCol = atomData.getAttributeIndex("atom_id")
-            altAtomNameCol = atomData.getAttributeIndex("alt_atom_id")
-            symbolCol = atomData.getAttributeIndex("type_symbol")
-            leavingCol = atomData.getAttributeIndex("pdbx_leaving_atom_flag")
-            chargeCol = atomData.getAttributeIndex("charge")
-            aromaticCol = atomData.getAttributeIndex("pdbx_aromatic_flag")
-            stereoCol = atomData.getAttributeIndex("pdbx_stereo_config")
-
-            atoms = [
-                AtomDefinition(
-                    name=row[atomNameCol],
-                    synonyms=tuple(
-                        [row[altAtomNameCol]]
-                        if row[altAtomNameCol] != row[atomNameCol]
-                        else [],
-                    ),
-                    symbol=row[symbolCol][0:1].upper() + row[symbolCol][1:].lower(),
-                    leaving=row[leavingCol] == "Y",
-                    charge=int(row[chargeCol]),
-                    aromatic=row[aromaticCol] == "Y",
-                    stereo=None if row[stereoCol] == "N" else row[stereoCol],
-                )
-                for row in atomData.getRowList()
-            ]
-
-            bondData = block.getObj("chem_comp_bond")
-            if bondData is not None:
-                atom1Col = bondData.getAttributeIndex("atom_id_1")
-                atom2Col = bondData.getAttributeIndex("atom_id_2")
-                orderCol = bondData.getAttributeIndex("value_order")
-                aromaticCol = bondData.getAttributeIndex("pdbx_aromatic_flag")
-                stereoCol = bondData.getAttributeIndex("pdbx_stereo_config")
-                bonds = [
-                    BondDefinition(
-                        atom1=row[atom1Col],
-                        atom2=row[atom2Col],
-                        order={"SING": 1, "DOUB": 2, "TRIP": 3, "QUAD": 4}[
-                            row[orderCol]
-                        ],
-                        aromatic=row[aromaticCol] == "Y",
-                        stereo=None if row[stereoCol] == "N" else row[stereoCol],
+                if residueName == "UNK":
+                    warnings.warn(
+                        "Skipping block with residue name UNK as it is reserved for unknown amino acid residues",
                     )
-                    for row in bondData.getRowList()
+                    continue
+                if residueName == "UNL":
+                    warnings.warn(
+                        "Skipping block with residue name UNL as it is reserved for unknown ligands",
+                    )
+                    continue
+
+                residue_description = cif_str(unwrap(block["_chem_comp.name"]))
+                linking_type = cif_str(unwrap(block["_chem_comp.type"])).upper()
+                if linking_type not in LINKING_TYPES:
+                    warnings.warn(
+                        f"linking type {linking_type!r} in {residueName} unknown;"
+                        + " this ResidueDefinition will be unable to form polymer bonds",
+                    )
+                linking_bond = LINKING_TYPES.get(linking_type)
+
+                atoms = [
+                    AtomDefinition(
+                        name=atom_name,
+                        synonyms=tuple(
+                            [alt_atom_name] if alt_atom_name != atom_name else [],
+                        ),
+                        symbol=symbol[0:1].upper() + symbol[1:].lower(),
+                        leaving=leaving_flag == "Y",
+                        charge=charge,
+                        aromatic=aromatic_flag == "Y",
+                        stereo=None if stereo == "N" else stereo,  # pyright: ignore[reportArgumentType]
+                    )
+                    for atom_name, alt_atom_name, symbol, leaving_flag, (
+                        charge,
+                        aromatic_flag,
+                        stereo,
+                    ) in zip(
+                        cif_strs(block["_chem_comp_atom.atom_id"]),
+                        cif_strs(block["_chem_comp_atom.alt_atom_id"]),
+                        cif_strs(block["_chem_comp_atom.type_symbol"]),
+                        cif_strs(block["_chem_comp_atom.pdbx_leaving_atom_flag"]),
+                        zip(  # Keep zip invocations to <=5 arguments to keep types attached
+                            cif_ints(block["_chem_comp_atom.charge"]),
+                            cif_strs(block["_chem_comp_atom.pdbx_aromatic_flag"]),
+                            cif_strs(block["_chem_comp_atom.pdbx_stereo_config"]),
+                            strict=True,
+                        ),
+                        strict=True,
+                    )
                 ]
-            else:
-                bonds = []
 
-            with _skip_residue_definition_validation():
-                residue_definition = ResidueDefinition(
-                    residue_name=residueName,
-                    description=residue_description,
-                    linking_bond=linking_bond,
-                    crosslink=None,
-                    atoms=tuple(atoms),
-                    bonds=tuple(bonds),
-                    virtual_sites=(),
-                )
+                # If chem_comp_bond.atom_id_1 is missing, we need to make sure the
+                # entire chem_comp_bond loop is missing before we conclude that there
+                # are no bonds. If the loop is present, we need to raise an error.
+                # Typically, chem_comp_bond.atom_id_1 will be present,
+                # and the `or` will short circuit, or else the loop will be missing,
+                # in which case the `any` has nothing to do.
+                if "_chem_comp_bond.atom_id_1" in block or any(
+                    key.startswith("_chem_comp_bond.") for key in block.keys()
+                ):
+                    bonds = [
+                        BondDefinition(
+                            atom1=atom1,
+                            atom2=atom2,
+                            order={"SING": 1, "DOUB": 2, "TRIP": 3, "QUAD": 4}[order],
+                            aromatic=aromatic_flag == "Y",
+                            stereo=None if stereo_flag == "N" else stereo_flag,  # pyright: ignore[reportArgumentType]
+                        )
+                        for atom1, atom2, order, aromatic_flag, stereo_flag in zip(
+                            cif_strs(block["_chem_comp_bond.atom_id_1"]),
+                            cif_strs(block["_chem_comp_bond.atom_id_2"]),
+                            cif_strs(block["_chem_comp_bond.value_order"]),
+                            cif_strs(block["_chem_comp_bond.pdbx_aromatic_flag"]),
+                            cif_strs(block["_chem_comp_bond.pdbx_stereo_config"]),
+                            strict=True,
+                        )
+                    ]
+                else:
+                    bonds = []
 
-            return residue_definition
+                with _skip_residue_definition_validation():
+                    residue_definition = ResidueDefinition(
+                        residue_name=residueName,
+                        description=residue_description,
+                        linking_bond=linking_bond,
+                        crosslink=None,
+                        atoms=tuple(atoms),
+                        bonds=tuple(bonds),
+                        virtual_sites=(),
+                    )
 
-        return inner(s)
+                yield residue_definition
+            except GemmiError as e:
+                yield e
 
     def __contains__(self, value: object) -> bool:
         if not isinstance(value, str):
@@ -598,11 +801,10 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         ``CcdCache.with_*()`` methods.
         """
         new = deepcopy(self)
-        new._patches.append({residue_name: patch})
-        if residue_name in new._definitions:
-            new._definitions[residue_name] = list(
-                flatten(patch(resdef) for resdef in new._definitions[residue_name]),
-            )
+        patchdict = {residue_name: patch}
+        new._patches.append(patchdict)
+        for resdef in new._definitions.get(residue_name, ()):
+            resdef.patch_in_place([patchdict], force=True)
         return new
 
     @overload

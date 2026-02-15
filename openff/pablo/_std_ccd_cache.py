@@ -6,19 +6,7 @@ from openff.pablo.chem import PEPTIDE_BOND
 from openff.pablo.residue import ResidueDefinition
 
 from .ccd._ccdcache import CcdCache
-from .ccd.patches import (
-    add_dephosphorylated_5p_terminus,
-    add_disulfide_crosslink,
-    add_nh2_leaving_atom,
-    add_protonation_variants,
-    add_synonyms,
-    delete_doubly_deprotonated_arginine,
-    disambiguate_alt_ids,
-    fix_caps,
-    patch_his_sidechain_zwitterion,
-    set_hop3_leaving,
-    strip_linkless_leavers,
-)
+from .ccd.patches import DEFAULT_PATCHES
 
 __all__ = [
     "STD_CCD_CACHE",
@@ -37,43 +25,7 @@ def _construct_std_ccd_cache(
         # TODO: Use a proper resource setup for this
         library_paths=[Path(__file__).parent / "ccd/data/ccd_cache"],
         cache_path=cache_path,
-        patches=[
-            {
-                "ACE": fix_caps,
-                "NME": fix_caps,
-                "NH2": fix_caps,
-                "CYS": add_disulfide_crosslink,
-            },
-            {"*": add_protonation_variants},
-            {
-                "U": add_dephosphorylated_5p_terminus,
-                "G": add_dephosphorylated_5p_terminus,
-                "C": add_dephosphorylated_5p_terminus,
-                "A": add_dephosphorylated_5p_terminus,
-                "DT": add_dephosphorylated_5p_terminus,
-                "DG": add_dephosphorylated_5p_terminus,
-                "DC": add_dephosphorylated_5p_terminus,
-                "DA": add_dephosphorylated_5p_terminus,
-                "NH2": add_nh2_leaving_atom,
-            },
-            {
-                "U": set_hop3_leaving,
-                "G": set_hop3_leaving,
-                "C": set_hop3_leaving,
-                "A": set_hop3_leaving,
-                "DT": set_hop3_leaving,
-                "DG": set_hop3_leaving,
-                "DC": set_hop3_leaving,
-                "DA": set_hop3_leaving,
-            },
-            {"*": disambiguate_alt_ids},
-            {"*": add_synonyms},
-            {"*": strip_linkless_leavers},
-            {
-                "HIS": patch_his_sidechain_zwitterion,
-                "ARG": delete_doubly_deprotonated_arginine,
-            },
-        ],
+        patches=DEFAULT_PATCHES,
         extra_definitions={
             "I": [ResidueDefinition.from_smiles("[I-:1]", {1: "I"}, "I")],
             "WAT": [
@@ -111,6 +63,7 @@ def _construct_std_ccd_cache(
                 ),
             ],
         },
+        fail_on_error=False,  # Be tolerant to errors so users don't get importtime errors
     )
 
 
