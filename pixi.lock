@@ -1165,7 +1165,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/e8/21/1260081a2c67105a3bd0f8692ff3c80b5f0cb5fe9f3f8fd4a990f17b8a39/css_html_js_minify-2.5.5-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fd/5a/eb5b62641df0459a3291fc206cf5bd669c0feed7814dded8edef4ade8512/libsass-0.23.0-cp38-abi3-manylinux_2_5_x86_64.manylinux1_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/c6/d1/232b3309a02d60f11e71857778bfcd4acbdb86c07db8260caf7d008b08f8/lxml-6.0.2-cp312-cp312-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl
-      - pypi: git+https://github.com/openforcefield/openff-sphinx-theme.git#3b5d7fc79808d850bcaab83a8c8965758655a5f9
+      - pypi: git+https://github.com/openforcefield/openff-sphinx-theme.git?rev=main#3b5d7fc79808d850bcaab83a8c8965758655a5f9
       - pypi: https://files.pythonhosted.org/packages/a4/62/02da182e544a51a5c3ccf4b03ab79df279f9c60c5e82d5e8bec7ca26ac11/python_slugify-8.0.4-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ae/21/62d3a58ff7bd02bbb9245a63d1f0d2e0455522a11a78951d16088569fca8/sphinx-paramlinks-0.6.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/19/3b/d981175d7b9bbbcf6894faf640d15198394efc7dedd6182332c4a791a5a6/sphinx_hoverxref-1.4.2-py2.py3-none-any.whl
@@ -1400,7 +1400,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/e8/21/1260081a2c67105a3bd0f8692ff3c80b5f0cb5fe9f3f8fd4a990f17b8a39/css_html_js_minify-2.5.5-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e5/13/fc1bea1de880ca935137183727c7d4dd921c4128fc08b8ddc3698ba5a8a3/libsass-0.23.0-cp38-abi3-macosx_11_0_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/37/6f/9aae1008083bb501ef63284220ce81638332f9ccbfa53765b2b7502203cf/lxml-6.0.2-cp312-cp312-macosx_10_13_x86_64.whl
-      - pypi: git+https://github.com/openforcefield/openff-sphinx-theme.git#3b5d7fc79808d850bcaab83a8c8965758655a5f9
+      - pypi: git+https://github.com/openforcefield/openff-sphinx-theme.git?rev=main#3b5d7fc79808d850bcaab83a8c8965758655a5f9
       - pypi: https://files.pythonhosted.org/packages/a4/62/02da182e544a51a5c3ccf4b03ab79df279f9c60c5e82d5e8bec7ca26ac11/python_slugify-8.0.4-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ae/21/62d3a58ff7bd02bbb9245a63d1f0d2e0455522a11a78951d16088569fca8/sphinx-paramlinks-0.6.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/19/3b/d981175d7b9bbbcf6894faf640d15198394efc7dedd6182332c4a791a5a6/sphinx_hoverxref-1.4.2-py2.py3-none-any.whl
@@ -1632,7 +1632,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/e8/21/1260081a2c67105a3bd0f8692ff3c80b5f0cb5fe9f3f8fd4a990f17b8a39/css_html_js_minify-2.5.5-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/79/b4/ab091585eaa77299558e3289ca206846aefc123fb320b5656ab2542c20ad/libsass-0.23.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/f3/c8/8ff2bc6b920c84355146cd1ab7d181bc543b89241cfb1ebee824a7c81457/lxml-6.0.2-cp312-cp312-macosx_10_13_universal2.whl
-      - pypi: git+https://github.com/openforcefield/openff-sphinx-theme.git#3b5d7fc79808d850bcaab83a8c8965758655a5f9
+      - pypi: git+https://github.com/openforcefield/openff-sphinx-theme.git?rev=main#3b5d7fc79808d850bcaab83a8c8965758655a5f9
       - pypi: https://files.pythonhosted.org/packages/a4/62/02da182e544a51a5c3ccf4b03ab79df279f9c60c5e82d5e8bec7ca26ac11/python_slugify-8.0.4-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ae/21/62d3a58ff7bd02bbb9245a63d1f0d2e0455522a11a78951d16088569fca8/sphinx-paramlinks-0.6.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/19/3b/d981175d7b9bbbcf6894faf640d15198394efc7dedd6182332c4a791a5a6/sphinx_hoverxref-1.4.2-py2.py3-none-any.whl
@@ -3289,7 +3289,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/e8/21/1260081a2c67105a3bd0f8692ff3c80b5f0cb5fe9f3f8fd4a990f17b8a39/css_html_js_minify-2.5.5-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fd/5a/eb5b62641df0459a3291fc206cf5bd669c0feed7814dded8edef4ade8512/libsass-0.23.0-cp38-abi3-manylinux_2_5_x86_64.manylinux1_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/c6/d1/232b3309a02d60f11e71857778bfcd4acbdb86c07db8260caf7d008b08f8/lxml-6.0.2-cp312-cp312-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl
-      - pypi: git+https://github.com/openforcefield/openff-sphinx-theme.git#3b5d7fc79808d850bcaab83a8c8965758655a5f9
+      - pypi: git+https://github.com/openforcefield/openff-sphinx-theme.git?rev=main#3b5d7fc79808d850bcaab83a8c8965758655a5f9
       - pypi: https://files.pythonhosted.org/packages/a4/62/02da182e544a51a5c3ccf4b03ab79df279f9c60c5e82d5e8bec7ca26ac11/python_slugify-8.0.4-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ae/21/62d3a58ff7bd02bbb9245a63d1f0d2e0455522a11a78951d16088569fca8/sphinx-paramlinks-0.6.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/19/3b/d981175d7b9bbbcf6894faf640d15198394efc7dedd6182332c4a791a5a6/sphinx_hoverxref-1.4.2-py2.py3-none-any.whl
@@ -3715,7 +3715,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/e8/21/1260081a2c67105a3bd0f8692ff3c80b5f0cb5fe9f3f8fd4a990f17b8a39/css_html_js_minify-2.5.5-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e5/13/fc1bea1de880ca935137183727c7d4dd921c4128fc08b8ddc3698ba5a8a3/libsass-0.23.0-cp38-abi3-macosx_11_0_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/37/6f/9aae1008083bb501ef63284220ce81638332f9ccbfa53765b2b7502203cf/lxml-6.0.2-cp312-cp312-macosx_10_13_x86_64.whl
-      - pypi: git+https://github.com/openforcefield/openff-sphinx-theme.git#3b5d7fc79808d850bcaab83a8c8965758655a5f9
+      - pypi: git+https://github.com/openforcefield/openff-sphinx-theme.git?rev=main#3b5d7fc79808d850bcaab83a8c8965758655a5f9
       - pypi: https://files.pythonhosted.org/packages/a4/62/02da182e544a51a5c3ccf4b03ab79df279f9c60c5e82d5e8bec7ca26ac11/python_slugify-8.0.4-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ae/21/62d3a58ff7bd02bbb9245a63d1f0d2e0455522a11a78951d16088569fca8/sphinx-paramlinks-0.6.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/19/3b/d981175d7b9bbbcf6894faf640d15198394efc7dedd6182332c4a791a5a6/sphinx_hoverxref-1.4.2-py2.py3-none-any.whl
@@ -4140,7 +4140,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/e8/21/1260081a2c67105a3bd0f8692ff3c80b5f0cb5fe9f3f8fd4a990f17b8a39/css_html_js_minify-2.5.5-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/79/b4/ab091585eaa77299558e3289ca206846aefc123fb320b5656ab2542c20ad/libsass-0.23.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/f3/c8/8ff2bc6b920c84355146cd1ab7d181bc543b89241cfb1ebee824a7c81457/lxml-6.0.2-cp312-cp312-macosx_10_13_universal2.whl
-      - pypi: git+https://github.com/openforcefield/openff-sphinx-theme.git#3b5d7fc79808d850bcaab83a8c8965758655a5f9
+      - pypi: git+https://github.com/openforcefield/openff-sphinx-theme.git?rev=main#3b5d7fc79808d850bcaab83a8c8965758655a5f9
       - pypi: https://files.pythonhosted.org/packages/a4/62/02da182e544a51a5c3ccf4b03ab79df279f9c60c5e82d5e8bec7ca26ac11/python_slugify-8.0.4-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ae/21/62d3a58ff7bd02bbb9245a63d1f0d2e0455522a11a78951d16088569fca8/sphinx-paramlinks-0.6.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/19/3b/d981175d7b9bbbcf6894faf640d15198394efc7dedd6182332c4a791a5a6/sphinx_hoverxref-1.4.2-py2.py3-none-any.whl
@@ -13101,7 +13101,17 @@ packages:
   - pytest-cov>=3.0 ; extra == 'test'
   - sphinx ; extra == 'doc'
   requires_python: '>=3.12'
-- pypi: git+https://github.com/openforcefield/openff-sphinx-theme.git#3b5d7fc79808d850bcaab83a8c8965758655a5f9
+- pypi: ./
+  name: openff-pablo
+  version: 0.2.1.post31+g756abe6
+  sha256: 76b2804232cea7862bc80174d46b1e537b42af2004d3686dca428bf7f22295f9
+  requires_dist:
+  - pytest>=6.0 ; extra == 'test'
+  - pytest-xdist>=2.5 ; extra == 'test'
+  - pytest-cov>=3.0 ; extra == 'test'
+  - sphinx ; extra == 'doc'
+  requires_python: '>=3.12'
+- pypi: git+https://github.com/openforcefield/openff-sphinx-theme.git?rev=main#3b5d7fc79808d850bcaab83a8c8965758655a5f9
   name: openff-sphinx-theme
   version: 0.0.32+287.g3b5d7fc
   requires_dist:

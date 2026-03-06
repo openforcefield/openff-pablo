@@ -1,9 +1,9 @@
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+import logging
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from copy import deepcopy
 from io import StringIO
 from pathlib import Path
 from typing import Literal, Self, no_type_check, overload
-from collections.abc import Collection
 from urllib.error import URLError
 from urllib.request import HTTPError, urlopen
 
@@ -23,6 +23,7 @@ from ..residue import (
 __all__ = [
     "CcdCache",
 ]
+logger = logging.getLogger(__name__)
 
 
 class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
@@ -638,7 +639,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
         bond_order: int = 1,
         aromatic: bool = False,
         stereo: Literal["E", "Z"] | None = None,
-    ) -> Self:
+    ):
         """
         Add a custom crosslink between residues.
 
@@ -703,24 +704,66 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
             (res_a, bond_a, leavers_a),
             (res_b, bond_b, leavers_b),
         ):
+            if len(leavers) == 0:
+                raise PabloError(f"No leaving atoms defined for residue {res_name}")
+            unused_leavers = set(leavers)
             for residue in self[res_name]:
                 if residue.crosslink is not None:
                     raise PabloError(
                         f"{residue.residue_name} not supported: existing crosslink",
                     )
 
-                modified_residues.append(
-                    residue.replace(
-                        crosslink=bond,
-                        atoms=tuple(
-                            (
-                                atom.replace(leaving=True)
-                                if atom.name in leavers
-                                else atom
-                            )
-                            for atom in residue.atoms
-                        ),
+                leaving_fragment = {
+                    atom
+                    for atom in residue.atoms_bonded_to(bond.atom1)
+                    if atom in leavers
+                }
+                atoms_to_check = set(leaving_fragment)
+                checked_atoms = {bond.atom1}
+                while len(atoms_to_check) != 0:
+                    atom = atoms_to_check.pop()
+                    if atom in leavers:
+                        leaving_fragment.add(atom)
+                        unused_leavers.discard(atom)
+                        atoms_to_check.update(
+                            set(residue.atoms_bonded_to(atom)) - checked_atoms,
+                        )
+                    elif atom == bond.atom1:
+                        pass
+                    else:
+                        raise PabloError(
+                            f"Could not identify valid leaving fragment for {residue.description}: "
+                            + f"{atom} is part of the fragment but was not declared a leaving atom",
+                        )
+
+                    checked_atoms.add(atom)
+
+                if len(leaving_fragment) == 0:
+                    # This means that this crosslink does not exist in this residue variant
+                    logger.info(
+                        f"No possible leaving fragment was found for {residue.description}, so no crosslink was added",
+                    )
+                    modified_residues.append(residue)
+                    continue
+
+                new_residue = residue.replace(
+                    crosslink=bond,
+                    atoms=tuple(
+                        (
+                            atom.replace(leaving=True)
+                            if atom.name in leaving_fragment
+                            else atom
+                        )
+                        for atom in residue.atoms
                     ),
+                )
+                logging.debug(
+                    f"modified residue: {new_residue} {new_residue.crosslink=}",
+                )
+                modified_residues.append(new_residue)
+            if len(unused_leavers) != 0:
+                raise PabloError(
+                    f"declared leaving atoms {unused_leavers} not found in any {res_name} residue",
                 )
         return self.with_replaced(modified_residues)
 
