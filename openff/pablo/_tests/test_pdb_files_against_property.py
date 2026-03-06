@@ -1185,3 +1185,22 @@ def test_1csa_maestro_waterfirst_loads(tmp_ccd_cache: CcdCache):
 
 
 # TODO: Test that the correct atom metadata are written out (as documented in topology_from_pdb())
+
+
+def test_semaglutide_with_crosslink(tmp_ccd_cache: CcdCache):
+    tmp_ccd_cache.get_from_ccd("KUT")
+    tmp_ccd_cache.get_from_ccd("AIB")
+
+    crosslinked_ccd = tmp_ccd_cache.with_crosslink(
+        residues=("LYS", "KUT"),
+        linking_atoms=("NZ", "C33"),
+        leaving_atoms=(["HZ2"], ["H61"]),
+        bond_order=1,
+    )
+
+    topology = topology_from_pdb(
+        get_test_data_path("semaglutide.pdb"),
+        residue_library=crosslinked_ccd,
+    )
+
+    assert topology.n_molecules == 1

@@ -299,12 +299,14 @@ class ResidueMatch(MatchProtocol):
             and (
                 self.crosslink_idcs != other.crosslink_idcs
                 or (
-                    self.residue_definition.crosslink.flipped()
+                    self.residue_definition.crosslink
                     != other.residue_definition.crosslink
                 )
             )
         ):
-            logger.debug("  DISAGREES: external bonds differ")
+            logger.debug(
+                "  DISAGREES: external bonds differ",
+            )
             return False
 
         if (self.expects_prior_bond or self.expects_posterior_bond) and (
