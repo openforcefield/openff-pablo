@@ -210,17 +210,17 @@ def _get_all_mappings(
         # Desymmetrize hydrogens
         if (
             new_atomdef.symbol == "H"
-            and data.element[pdb_idx] == "H"
+            and data.element[pdb_idx].upper() == "H"
             and desymm_a != desymm_b
         ):
             return False
         # If this atom is unidentified, check the element matches the PDB file
         if old_atomdef is None:
-            return new_atomdef.symbol == data.element[pdb_idx]
+            return new_atomdef.symbol.upper() == data.element[pdb_idx].upper()
         # Otherwise, check that the chemical information matches
         # between PDB file, old chem info, and new chem info
         return (  # nofmt
-            data.element[pdb_idx] == new_atomdef.symbol
+            data.element[pdb_idx].upper() == new_atomdef.symbol.upper()
             and old_atomdef.symbol == new_atomdef.symbol
             and old_atomdef.charge == new_atomdef.charge
         )

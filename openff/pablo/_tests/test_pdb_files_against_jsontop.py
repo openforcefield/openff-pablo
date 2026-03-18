@@ -189,11 +189,6 @@ SKIP_POLYMERS = [
 
 XFAIL_POLYMERS = [
     "8ovp.pdb",  # BUG: Unmatched neighbour reads as unsupported bond
-    "messy_sugar.pdb",  # Unknown additional_definitions matching issue
-    "bisphenolA.pdb",  # Unknown additional_definitions matching issue
-    "bip23267_sup-0002-appendixs1.pdb",  # Unknown additional_definitions matching issue
-    "PAMAM.pdb",  # Unknown additional_definitions matching issue
-    "polyvinylchloride.pdb",  # Unknown additional_definitions matching issue
     "polyvinylchloride-s81.pdb",  # Unknown additional_definitions matching issue
 ]
 
