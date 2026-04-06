@@ -86,7 +86,7 @@ repos:
         files: "openff"
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.14.10
+    rev: v0.15.9
     hooks:
       # Run the linter.
       - id: ruff
@@ -103,7 +103,7 @@ repos:
   #       args: ["openff/pablo/", "-e", "openff/pablo/_tests/"]
   #       pass_filenames: false
   - repo: https://github.com/kynan/nbstripout
-    rev: 0.8.2
+    rev: 0.9.1
     hooks:
       - id: nbstripout
         files: ^examples
