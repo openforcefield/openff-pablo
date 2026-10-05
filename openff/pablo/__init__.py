@@ -11,13 +11,13 @@ from .ccd import CcdCache
 from .residue import ResidueDefinition
 
 __all__ = [
-    "topology_from_pdb",
     "STD_CCD_CACHE",
     "ResidueDefinition",
-    "exceptions",
     "ccd",
-    "residue",
     "chem",
+    "exceptions",
+    "residue",
+    "topology_from_pdb",
 ]
 
 __version__ = version("openff.pablo")

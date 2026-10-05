@@ -1080,10 +1080,10 @@ def test_complex_pdb_1flr(tmp_ccd_cache: CcdCache):
     for mol in topology.molecules:
         assert isinstance(mol, Molecule)
         if mol.n_atoms > 3:
-            assert mol.hill_formula not in uniques.keys()
+            assert mol.hill_formula not in uniques
             uniques[mol.hill_formula] = mol
         else:
-            if mol.to_smiles in uniques.keys():
+            if mol.to_smiles in uniques:
                 pass
             else:
                 uniques[mol.to_smiles()] = mol

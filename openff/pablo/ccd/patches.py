@@ -15,18 +15,18 @@ from ._ccdcache import PEPTIDE_BOND
 
 __all__ = [
     "ACIDIC_PROTONS",
-    "BASIC_ATOMS",
     "ATOM_NAME_SYNONYMS",
-    "fix_caps",
+    "BASIC_ATOMS",
+    "add_dephosphorylated_5p_terminus",
+    "add_disulfide_crosslink",
+    "add_nh2_leaving_atom",
     "add_protonation_variants",
     "add_synonyms",
-    "disambiguate_alt_ids",
-    "add_disulfide_crosslink",
-    "add_dephosphorylated_5p_terminus",
-    "set_hop3_leaving",
-    "patch_his_sidechain_zwitterion",
     "delete_doubly_deprotonated_arginine",
-    "add_nh2_leaving_atom",
+    "disambiguate_alt_ids",
+    "fix_caps",
+    "patch_his_sidechain_zwitterion",
+    "set_hop3_leaving",
     "strip_linkless_leavers",
 ]
 

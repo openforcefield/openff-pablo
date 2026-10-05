@@ -3,11 +3,11 @@ Exceptions for the PDB loader.
 """
 
 __all__ = [
-    "PabloError",
-    "ResidueValidationError",
-    "PdbResidueMatchError",
-    "UnknownOrAmbiguousSerialInConectError",
     "MissingAtomError",
+    "PabloError",
+    "PdbResidueMatchError",
+    "ResidueValidationError",
+    "UnknownOrAmbiguousSerialInConectError",
 ]
 
 
@@ -17,25 +17,17 @@ from collections.abc import Collection
 class PabloError(ValueError):
     """A generic Pablo error. Base class of all Pablo errors."""
 
-    pass
-
 
 class MissingAtomError(PabloError):
     """A required atom is missing from a ``ResidueDefinition``."""
-
-    pass
 
 
 class ResidueValidationError(PabloError):
     """A newly created ``ResidueDefinition`` is invalid."""
 
-    pass
-
 
 class PdbResidueMatchError(PabloError):
     """A residue could not be matched to a residue definition while loading a file."""
-
-    pass
 
 
 class UnknownOrAmbiguousSerialInConectError(PabloError):
