@@ -1,7 +1,7 @@
+from collections.abc import Callable, Iterable
 from io import StringIO
 from itertools import count
 from pathlib import Path
-from collections.abc import Callable, Iterable
 
 from openff.toolkit import Topology
 

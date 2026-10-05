@@ -9,7 +9,7 @@ from functools import cached_property
 from io import IOBase, TextIOBase
 from os import PathLike
 from pathlib import Path
-from typing import IO, Any, DefaultDict, Literal, Protocol, Self
+from typing import IO, Any, Literal, Protocol, Self
 
 from openff.pablo._additional_definitions import apply_additional_definitions
 from openff.pablo._cif import (
@@ -77,7 +77,7 @@ class PdbData:
     charge: list[int | None] = field(default_factory=list[int | None])
     terminated: list[bool] = field(default_factory=list[bool])
     res_idx: list[int] | None = None
-    serial_to_index: DefaultDict[str, list[int]] = field(
+    serial_to_index: defaultdict[str, list[int]] = field(
         default_factory=lambda: defaultdict(list),
     )
     conects: list[set[int]] = field(default_factory=list[set[int]])

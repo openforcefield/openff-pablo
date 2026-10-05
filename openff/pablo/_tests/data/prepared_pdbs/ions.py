@@ -1,7 +1,6 @@
+from openff.interchange.components._packmol import pack_box
 from openff.toolkit import Molecule
 from openff.units import unit
-
-from openff.interchange.components._packmol import pack_box
 
 water = Molecule.from_smiles("O")
 for i, atom in enumerate(water.atoms):

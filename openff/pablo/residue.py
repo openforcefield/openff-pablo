@@ -12,7 +12,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, DefaultDict, Literal, Self, TextIO
+from typing import TYPE_CHECKING, Literal, Self, TextIO
 
 from openff.toolkit.topology import Molecule
 from openff.toolkit.utils import RDKitToolkitWrapper
@@ -785,7 +785,7 @@ class ResidueDefinition:
             allow_undefined_stereo=True,
         )
 
-        neighbours: DefaultDict[int, set[int]] = defaultdict(set)
+        neighbours: defaultdict[int, set[int]] = defaultdict(set)
         for atom1, atom2 in molecule.nth_degree_neighbors(1):
             neighbours[atom1.molecule_atom_index].add(atom2.molecule_atom_index)
             neighbours[atom2.molecule_atom_index].add(atom1.molecule_atom_index)
@@ -830,7 +830,7 @@ class ResidueDefinition:
             allow_undefined_stereo=True,
         )
 
-        neighbours: DefaultDict[int, set[int]] = defaultdict(set)
+        neighbours: defaultdict[int, set[int]] = defaultdict(set)
         for atom1, atom2 in molecule.nth_degree_neighbors(1):
             neighbours[atom1.molecule_atom_index].add(atom2.molecule_atom_index)
             neighbours[atom2.molecule_atom_index].add(atom1.molecule_atom_index)

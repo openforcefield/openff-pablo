@@ -3,7 +3,6 @@ from collections import defaultdict
 from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Sequence
 from typing import (
     Any,
-    DefaultDict,
     Literal,
     TypeGuard,
     no_type_check,
@@ -27,18 +26,18 @@ from rdkit.Chem.rdChemReactions import ReactionFromSmarts
 from openff.pablo.exceptions import PabloError
 
 __all__ = [
-    "default_dict",
-    "unwrap",
-    "sort_tuple",
-    "flatten",
-    "with_neighbours",
-    "float_or_unknown",
-    "dec_hex",
+    "__UNSET__",
+    "assign_stereochemistry_from_3d",
     "charge_int_or_none",
     "cryst_to_box_vectors",
-    "assign_stereochemistry_from_3d",
-    "__UNSET__",
     "dbg",
+    "dec_hex",
+    "default_dict",
+    "flatten",
+    "float_or_unknown",
+    "sort_tuple",
+    "unwrap",
+    "with_neighbours",
 ]
 
 logger = logging.getLogger(__name__)
@@ -46,8 +45,6 @@ logger = logging.getLogger(__name__)
 
 class __UNSET__:
     """Reference value for an unset parameter."""
-
-    pass
 
 
 def dbg[T](o: T, msg: str = "{}") -> T:
@@ -60,8 +57,8 @@ def dbg[T](o: T, msg: str = "{}") -> T:
 def default_dict[K: Hashable, T, U](
     default_factory: Callable[[], T],
     map: Mapping[K, U] = {},
-) -> DefaultDict[K, T | U]:
-    dd: DefaultDict[K, T | U] = defaultdict(default_factory)
+) -> defaultdict[K, T | U]:
+    dd: defaultdict[K, T | U] = defaultdict(default_factory)
     dd.update(map)
     return dd
 

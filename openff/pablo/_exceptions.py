@@ -7,11 +7,11 @@ exceptions that can be consumed publically but are produced privately.
 """
 
 __all__ = [
-    "PabloError",
-    "ResidueValidationError",
-    "PdbResidueMatchError",
-    "UnknownOrAmbiguousSerialInConectError",
     "MissingAtomError",
+    "PabloError",
+    "PdbResidueMatchError",
+    "ResidueValidationError",
+    "UnknownOrAmbiguousSerialInConectError",
     "create_pdb_residue_match_error",
 ]
 

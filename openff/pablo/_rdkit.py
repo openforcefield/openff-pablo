@@ -176,11 +176,9 @@ class EditableRdMol:
 
     def _begin_batch_edit(self):
         self._mol.BeginBatchEdit()
-        pass
 
     def _commit_batch_edit(self):
         self._mol.CommitBatchEdit()
-        pass
 
     def _modify_via_mol[T, **P](
         self,

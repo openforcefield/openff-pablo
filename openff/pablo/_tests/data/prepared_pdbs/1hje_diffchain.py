@@ -10,9 +10,9 @@ OUTFILENAME = Path(f"{PDBID}_diffchain.pdb")
 with (
     TemporaryDirectory() as tmpdir,
     NamedTemporaryFile(suffix=".pdb", dir=tmpdir) as tmpfile,
+    chdir(tmpdir),
 ):
-    with chdir(tmpdir):
-        cmd.do(f"fetch {PDBID}, async=0")
+    cmd.do(f"fetch {PDBID}, async=0")
 
 cmd.do("remove not alt ''+A")
 cmd.do("alter all, alt=''")
