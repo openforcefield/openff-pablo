@@ -18,4 +18,4 @@ PR Checklist
 
  Were LLMs or other AI-powered tools used in this contribution? Please see our [AI Policy](https://github.com/openforcefield/openff-toolkit/blob/main/AI_POLICY.md) for acceptable use.
  - [ ] No
- - [ ] Yes: [If yes, please provide details here]
+ - [ ] Yes: <!-- If yes, please provide details here -->
