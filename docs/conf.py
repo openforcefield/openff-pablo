@@ -189,7 +189,7 @@ intersphinx_mapping = {
         None,
     ),
     "openff.qcsubmit": (
-        "https://docs.openforcefield.org/projects/qcsubmit/en/stable/",
+        "https://docs.openforcefield.org/projects/qcsubmit/en/latest/",
         None,
     ),
     "openff.nagl": (
