@@ -258,16 +258,164 @@ class TestResidueDefinition:
         cys_molecule = Molecule.from_mapped_smiles(cys_mapped_smiles)
         assert cys_def.to_openff_molecule() == cys_molecule
 
+    @pytest.mark.parametrize(
+        "resdef_fixture",
+        [
+            "hoh_def",  # no linking bond or crosslink
+            "hoh_def_with_synonyms",
+            "cys_def",  # linking bond and crosslink
+        ],
+    )
     def test_to_openff_molecule_roundtrip(
         self,
-        hoh_def: ResidueDefinition,
+        resdef_fixture: str,
+        request: pytest.FixtureRequest,
     ):
-        hoh_molecule = hoh_def.to_openff_molecule()
-        hoh_def_roundtripped = ResidueDefinition.from_molecule(
-            hoh_molecule,
-            residue_name="HOH",
+        resdef: ResidueDefinition = request.getfixturevalue(resdef_fixture)
+        roundtripped = ResidueDefinition.from_molecule(resdef.to_openff_molecule())
+        assert roundtripped == resdef
+
+    def test_to_openff_molecule_roundtrip_ccd(self, tmp_ccd_cache: CcdCache):
+        for resdef in tmp_ccd_cache["ALA"]:
+            roundtripped = ResidueDefinition.from_molecule(resdef.to_openff_molecule())
+            assert roundtripped == resdef
+
+    def test_to_openff_molecule_anon_roundtrip(self, cys_def: ResidueDefinition):
+        molecule = cys_def.to_openff_molecule()
+        anon_def = ResidueDefinition.anon_from_molecule(molecule)
+
+        assert anon_def.is_anonymous
+        assert anon_def.linking_bond == PEPTIDE_BOND
+        assert anon_def.crosslink == DISULFIDE_BOND
+        assert anon_def.description == cys_def.description
+
+        # Atoms in the linking bond and crosslink keep their names; all other
+        # names are replaced by molecule indices
+        assert [atom.name for atom in anon_def.atoms] == [
+            atom.name if atom.name in {"N", "C", "SG"} else str(i)
+            for i, atom in enumerate(cys_def.atoms)
+        ]
+
+        # Apart from names, the chemistry is unchanged
+        index_to_name = {str(i): atom.name for i, atom in enumerate(cys_def.atoms)}
+        renamed = anon_def.replace(
+            atoms=[
+                atom.replace(name=index_to_name.get(atom.name, atom.name))
+                for atom in anon_def.atoms
+            ],
+            bonds=[
+                bond.replace(
+                    atom1=index_to_name.get(bond.atom1, bond.atom1),
+                    atom2=index_to_name.get(bond.atom2, bond.atom2),
+                )
+                for bond in anon_def.bonds
+            ],
         )
-        assert hoh_def_roundtripped == hoh_def
+        assert renamed._is_isomorphic_to(cys_def)
+
+        # Leaving atoms are assigned to the same bonds as in the original
+        assert {
+            index_to_name.get(name, name) for name in anon_def._prior_bond_leaving_atoms
+        } == cys_def._prior_bond_leaving_atoms
+        assert {
+            index_to_name.get(name, name)
+            for name in anon_def._posterior_bond_leaving_atoms
+        } == cys_def._posterior_bond_leaving_atoms
+        assert {
+            index_to_name.get(name, name) for name in anon_def._crosslink_leaving_atoms
+        } == cys_def._crosslink_leaving_atoms
+
+    def test_anon_from_molecule_duplicate_linking_atom_name_raises(
+        self,
+        cys_def: ResidueDefinition,
+    ):
+        molecule = cys_def.to_openff_molecule()
+        unwrap(atom for atom in molecule.atoms if atom.name == "CB").name = "C"
+
+        with pytest.raises(
+            ResidueValidationError,
+            match="Multiple atoms with linking atom name 'C'",
+        ):
+            ResidueDefinition.anon_from_molecule(molecule)
+
+    # cys_def has 14 atoms; SG (index 5) is the crosslink atom
+    @pytest.mark.parametrize(
+        ("renames", "linking_bond", "expected_names"),
+        [
+            pytest.param(
+                {"N": "4"},
+                BondDefinition.with_defaults("C", "4"),
+                {0: "4", 2: "C", 4: "14", 5: "SG"},
+                id="clashes_with_index",
+            ),
+            pytest.param(
+                {},
+                BondDefinition.with_defaults("C", "4"),
+                {2: "C", 4: "14", 5: "SG"},
+                id="absent_atom_clashes_with_index",
+            ),
+            pytest.param(
+                {},
+                BondDefinition.with_defaults("3", "4"),
+                {3: "14", 4: "15", 5: "SG"},
+                id="two_clashes",
+            ),
+            pytest.param(
+                {},
+                BondDefinition.with_defaults("4", "14"),
+                {4: "15", 5: "SG"},
+                id="replacement_skips_linking_atom_name",
+            ),
+        ],
+    )
+    def test_anon_from_molecule_index_names_skip_linking_atom_names(
+        self,
+        cys_def: ResidueDefinition,
+        renames: dict[str, str],
+        linking_bond: BondDefinition,
+        expected_names: dict[int, str],
+    ):
+        molecule = cys_def.to_openff_molecule()
+        for atom in molecule.atoms:
+            atom.name = renames.get(atom.name, atom.name)
+        molecule.properties["linking_bond"] = linking_bond
+
+        anon_def = ResidueDefinition.anon_from_molecule(molecule)
+
+        assert [atom.name for atom in anon_def.atoms] == [
+            expected_names.get(i, str(i)) for i in range(len(cys_def.atoms))
+        ]
+
+    def test_anon_from_molecule_overwrites_duplicate_names(
+        self,
+        cys_def: ResidueDefinition,
+    ):
+        molecule = cys_def.to_openff_molecule()
+        for atom in molecule.atoms:
+            if atom.symbol == "H":
+                atom.name = "H"
+
+        anon_def = ResidueDefinition.anon_from_molecule(molecule)
+
+        assert [atom.name for atom in anon_def.atoms] == [
+            atom.name if atom.name in {"N", "C", "SG"} else str(i)
+            for i, atom in enumerate(cys_def.atoms)
+        ]
+
+    @pytest.mark.parametrize("residue_name", ["ACE", "DA"])
+    def test_anon_from_molecule_absent_linking_atom(
+        self,
+        tmp_ccd_cache: CcdCache,
+        residue_name: str,
+    ):
+        """Caps and 5' nucleotides may lack one of their linking bond's atoms"""
+        for resdef in tmp_ccd_cache[residue_name]:
+            anon_def = ResidueDefinition.anon_from_molecule(
+                resdef.to_openff_molecule(),
+            )
+            assert anon_def.linking_bond == resdef.linking_bond
+            assert anon_def._can_form_prior_bond == resdef._can_form_prior_bond
+            assert anon_def._can_form_posterior_bond == resdef._can_form_posterior_bond
 
     def test_name_to_atom(self, hoh_def_with_synonyms: ResidueDefinition):
         assert (
