@@ -1166,6 +1166,56 @@ class PdbData:
             if not rescued:
                 logger.debug("    REJECTED: no mappings matched")
 
+    def _conect_bond_to_undefined_residue(
+        self,
+        match: ResidueMatch,
+        linking_atom_name: str,
+        all_matches: Sequence[Sequence[PossibleResidueMatch]],
+    ) -> tuple[int, int] | None:
+        """
+        Find a polymer bond to a residue without definitions from CONECT records.
+
+        Residues with no definitions cannot advertise which polymer bonds they
+        support, so a neighbouring residue's polymer bond to such a residue is
+        taken from the CONECT records instead. The partner residue is
+        identified from the CONECT record itself, not from its position in the
+        file, so that ring closures (eg, a cyclic peptide closed by a linker
+        listed at the end of the chain) are found too. TER records are ignored:
+        they mean "don't infer a polymer bond here", which does not apply to a
+        bond given explicitly in a CONECT record.
+
+        Parameters
+        ----------
+        match
+            The match that expects a polymer bond
+        linking_atom_name
+            The canonical name of the atom in ``match`` that forms the bond
+        all_matches
+            All possible matches for each residue
+
+        Returns
+        -------
+        (linking_idx, partner_idx) | None
+            The PDB indices of the linking atom in ``match`` and its bonded
+            partner in the residue without definitions, or ``None`` if there is
+            not exactly one such partner
+        """
+        assert self.res_idx is not None
+        linking_idx = match.canonical_atom_name_to_index.get(linking_atom_name)
+        if linking_idx is None:
+            return None
+
+        partner_idx = unwrap_or_none(
+            j
+            for j in self.conects[linking_idx]
+            if len(all_matches[self.res_idx[j]]) > 0
+            and all(
+                isinstance(partner_match, NoResidueDefinitions)
+                for partner_match in all_matches[self.res_idx[j]]
+            )
+        )
+        return None if partner_idx is None else (linking_idx, partner_idx)
+
     def identify_polymer_linkages(
         self,
         this_res_idx: int,
@@ -1297,6 +1347,22 @@ class PdbData:
                 elif (
                     match.residue_definition.linking_bond
                     not in neighbour_supported_prior_bonds
+                    or prev_residue_terminated
+                ) and (
+                    conect_bond := self._conect_bond_to_undefined_residue(
+                        match,
+                        match.residue_definition._prior_bond_linking_atom,
+                        all_matches,
+                    )
+                ) is not None:
+                    logger.debug(
+                        "    Bond to previous residue set from CONECT record to residue without definitions",
+                    )
+                    linking_idx, partner_idx = conect_bond
+                    match.set_prior_bond(partner_idx, linking_idx)
+                elif (
+                    match.residue_definition.linking_bond
+                    not in neighbour_supported_prior_bonds
                 ):
                     reason = "Bond to previous residue expected but not supported by neighbor"
                     logger.debug(f"    Match failed: {reason}")
@@ -1363,6 +1429,21 @@ class PdbData:
                     logger.debug(
                         "    Valid bond to next residue already set from CONECT records",
                     )
+                elif (
+                    match.residue_definition.linking_bond
+                    not in neighbour_supported_posterior_bonds
+                    or this_residue_terminated
+                ) and (
+                    conect_bond := self._conect_bond_to_undefined_residue(
+                        match,
+                        match.residue_definition._posterior_bond_linking_atom,
+                        all_matches,
+                    )
+                ) is not None:
+                    logger.debug(
+                        "    Bond to next residue set from CONECT record to residue without definitions",
+                    )
+                    match.set_posterior_bond(*conect_bond)
                 elif (
                     match.residue_definition.linking_bond
                     not in neighbour_supported_posterior_bonds

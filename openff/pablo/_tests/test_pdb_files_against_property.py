@@ -1204,3 +1204,87 @@ def test_semaglutide_with_crosslink(tmp_ccd_cache: CcdCache):
     )
 
     assert topology.n_molecules == 1
+
+
+ALKYNE_CAPS = (
+    "C#CCCC(=O)[O:1][H:2]",
+    "[H:1]NCC#C",
+)
+ALKYNE_CAPPED_PEPTIDE = "C#CCCC(=O)N[C@@H](C)C(=O)N[C@@H](C)C(=O)NCC#C"
+
+
+# Peptides bonded by CONECT records to residues with no definitions. Atom names
+# in the undefined residues are deliberately not the canonical partner names
+# of a peptide bond, so the bonds can only come from the CONECT records.
+@pytest.mark.parametrize(
+    ("filename", "undefined_residue_smiles", "molecule_smiles", "error_lines"),
+    [
+        pytest.param(
+            "alkyne_capped_peptide.pdb",
+            ALKYNE_CAPS,
+            ALKYNE_CAPPED_PEPTIDE,
+            [
+                "  A:UNL#1 (l4-14): No residue definitions",
+                "  A:UNL#4 (l35-42): No residue definitions",
+            ],
+            id="linear",
+        ),
+        pytest.param(
+            "alkyne_capped_peptide_hetatm_after_ter.pdb",
+            ALKYNE_CAPS,
+            ALKYNE_CAPPED_PEPTIDE,
+            [
+                "  A:UNL#1 (l3-13): No residue definitions",
+                "  A:UNL#4 (l35-42): No residue definitions",
+            ],
+            id="cap_after_ter",
+        ),
+        pytest.param(
+            "linker_cyclised_peptide.pdb",
+            ["[H:1]NCc1ccc(cc1)C(=O)[O:2][H:3]"],
+            "O=C1N[C@@H](C)C(=O)N[C@@H](C)C(=O)N[C@@H](C)C(=O)NCc2ccc1cc2",
+            ["  A:UNL#4 (l34-50): No residue definitions"],
+            id="cyclic",
+        ),
+    ],
+)
+def test_peptide_bonded_to_undefined_residues(
+    tmp_ccd_cache: CcdCache,
+    filename: str,
+    undefined_residue_smiles: Sequence[str],
+    molecule_smiles: str,
+    error_lines: Sequence[str],
+):
+    """Only the undefined residues are reported, and the peptide loads once they are defined"""
+    path = get_test_data_path(filename).absolute()
+
+    def check_err(err: PdbResidueMatchError) -> bool:
+        expected_error = "\n".join(
+            [
+                "some residues could not be identified",
+                "A topology cannot be created without chemical information for every",
+                "atom and bond. The following residues present in PDB file",
+                str(path),
+                "could not be identified from the provided residue library:",
+                "\n\n".join(error_lines),
+            ],
+        )
+
+        assert err.args[0] == expected_error
+        return True
+
+    with pytest.raises(PdbResidueMatchError, check=check_err):
+        topology_from_pdb(path, residue_library=tmp_ccd_cache)
+
+    top = topology_from_pdb(
+        path,
+        residue_library=tmp_ccd_cache,
+        additional_definitions=[
+            ResidueDefinition.anon_from_smiles_marked_leaving(smiles)
+            for smiles in undefined_residue_smiles
+        ],
+    )
+
+    top_mol = unwrap(top.molecules)
+    assert isinstance(top_mol, Molecule)
+    assert top_mol.is_isomorphic_with(Molecule.from_smiles(molecule_smiles))
