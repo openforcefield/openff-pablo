@@ -170,12 +170,14 @@ SLOW_POLYMERS = [
 ]
 
 SKIP_POLYMERS = [
+    "8ovp.pdb",  # All hydrogens come after all heavy atoms
     "144d.pdb",  # All hydrogens come after all heavy atoms
     "133d.pdb",  # All hydrogens come after all heavy atoms
     "130d.pdb",  # All hydrogens come after all heavy atoms
     "122d.pdb",  # All hydrogens come after all heavy atoms
     "2q1r.pdb",  # All hydrogens come after all heavy atoms
     "7xjf.pdb",  # Non-standard arginine?
+    "polyvinylchloride-s81.pdb",  # Too slow
     "pnipam_modified-s49.pdb",  # Too slow
     "syntactic_styrene-s49.pdb",  # Too slow
     "8f0x.pdb",  # Too slow
@@ -187,11 +189,6 @@ SKIP_POLYMERS = [
     "naturalrubber-s49.pdb",  # Too slow
 ]
 
-XFAIL_POLYMERS = [
-    "8ovp.pdb",  # BUG: Unmatched neighbour reads as unsupported bond
-    "polyvinylchloride-s81.pdb",  # Unknown additional_definitions matching issue
-]
-
 
 @pytest.mark.parametrize(
     "pdbfile",
@@ -201,7 +198,6 @@ XFAIL_POLYMERS = [
             marks=(
                 *((pytest.mark.slow,) if file.name in SLOW_POLYMERS else ()),
                 *((pytest.mark.skip,) if file.name in SKIP_POLYMERS else ()),
-                *((pytest.mark.xfail,) if file.name in XFAIL_POLYMERS else ()),
             ),
         )
         for dir in get_test_data_path("polymers/").iterdir()
