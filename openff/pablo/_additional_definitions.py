@@ -1,6 +1,7 @@
 import itertools
 import logging
 import math
+from collections import defaultdict
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
@@ -64,9 +65,18 @@ def apply_additional_definitions(
         if prev_n_new_matches == len(new_matches):
             logger.debug("  no matches")
 
-    # Do the exhaustive o(n**2) check for ambiguity
-    for mapping_a, mapping_b in itertools.combinations(new_matches, r=2):
-        mapping_a.check_agrees_with_where_overlaps(mapping_b)
+    # Check that all overlapping matches agree on chemistry
+    matches_by_atom: defaultdict[int, list[int]] = defaultdict(list)
+    for k, match in enumerate(new_matches):
+        for i in match.identified_atom_idcs:
+            matches_by_atom[i].append(k)
+    overlapping_pairs = {
+        pair
+        for ks in matches_by_atom.values()
+        for pair in itertools.combinations(ks, 2)
+    }
+    for a, b in sorted(overlapping_pairs):
+        new_matches[a].check_agrees_with_where_overlaps(new_matches[b])
 
     return new_matches
 
@@ -154,7 +164,10 @@ def _map_resdef_to_graph(
         bond in multiple chemically distinct ways.
     """
 
-    mappings: list[AdditionalDefMatch] = []
+    # Mappings can only agree if they identify the same atoms
+    mappings_by_atoms: defaultdict[frozenset[int], list[AdditionalDefMatch]] = (
+        defaultdict(list)
+    )
     resdef_graphs = list(resdef._to_graphs())
     logger.debug(
         f"  {resdef.description} has {len(resdef_graphs)} graphs,"
@@ -172,13 +185,17 @@ def _map_resdef_to_graph(
             )
             # Discard the new mapping if it would assign the same chemistry as
             # an existing mapping
-            if any(mapping.agrees_with(new_mapping) for mapping in mappings):
+            if any(
+                mapping.agrees_with(new_mapping)
+                for mapping in mappings_by_atoms[new_mapping.identified_atom_idcs]
+            ):
                 continue
 
             mapping_readable = _prettify_mapping(data, new_mapping)
             logger.debug(f"    Found a new mapping: {mapping_readable}")
-            mappings.append(new_mapping)
+            mappings_by_atoms[new_mapping.identified_atom_idcs].append(new_mapping)
 
+    mappings = list(flatten(mappings_by_atoms.values()))
     logger.info(
         f"  Found {len(mappings)} unique mappings to {resdef.description} from"
         + f" {n_successful_mappings} total mappings",

@@ -161,12 +161,18 @@ SLOW_POLYMERS = [
     "atactic_styrene-s9.pdb",
     "naturalrubber-s49.pdb",
     "polyphenyleneII.pdb",
-    "8bhw.pdb",
     "8fy3.pdb",
     "7pvu.pdb",
-    "polyvinylchloride-s81.pdb",
     "8gt9.pdb",
     "6mtg.pdb",
+    "pnipam_modified-s49.pdb",
+    "syntactic_styrene-s49.pdb",
+    "peg_modified-s49.pdb",
+    "polyethylmethacrylate-s81.pdb",
+    "8bhw.pdb",
+    "paam_modified-s64.pdb",
+    "naturalrubber-s49.pdb",
+    "polyvinylchloride-s81.pdb",
 ]
 
 SKIP_POLYMERS = [
@@ -177,16 +183,9 @@ SKIP_POLYMERS = [
     "122d.pdb",  # All hydrogens come after all heavy atoms
     "2q1r.pdb",  # All hydrogens come after all heavy atoms
     "7xjf.pdb",  # Non-standard arginine?
-    "polyvinylchloride-s81.pdb",  # Too slow
-    "pnipam_modified-s49.pdb",  # Too slow
-    "syntactic_styrene-s49.pdb",  # Too slow
     "8f0x.pdb",  # Too slow
-    "peg_modified-s49.pdb",  # Too slow
-    "polyethylmethacrylate-s81.pdb",  # Too slow
     "8fy3.pdb",  # Too slow
     "8bhw.pdb",  # Too slow
-    "paam_modified-s64.pdb",  # Too slow
-    "naturalrubber-s49.pdb",  # Too slow
 ]
 
 
