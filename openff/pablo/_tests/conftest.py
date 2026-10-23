@@ -13,7 +13,7 @@ from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefiniti
 
 @pytest.fixture(
     params=[
-        "5ap1_prepared.pdb",
+        "5ap1_nosol.pdb",
         "prepared_pdbs/193l_prepared.pdb",
         "prepared_pdbs/2zuq_prepared.pdb",
         "prepared_pdbs/2hi7_prepared.pdb",

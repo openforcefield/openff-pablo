@@ -3,7 +3,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import pytest
-from openff.toolkit import Topology
+from openff.toolkit import Molecule, Topology
 
 from openff.pablo._pdb import topology_from_pdb
 from openff.pablo._tests.utils import get_test_data_path
@@ -165,13 +165,7 @@ SLOW_POLYMERS = [
     "7pvu.pdb",
     "8gt9.pdb",
     "6mtg.pdb",
-    "pnipam_modified-s49.pdb",
-    "syntactic_styrene-s49.pdb",
-    "peg_modified-s49.pdb",
-    "polyethylmethacrylate-s81.pdb",
     "8bhw.pdb",
-    "paam_modified-s64.pdb",
-    "naturalrubber-s49.pdb",
     "polyvinylchloride-s81.pdb",
 ]
 
@@ -183,9 +177,6 @@ SKIP_POLYMERS = [
     "122d.pdb",  # All hydrogens come after all heavy atoms
     "2q1r.pdb",  # All hydrogens come after all heavy atoms
     "7xjf.pdb",  # Non-standard arginine?
-    "8f0x.pdb",  # Too slow
-    "8fy3.pdb",  # Too slow
-    "8bhw.pdb",  # Too slow
 ]
 
 
@@ -271,23 +262,41 @@ def topology_identical_to_jsontop(
 ):
     assert pablo_top.n_molecules == jsontop_top.n_molecules
     for pablo_mol, jsontop_mol in zip(pablo_top.molecules, jsontop_top.molecules):
+        assert isinstance(pablo_mol, Molecule)
+        assert isinstance(jsontop_mol, Molecule)
         assert pablo_mol.n_atoms == jsontop_mol.n_atoms
         for pablo_atom, jsontop_atom in zip(pablo_mol.atoms, jsontop_mol.atoms):
             assert pablo_atom.symbol == jsontop_atom.symbol
-            assert pablo_atom.formal_charge == jsontop_atom.formal_charge
             assert pablo_atom.name == jsontop_atom.name
             # assert pablo_atom.metadata == jsontop_atom.metadata
 
-        pablo_bonds = {
-            (sort_tuple((bond.atom1_index, bond.atom2_index)), bond.bond_order)
-            for bond in pablo_mol.bonds
-        }
-        jsontop_bonds = {
-            (sort_tuple((bond.atom1_index, bond.atom2_index)), bond.bond_order)
-            for bond in jsontop_mol.bonds
-        }
-        if pablo_bonds == jsontop_bonds:
-            # molecules are identical (even the same kekulization)
+        if _identical_up_to_kekulization(pablo_mol, jsontop_mol):
             continue
-        else:
-            assert pablo_mol.is_isomorphic_with(jsontop_mol)
+        # Other resonance forms, eg arginine's charged nitrogen, need a full check
+        assert pablo_mol.is_isomorphic_with(jsontop_mol)
+
+
+def _identical_up_to_kekulization(mol_a: Molecule, mol_b: Molecule) -> bool:
+    """
+    True if both molecules have the same charges and bonds, in the same order.
+
+    Bond orders may differ only where both molecules call the bond aromatic, so
+    different Kekule structures of the same aromatic ring are accepted even if
+    the molecules were assigned aromaticity with different models.
+    """
+    if [atom.formal_charge for atom in mol_a.atoms] != [
+        atom.formal_charge for atom in mol_b.atoms
+    ]:
+        return False
+
+    bonds_a = {
+        sort_tuple((bond.atom1_index, bond.atom2_index)): bond for bond in mol_a.bonds
+    }
+    bonds_b = {
+        sort_tuple((bond.atom1_index, bond.atom2_index)): bond for bond in mol_b.bonds
+    }
+    return bonds_a.keys() == bonds_b.keys() and all(
+        bond_a.bond_order == bonds_b[idcs].bond_order
+        or (bond_a.is_aromatic and bonds_b[idcs].is_aromatic)
+        for idcs, bond_a in bonds_a.items()
+    )
