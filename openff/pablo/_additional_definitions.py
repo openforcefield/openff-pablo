@@ -3,14 +3,13 @@ import logging
 import math
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING
 
 from openff.pablo._graph import Graph
 from openff.pablo._utils import flatten, sort_tuple
 
 from ._matching import (
-    ResidueMatch,
+    AdditionalDefMatch,
     SuccessfulMatch,
 )
 from .residue import AtomDefinition, BondDefinition, ResidueDefinition, _Linkages
@@ -335,74 +334,3 @@ def _has_valid_connectivity(
             return False
 
     return True
-
-
-@dataclass(frozen=True)
-class AdditionalDefMatch(ResidueMatch):
-    @classmethod
-    def from_mapping(
-        cls,
-        atom_mapping: Mapping[int, AtomDefinition],
-        resdef: ResidueDefinition,
-    ) -> Self:
-        """Compute the bond mapping for a particular atom mapping"""
-        n_unique_mapped_names = len(
-            {atomdef.name for atomdef in atom_mapping.values()},
-        )
-        assert n_unique_mapped_names == len(atom_mapping)
-
-        neighbouring_atoms: dict[str, int] = {}
-        matched_atoms: dict[str, int] = {}
-        for i, atom in atom_mapping.items():
-            if atom.symbol == "":
-                neighbouring_atoms[atom.name] = i
-            else:
-                matched_atoms[atom.name] = i
-
-        if (  # nofmt
-            resdef.linking_bond is None
-            or resdef._prior_bond_leaving_atoms.issubset(matched_atoms)
-        ):
-            prior_bond = None
-        elif resdef._prior_bond_leaving_atoms.isdisjoint(matched_atoms):
-            prior_bond = (
-                neighbouring_atoms[resdef._prior_bond_partner_atom + "_PRIOR"],
-                matched_atoms[resdef._prior_bond_linking_atom],
-            )
-        else:
-            assert False, "this is not a valid mapping"
-
-        if (  # nofmt
-            resdef.linking_bond is None
-            or resdef._posterior_bond_leaving_atoms.issubset(matched_atoms)
-        ):
-            posterior_bond = None
-        elif resdef._posterior_bond_leaving_atoms.isdisjoint(matched_atoms):
-            posterior_bond = (
-                matched_atoms[resdef._posterior_bond_linking_atom],
-                neighbouring_atoms[resdef._posterior_bond_partner_atom + "_POSTERIOR"],
-            )
-        else:
-            assert False
-
-        if (  # nofmt
-            resdef.crosslink is None
-            or resdef._crosslink_leaving_atoms.issubset(matched_atoms)
-        ):
-            crosslink = None
-        elif resdef._crosslink_leaving_atoms.isdisjoint(matched_atoms):
-            crosslink = (
-                matched_atoms[resdef._crosslink_linking_atom],
-                neighbouring_atoms[resdef._crosslink_partner_atom + "_CROSSLINK"],
-            )
-        else:
-            assert False
-
-        return cls(
-            residue_definition=resdef,
-            index_to_atomdef={k: v for k, v in atom_mapping.items()},
-            vsite_idcs=(),
-            prior_bond_idcs=prior_bond,
-            posterior_bond_idcs=posterior_bond,
-            crosslink_idcs=crosslink,
-        )
