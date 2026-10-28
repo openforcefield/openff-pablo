@@ -827,10 +827,12 @@ def test_unmatched_residues_give_clear_error(
                 str(path),
                 "could not be identified from the provided residue library:",
                 "  A:CYS#221 (l1-11): No matching residue definitions:",
-                "    ╰─ CYSTEINE didn't match: found CONECT record that could not be matched with a bond",
+                "    ├─ CYSTEINE didn't match: found CONECT record that could not be matched with a bond",
+                "    ╰─ CYSTEINE didn't match: Missing leaving atoms (HXT, OXT) are not explained by these combinations of bonds to other residues",
                 "",
                 "  A:CYS#222 (l12-23): No matching residue definitions:",
-                "    ╰─ CYSTEINE didn't match: found CONECT record that could not be matched with a bond",
+                "    ├─ CYSTEINE didn't match: found CONECT record that could not be matched with a bond",
+                "    ╰─ CYSTEINE didn't match: Missing leaving atoms (H2) are not explained by these combinations of bonds to other residues",
             ],
         )
 
@@ -1427,14 +1429,11 @@ class TestMultipleLinkagesOnSameAtom:
     ):
         # 2B0F model 1 with GLN A 182 O restored and NMA B 8 appended after YTF B 7,
         # so YTF C is CONECTed to both CYS A 146 SG and NMA N. Both bonds consume
-        # the same single leaving atom (H11), so a match that forms both gives a
-        # pentavalent carbon that must be rejected before a topology is produced.
+        # the same single leaving atom (H11), so YTF can form only one of them
+        # and must fail to match rather than produce a pentavalent carbon.
         pdb_path = get_test_data_path("2B0F_ytf_nma.pdb").absolute()
 
-        with pytest.raises(
-            ValueError,
-            match="Explicit valence for atom # 2928 C, 5, is greater than permitted",
-        ):
+        with pytest.raises(PdbResidueMatchError, match="B:YTF#7"):
             topology_from_pdb(pdb_path, residue_library=ytf_carboxy_crosslink_library)
 
     def test_2b0f_crosslink_on_same_atom_as_linking_without_crosslink_forms_linking_bond(

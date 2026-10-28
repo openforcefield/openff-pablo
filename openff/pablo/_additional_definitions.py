@@ -184,6 +184,7 @@ def _map_resdef_to_graph(
             new_mapping = AdditionalDefMatch.from_mapping(
                 mapping,
                 resdef,
+                resdef_graph.attrs,
             )
             # Discard the new mapping if it would assign the same chemistry as
             # an existing mapping

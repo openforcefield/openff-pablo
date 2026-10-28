@@ -1449,44 +1449,6 @@ class ResidueDefinition:
             ),
         )
 
-    def _missing_atoms_are_valid_leaving_atoms(
-        self,
-        missing_atom_names: Collection[str],
-    ) -> bool:
-        """
-        ``True`` if the missing atom names form a valid set of leaving atoms, ``False`` if not.
-
-        A valid set must all be marked as leaving atoms and must all be
-        assignable to a linking or crosslinking bond.
-        """
-        missing_atom_names = set(missing_atom_names)
-        return (
-            (
-                missing_atom_names.issuperset(
-                    self._prior_bond_leaving_atoms,
-                )
-                or missing_atom_names.isdisjoint(
-                    self._prior_bond_leaving_atoms,
-                )
-            )
-            and (
-                missing_atom_names.issuperset(
-                    self._posterior_bond_leaving_atoms,
-                )
-                or missing_atom_names.isdisjoint(
-                    self._posterior_bond_leaving_atoms,
-                )
-            )
-            and (
-                missing_atom_names.issuperset(
-                    self._crosslink_leaving_atoms,
-                )
-                or missing_atom_names.isdisjoint(
-                    self._crosslink_leaving_atoms,
-                )
-            )
-        )
-
     def _possible_prior_bond_names_gen(self) -> Iterator[tuple[str, str]]:
         if (
             self.linking_bond is None

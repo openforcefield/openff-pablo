@@ -3,8 +3,11 @@ from collections.abc import Iterable
 import pytest
 from openff.toolkit import Molecule
 
+from openff.pablo._matching import AdditionalDefMatch, ResidueMismatch
 from openff.pablo._pdb_data import ResidueMatch
-from openff.pablo.residue import ResidueDefinition
+from openff.pablo._tests.utils import only_match
+from openff.pablo._utils import unwrap
+from openff.pablo.residue import AtomDefinition, ResidueDefinition
 
 
 class TestResidueMatch:
@@ -20,12 +23,20 @@ class TestResidueMatch:
         with pytest.raises(TypeError):
             cys_match.atom(3.14159)  # pyright: ignore[reportArgumentType]
 
-    def test_set_crosslink_mutates_match(self, cys_match: ResidueMatch):
-        cys_match.set_crosslink(cys_match.canonical_atom_name_to_index["SG"], 99)
-        assert cys_match.crosslink_idcs == (
-            cys_match.canonical_atom_name_to_index["SG"],
-            99,
-        )
+    def test_set_crosslink_mutates_match(self, cys_match_no_leaving: ResidueMatch):
+        sg_idx = cys_match_no_leaving.canonical_atom_name_to_index["SG"]
+        cys_match_no_leaving.set_crosslink(sg_idx, 99)
+        assert cys_match_no_leaving.crosslink_idcs == (sg_idx, 99)
+
+    def test_set_linkages_raise_without_linkage(self, cys_match: ResidueMatch):
+        assert cys_match.linkages.leavers == frozenset()
+        index = cys_match.canonical_atom_name_to_index
+        with pytest.raises(ValueError, match="without a crosslink"):
+            cys_match.set_crosslink(index["SG"], 99)
+        with pytest.raises(ValueError, match="without a prior bond"):
+            cys_match.set_prior_bond(99, index["N"])
+        with pytest.raises(ValueError, match="without a posterior bond"):
+            cys_match.set_posterior_bond(index["C"], 99)
 
     def test_set_crosslink_raises_on_wrong_atom(self, cys_match: ResidueMatch):
         with pytest.raises(ValueError):
@@ -66,20 +77,49 @@ class TestResidueMatch:
         match: ResidueMatch = request.getfixturevalue(fixture_name)
         assert match.missing_atoms == set(missing_atoms)
 
-    def test_missing_leaving_atoms(
+    def test_missing_leaving_atoms(self, cys_match_no_leaving: ResidueMatch):
+        assert cys_match_no_leaving.missing_leaving_atoms == {
+            atom.name
+            for atom in cys_match_no_leaving.residue_definition.atoms
+            if atom.leaving
+        }
+
+    def test_reject_keeps_linkages(self, cys_match_no_leaving: ResidueMatch):
+        mismatch = cys_match_no_leaving.reject("reason")
+        assert mismatch.linkages == {cys_match_no_leaving.linkages}
+
+    def test_create_split_rejects_every_linkage_when_none_fit(
+        self,
+        cys_def: ResidueDefinition,
+    ):
+        # Only half of the posterior bond's leaving fragment is missing
+        mismatch = unwrap(
+            ResidueMatch.create_split(
+                cys_def,
+                {i: atom for i, atom in enumerate(cys_def.atoms) if atom.name != "HXT"},
+            ),
+        )
+
+        assert isinstance(mismatch, ResidueMismatch)
+        assert mismatch.linkages == frozenset(cys_def._linkage_combinations)
+        assert mismatch.reason == (
+            "Missing leaving atoms (HXT) are not explained by any combination of"
+            + " bonds to other residues"
+        )
+
+    def test_create_split_rejects_missing_non_leaving_atoms(
         self,
         hoh_def: ResidueDefinition,
     ):
-        match = ResidueMatch(
-            residue_definition=hoh_def,
-            crosslink_idcs=None,
-            index_to_atomdef={
-                i: atom for i, atom in enumerate(hoh_def.atoms) if atom.name != "O"
-            },
-            vsite_idcs=(),
+        result = unwrap(
+            ResidueMatch.create_split(
+                hoh_def,
+                {i: atom for i, atom in enumerate(hoh_def.atoms) if atom.name != "O"},
+            ),
         )
-        assert match.missing_atoms == {"O"}
-        assert match.missing_leaving_atoms == set()
+        assert isinstance(result, ResidueMismatch)
+        assert result.reason == "Expected atoms are missing: O"
+        assert result.linkages == frozenset()
 
     @pytest.mark.parametrize(
         "expect_prop_suffix",
@@ -139,15 +179,13 @@ class TestResidueMatch:
         assert ox.symbol == "O"
         assert ox.charge == -1
 
-        match1 = ResidueMatch(
+        match1 = only_match(
             residue_definition=resdef,
             index_to_atomdef={10: c, 11: h, 12: o, 13: ox},
-            vsite_idcs=(),
         )
-        match2 = ResidueMatch(
+        match2 = only_match(
             residue_definition=resdef,
             index_to_atomdef={10: c, 11: h, 12: ox, 13: o},
-            vsite_idcs=(),
         )
         assert match1.agrees_with(match2)
 
@@ -177,25 +215,22 @@ class TestResidueMatch:
         )
 
         # Alternate kekulization
-        match1 = ResidueMatch(
+        match1 = only_match(
             residue_definition=benzene,
             index_to_atomdef=dict(enumerate(benzene.atoms)),
-            vsite_idcs=(),
         )
-        match2 = ResidueMatch(
+        match2 = only_match(
             residue_definition=benzene_alt_kekulization,
             index_to_atomdef=dict(enumerate(benzene_alt_kekulization.atoms)),
-            vsite_idcs=(),
         )
         assert match1.agrees_with(match2), "alternate kekulization"
 
         # Incorrect elements
-        match1 = ResidueMatch(
+        match1 = only_match(
             residue_definition=benzene,
             index_to_atomdef=dict(enumerate(benzene.atoms)),
-            vsite_idcs=(),
         )
-        match2 = ResidueMatch(
+        match2 = only_match(
             residue_definition=benzene,
             index_to_atomdef={
                 0: benzene.atoms[0],
@@ -211,17 +246,15 @@ class TestResidueMatch:
                 10: benzene.atoms[9],
                 11: benzene.atoms[11],
             },
-            vsite_idcs=(),
         )
         assert not match1.agrees_with(match2), "incorrect elements"
 
         # incorrect connectivity (correct elements
-        match1 = ResidueMatch(
+        match1 = only_match(
             residue_definition=benzene,
             index_to_atomdef=dict(enumerate(benzene.atoms)),
-            vsite_idcs=(),
         )
-        match2 = ResidueMatch(
+        match2 = only_match(
             residue_definition=benzene,
             index_to_atomdef={
                 0: benzene.atoms[0],
@@ -237,19 +270,132 @@ class TestResidueMatch:
                 10: benzene.atoms[10],
                 11: benzene.atoms[11],
             },
-            vsite_idcs=(),
         )
         assert not match1.agrees_with(match2), "incorrect connectivity"
 
         # Incorrect total charge (correct elements and connectivity)
-        match1 = ResidueMatch(
+        match1 = only_match(
             residue_definition=benzene,
             index_to_atomdef=dict(enumerate(benzene.atoms)),
-            vsite_idcs=(),
         )
-        match2 = ResidueMatch(
+        match2 = only_match(
             residue_definition=contrived_dicarbanion,
             index_to_atomdef=dict(enumerate(contrived_dicarbanion.atoms)),
-            vsite_idcs=(),
         )
         assert not match1.agrees_with(match2), "incorrect total charge"
+
+
+class TestSharedLinkingAtom:
+    def test_create_split_one_match_per_linkage(
+        self,
+        shared_linking_atom_def: ResidueDefinition,
+    ):
+        index_to_atomdef = {
+            i: atom
+            for i, atom in enumerate(shared_linking_atom_def.atoms)
+            if atom.name != "HC3"
+        }
+
+        results = ResidueMatch.create_split(shared_linking_atom_def, index_to_atomdef)
+        matches = [result for result in results if isinstance(result, ResidueMatch)]
+        mismatch = unwrap(
+            result for result in results if isinstance(result, ResidueMismatch)
+        )
+
+        assert {
+            (match.expects_posterior_bond, match.expects_crosslink) for match in matches
+        } == {(True, False), (False, True)}
+        assert mismatch.linkages == frozenset(
+            shared_linking_atom_def._linkage_combinations,
+        ) - {match.linkages for match in matches}
+        assert mismatch.reason == (
+            "Missing leaving atoms (HC3) are not explained by these combinations of"
+            + " bonds to other residues"
+        )
+
+    def test_create_split_single_match_when_leaving_atoms_present(
+        self,
+        shared_linking_atom_def: ResidueDefinition,
+    ):
+        results = ResidueMatch.create_split(
+            shared_linking_atom_def,
+            dict(enumerate(shared_linking_atom_def.atoms)),
+        )
+        match = unwrap(result for result in results if isinstance(result, ResidueMatch))
+        mismatch = unwrap(
+            result for result in results if isinstance(result, ResidueMismatch)
+        )
+
+        assert match.linkages.leavers == frozenset()
+        assert mismatch.reason == (
+            "No leaving atoms are missing, but these combinations of bonds to other"
+            + " residues remove some"
+        )
+
+    def additional_def_match(
+        self,
+        resdef: ResidueDefinition,
+        partner_name: str,
+        partner_idx: int,
+    ) -> AdditionalDefMatch:
+        """A match to ``resdef`` with C1 bonded to ``partner_idx`` and HC3 absent"""
+        mapping = {i: atom for i, atom in enumerate(resdef.atoms) if atom.name != "HC3"}
+        mapping[partner_idx] = AtomDefinition.with_defaults(
+            partner_name,
+            "",
+            leaving=True,
+        )
+        linkages = unwrap(
+            linkages
+            for linkages in resdef._linkage_combinations
+            if linkages.leavers == frozenset({"HC3"})
+            and (linkages.crosslink == partner_name.endswith("_CROSSLINK"))
+        )
+        return AdditionalDefMatch.from_mapping(mapping, resdef, linkages)
+
+    def test_additional_def_match_agrees_regardless_of_linkage(
+        self,
+        shared_linking_atom_def: ResidueDefinition,
+    ):
+        posterior = self.additional_def_match(
+            shared_linking_atom_def,
+            "N1_POSTERIOR",
+            99,
+        )
+        crosslink = self.additional_def_match(
+            shared_linking_atom_def,
+            "X_CROSSLINK",
+            99,
+        )
+
+        assert posterior.linkages != crosslink.linkages
+        assert posterior.agrees_with(crosslink)
+        assert crosslink.agrees_with(posterior)
+
+    def test_additional_def_match_disagrees_on_external_partner(
+        self,
+        shared_linking_atom_def: ResidueDefinition,
+    ):
+        to_99 = self.additional_def_match(shared_linking_atom_def, "X_CROSSLINK", 99)
+        to_98 = self.additional_def_match(shared_linking_atom_def, "X_CROSSLINK", 98)
+
+        assert not to_99.agrees_with(to_98)
+
+    def test_agrees_with_rejects_mixed_match_types(
+        self,
+        shared_linking_atom_def: ResidueDefinition,
+    ):
+        additional = self.additional_def_match(
+            shared_linking_atom_def,
+            "X_CROSSLINK",
+            99,
+        )
+        residue = only_match(
+            shared_linking_atom_def,
+            dict(enumerate(shared_linking_atom_def.atoms)),
+        )
+
+        with pytest.raises(AssertionError):
+            residue.agrees_with(additional)
+        with pytest.raises(AssertionError):
+            additional.agrees_with(residue)

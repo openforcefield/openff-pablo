@@ -601,14 +601,16 @@ class PdbData:
         self,
         res_atom_idcs: Collection[int],
         residue_definition: ResidueDefinition,
-    ) -> PossibleResidueMatch:
+    ) -> Sequence[PossibleResidueMatch]:
         """
         Check if a set of atom indices matches a given residue definition.
 
         This performs a name-based match; connectivity-based matches occur
         later. Virtual sites are strictly enforced to match the residue
         definition exactly - missing or extra virtual sites will cause a
-        mismatch.
+        mismatch. A successful match is returned for each combination of
+        linkages its missing atoms allow; otherwise, a single mismatch is
+        returned.
 
         Parameters
         ----------
@@ -636,11 +638,13 @@ class PdbData:
                 except (ValueError, IndexError):
                     reason = f"Required virtual site {name} appeared too many times"
                     logger.debug("    Match failed: " + reason)
-                    return ResidueMismatch(
-                        residue_definition=residue_definition,
-                        index_to_atomdef={j: None for j in res_atom_idcs},
-                        reason=reason,
-                    )
+                    return [
+                        ResidueMismatch(
+                            residue_definition=residue_definition,
+                            index_to_atomdef={j: None for j in res_atom_idcs},
+                            reason=reason,
+                        ),
+                    ]
                 else:
                     matched_vsite_indices.append(i)
             else:
@@ -648,11 +652,13 @@ class PdbData:
         if len(unmatched_vsites) != 0:
             reason = f"Required virtual sites not found in PDB file: {', '.join(unmatched_vsites)}"
             logger.debug("    Match failed: " + reason)
-            return ResidueMismatch(
-                residue_definition=residue_definition,
-                index_to_atomdef={i: None for i in res_atom_idcs},
-                reason=reason,
-            )
+            return [
+                ResidueMismatch(
+                    residue_definition=residue_definition,
+                    index_to_atomdef={i: None for i in res_atom_idcs},
+                    reason=reason,
+                ),
+            ]
         if len(matched_vsite_indices) != 0:
             logger.info(
                 f"    Match to {residue_definition.description} dropped virtual sites on",
@@ -666,11 +672,13 @@ class PdbData:
         if len(residue_definition.atoms) < len(res_atom_idcs):
             reason = f"Too few atoms in residue definition ({len(residue_definition.atoms)} < {len(res_atom_idcs)})"
             logger.debug("    Match failed: " + reason)
-            return ResidueMismatch(
-                residue_definition=residue_definition,
-                index_to_atomdef={i: None for i in res_atom_idcs},
-                reason=reason,
-            )
+            return [
+                ResidueMismatch(
+                    residue_definition=residue_definition,
+                    index_to_atomdef={i: None for i in res_atom_idcs},
+                    reason=reason,
+                ),
+            ]
 
         # Skip non-(cross)linking definitions with the wrong number of atoms
         if (
@@ -683,11 +691,13 @@ class PdbData:
         ):
             reason = "No links and wrong number of atoms"
             logger.debug("    Match failed: " + reason)
-            return ResidueMismatch(
-                residue_definition=residue_definition,
-                index_to_atomdef={i: None for i in res_atom_idcs},
-                reason=reason,
-            )
+            return [
+                ResidueMismatch(
+                    residue_definition=residue_definition,
+                    index_to_atomdef={i: None for i in res_atom_idcs},
+                    reason=reason,
+                ),
+            ]
 
         # Get the map from the indices to the canonical names
         index_to_atomdef = {
@@ -736,17 +746,13 @@ class PdbData:
             )
 
             logger.debug("    Match failed: " + reason)
-            return ResidueMismatch(
-                residue_definition=residue_definition,
-                index_to_atomdef=index_to_atomdef,
-                reason=reason,
-            )
-
-        match = ResidueMatch(
-            index_to_atomdef=dict(index_to_atomdef),
-            residue_definition=residue_definition,
-            vsite_idcs=tuple(matched_vsite_indices),
-        )
+            return [
+                ResidueMismatch(
+                    residue_definition=residue_definition,
+                    index_to_atomdef=index_to_atomdef,
+                    reason=reason,
+                ),
+            ]
 
         matched_atoms = {atom.name for atom in index_to_atomdef.values()}
 
@@ -754,7 +760,13 @@ class PdbData:
         if len(matched_atoms) != len(res_atom_idcs):
             reason = "Atom definition matched multiple PDB coordinate records"
             logger.debug("    Match failed: " + reason)
-            return match.reject(reason)
+            return [
+                ResidueMismatch(
+                    residue_definition=residue_definition,
+                    index_to_atomdef=index_to_atomdef,
+                    reason=reason,
+                ),
+            ]
 
         # This assert should be guaranteed by the above
         assert set(index_to_atomdef.keys()) == set(res_atom_idcs)
@@ -766,7 +778,13 @@ class PdbData:
         ):
             reason = "Element mismatch"
             logger.debug("    Match failed: " + reason)
-            return match.reject(reason)
+            return [
+                ResidueMismatch(
+                    residue_definition=residue_definition,
+                    index_to_atomdef=index_to_atomdef,
+                    reason=reason,
+                ),
+            ]
 
         # PDB files can not be trusted; ignore charges.
         # # Check that charges match, but tolerate missing columns
@@ -780,10 +798,6 @@ class PdbData:
         missing_atoms = [
             atom for atom in residue_definition.atoms if atom.name not in matched_atoms
         ]
-
-        # Match only if all the leaving atoms associated with each linking atom
-        # is either entirely present or entirely absent
-        missing_atom_names = {atom.name for atom in missing_atoms}
         if any(not atom.leaving for atom in missing_atoms):
             reason = "Expected atoms are missing: "
             reason += ", ".join(
@@ -798,17 +812,26 @@ class PdbData:
             else:
                 reason += " (all present atoms were matched)"
             logger.debug("    Match failed: " + reason)
-            return match.reject(reason)
-        elif residue_definition._missing_atoms_are_valid_leaving_atoms(
-            missing_atom_names,
-        ):
-            logger.debug("    Match succeeded!")
-            self.set_linkages_from_conects(match)
-            return match
-        else:
-            reason = "Expected atoms are missing:"
-            logger.debug("    Match failed: " + reason)
-            return match.reject(reason)
+            return [
+                ResidueMismatch(
+                    residue_definition=residue_definition,
+                    index_to_atomdef=index_to_atomdef,
+                    reason=reason,
+                ),
+            ]
+
+        matches = ResidueMatch.create_split(
+            residue_definition,
+            dict(index_to_atomdef),
+            tuple(matched_vsite_indices),
+        )
+        for match in matches:
+            if isinstance(match, ResidueMatch):
+                logger.debug(f"    Match succeeded with {match.linkages}")
+                self.set_linkages_from_conects(match)
+            else:
+                logger.debug(f"    Match failed: {match.reason}")
+        return matches
 
     def set_linkages_from_conects(self, match: ResidueMatch) -> None:
         posterior_bond = match.residue_definition.linking_bond
@@ -897,11 +920,12 @@ class PdbData:
             )
 
             matches = [
-                self.subset_matches_residue(
+                match
+                for residue_definition in residue_library.get(res_name, [])
+                for match in self.subset_matches_residue(
                     res_atom_idcs,
                     residue_definition,
                 )
-                for residue_definition in residue_library.get(res_name, [])
             ]
             if len(matches) > 0:
                 yield matches
@@ -1077,22 +1101,14 @@ class PdbData:
                 }
                 logger.debug(f"      {missing_atoms=}")
 
-                if (
-                    # Missing atoms must exactly define linking bonds
-                    not resdef._missing_atoms_are_valid_leaving_atoms(
-                        {atom.name for atom in missing_atoms},
-                    )
+                variants = ResidueConectMatch.create_split(resdef, mapping)
+                if not any(
+                    isinstance(variant, ResidueConectMatch) for variant in variants
                 ):
                     logger.debug(
                         "        REJECTED: Missing atoms are not a valid set of leaving atoms",
                     )
                     continue
-
-                match = ResidueConectMatch(
-                    residue_definition=resdef,
-                    index_to_atomdef=mapping,
-                    vsite_idcs=(),
-                )
 
                 # Check that the CONECTs between this residue and another are
                 # compatible with this mapping
@@ -1136,34 +1152,40 @@ class PdbData:
                 logger.debug(f"      {prior_conects=}")
                 logger.debug(f"      {crosslink_conects=}")
 
-                if (  # nofmt
-                    # If there are conect records between this residue and another, match must agree
-                    len(unknown_conects) > 0
-                    or len(posterior_conects) > 1
-                    or len(prior_conects) > 1
-                    or len(crosslink_conects) > 1
-                    or (bool(crosslink_conects) and not match.expects_crosslink)
-                    or (bool(posterior_conects) and not match.expects_posterior_bond)
-                    or (bool(prior_conects) and not match.expects_prior_bond)
-                ):
-                    logger.debug(
-                        "        REJECTED: Interresidue CONECT records not compatible with missing leaving atoms",
-                    )
-                    continue
+                for variant in variants:
+                    if not isinstance(variant, ResidueConectMatch):
+                        continue
+                    if (  # nofmt
+                        # If there are conect records between this residue and another, match must agree
+                        len(unknown_conects) > 0
+                        or len(posterior_conects) > 1
+                        or len(prior_conects) > 1
+                        or len(crosslink_conects) > 1
+                        or (bool(crosslink_conects) and not variant.expects_crosslink)
+                        or (
+                            bool(posterior_conects)
+                            and not variant.expects_posterior_bond
+                        )
+                        or (bool(prior_conects) and not variant.expects_prior_bond)
+                    ):
+                        logger.debug(
+                            f"        REJECTED {variant.linkages}: Interresidue CONECT records not compatible with missing leaving atoms",
+                        )
+                        continue
 
-                if bool(crosslink_conects):
-                    match.set_crosslink(*unwrap(crosslink_conects))
-                if bool(posterior_conects):
-                    match.set_posterior_bond(*unwrap(posterior_conects))
-                if bool(prior_conects):
-                    match.set_prior_bond(*unwrap(prior_conects))
-                # Yield multiple residue matches for multiple mappings and let
-                # the remaining filters sort it out; if we end up with multiple
-                # matches at the end of filtering, then we couldn't
-                # unambiguously rescue this match
-                logger.debug("        ACCEPTED")
-                rescued = True
-                yield match
+                    if bool(crosslink_conects):
+                        variant.set_crosslink(*unwrap(crosslink_conects))
+                    if bool(posterior_conects):
+                        variant.set_posterior_bond(*unwrap(posterior_conects))
+                    if bool(prior_conects):
+                        variant.set_prior_bond(*unwrap(prior_conects))
+                    # Yield multiple residue matches for multiple mappings and let
+                    # the remaining filters sort it out; if we end up with multiple
+                    # matches at the end of filtering, then we couldn't
+                    # unambiguously rescue this match
+                    logger.debug(f"        ACCEPTED {variant.linkages}")
+                    rescued = True
+                    yield variant
 
             if not rescued:
                 logger.debug("    REJECTED: no mappings matched")
@@ -1624,7 +1646,7 @@ class PdbData:
             )
             res_atom_idcs = this_matches[0].res_atom_idcs
             for residue_definition in additional_definitions:
-                yield self.subset_matches_residue(
+                yield from self.subset_matches_residue(
                     res_atom_idcs,
                     residue_definition,
                 )

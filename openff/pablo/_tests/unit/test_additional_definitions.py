@@ -3,7 +3,7 @@ from openff.toolkit import Molecule
 from openff.pablo._additional_definitions import _get_pdb_graph
 from openff.pablo._matching import SuccessfulMatch, unwrap_successful
 from openff.pablo._pdb_data import PdbData, ResidueMatch
-from openff.pablo._tests.utils import get_test_data_path
+from openff.pablo._tests.utils import get_test_data_path, only_match
 from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.chem import PEPTIDE_BOND
 from openff.pablo.residue import AtomDefinition, BondDefinition, ResidueDefinition
@@ -27,20 +27,20 @@ def test_get_pdb_graph_partial():
     resdef = ResidueDefinition(
         residue_name="AAA",
         description="demo",
-        atoms=(AtomDefinition.with_defaults("A", "A"),),
-        bonds=(),
+        atoms=(
+            AtomDefinition.with_defaults("A", "A"),
+            AtomDefinition.with_defaults("L", "L", leaving=True),
+        ),
+        bonds=(BondDefinition.with_defaults("A", "L"),),
         virtual_sites=(),
         crosslink=None,
         linking_bond=BondDefinition.with_defaults("A", "B"),
     )
-    match = ResidueMatch(
+    match = only_match(
         residue_definition=resdef,
         index_to_atomdef={0: resdef.atoms[0]},
-        vsite_idcs=(),
-        prior_bond_idcs=None,
-        posterior_bond_idcs=(0, 1),
-        crosslink_idcs=None,
     )
+    match.set_posterior_bond(0, 1)
 
     graph, atoms, bonds = _get_pdb_graph(data, [match])
 

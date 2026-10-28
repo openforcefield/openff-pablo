@@ -667,48 +667,6 @@ class TestResidueDefinition:
         with pytest.raises(PabloError, match="not a leaving atom"):
             cys_def._leaving_fragment_with("SG")
 
-    @pytest.fixture
-    def leaving_linking_atom_def(self) -> ResidueDefinition:
-        # O1 is the posterior linking atom, but also leaves when C1 crosslinks
-        return ResidueDefinition.from_smiles(
-            "[N:1]([H:4])([H:5])[C:2]([H:6])([H:7])[O:3][H:8]",
-            atom_names={
-                1: "N1",
-                2: "C1",
-                3: "O1",
-                4: "HN1",
-                5: "HN2",
-                6: "HC1",
-                7: "HC2",
-                8: "HO1",
-            },
-            residue_name="LLA",
-            linking_bond=BondDefinition.with_defaults("O1", "N1"),
-            crosslink=BondDefinition.with_defaults("C1", "X"),
-            leaving_atoms=[3, 8],
-        )
-
-    @pytest.fixture
-    def shared_linking_atom_def(self) -> ResidueDefinition:
-        # C1 is both the posterior linking atom and the crosslinking atom, and
-        # both bonds would remove HC3
-        return ResidueDefinition.from_smiles(
-            "[N:1]([H:3])([H:4])[C:2]([H:5])([H:6])[H:7]",
-            atom_names={
-                1: "N1",
-                2: "C1",
-                3: "HN1",
-                4: "HN2",
-                5: "HC1",
-                6: "HC2",
-                7: "HC3",
-            },
-            residue_name="SLA",
-            linking_bond=BondDefinition.with_defaults("C1", "N1"),
-            crosslink=BondDefinition.with_defaults("C1", "X"),
-            leaving_atoms=[4, 7],
-        )
-
     def test_leaving_fragment_of_leaving_linking_atom(
         self,
         leaving_linking_atom_def: ResidueDefinition,

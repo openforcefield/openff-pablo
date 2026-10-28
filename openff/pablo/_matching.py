@@ -1,13 +1,13 @@
 import logging
-from collections.abc import Generator, Iterable, Mapping
+from collections.abc import Generator, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import cached_property, reduce
-from typing import ClassVar, Protocol, Self, TypeAlias
+from typing import ClassVar, Literal, Protocol, Self, TypeAlias
 
 from openff.pablo._utils import sort_tuple
 from openff.pablo.exceptions import AmbiguousMatchError, PabloError
 
-from .residue import AtomDefinition, BondDefinition, ResidueDefinition
+from .residue import AtomDefinition, BondDefinition, _Linkages, ResidueDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +85,10 @@ class ResidueMismatch(MismatchProtocol):
     residue_definition: ResidueDefinition
     index_to_atomdef: Mapping[int, AtomDefinition | None]
     reason: str
+    linkages: frozenset[_Linkages] = frozenset()
+    """The combinations of external bonds this mismatch rejects
+
+    Empty if matching failed before any combination was considered."""
     is_match = False
 
     @property
@@ -97,17 +101,132 @@ class ResidueMatch(MatchProtocol):
     residue_definition: ResidueDefinition
     index_to_atomdef: dict[int, AtomDefinition]
     vsite_idcs: tuple[int, ...]
+    linkages: _Linkages
+    """The external bonds this match forms, accounting for its missing atoms"""
     prior_bond_idcs: tuple[int, int] | None = None
     posterior_bond_idcs: tuple[int, int] | None = None
     crosslink_idcs: tuple[int, int] | None = None
     """PDB indices of each bonded atom"""
     is_match = True
 
-    def reject(self, reason: str) -> ResidueMismatch:
+    def __post_init__(self):
+        missing_core_atoms = sorted(
+            name for name in self.missing_atoms if not self.atom(name).leaving
+        )
+        if missing_core_atoms:
+            raise PabloError(f"match is missing non-leaving atoms {missing_core_atoms}")
+        if self.linkages not in self.residue_definition._linkage_combinations:
+            raise PabloError(
+                f"{self.linkages} is not a valid combination of linkages for"
+                + f" {self.residue_definition.description}",
+            )
+        if self.linkages.leavers != frozenset(self.missing_leaving_atoms):
+            raise PabloError(
+                f"{self.linkages} does not account for the missing leaving atoms"
+                + f" {sorted(self.missing_leaving_atoms)}",
+            )
+        for bond_idcs, formed, bond_name in [
+            (self.prior_bond_idcs, self.linkages.prior, "prior bond"),
+            (self.posterior_bond_idcs, self.linkages.posterior, "posterior bond"),
+            (self.crosslink_idcs, self.linkages.crosslink, "crosslink"),
+        ]:
+            if bond_idcs is not None and not formed:
+                raise PabloError(f"{bond_name} set on a match without that linkage")
+
+    @classmethod
+    def create_split(
+        cls,
+        residue_definition: ResidueDefinition,
+        index_to_atomdef: dict[int, AtomDefinition],
+        vsite_idcs: tuple[int, ...] = (),
+    ) -> Sequence[Self | ResidueMismatch]:
+        """
+        Match ``index_to_atomdef`` to ``residue_definition``.
+
+        Returns one match for each combination of linkages that the missing
+        atoms allow, and a single mismatch rejecting every combination they
+        don't. If a non-leaving atom is missing, no combination is considered
+        and a single mismatch is returned with no linkages.
+        """
+        matched_names = {atom.name for atom in index_to_atomdef.values()}
+        missing_atoms = [
+            atom for atom in residue_definition.atoms if atom.name not in matched_names
+        ]
+        missing_core_atoms = sorted(
+            atom.name for atom in missing_atoms if not atom.leaving
+        )
+        if missing_core_atoms:
+            return [
+                cls._mismatch(
+                    residue_definition,
+                    index_to_atomdef,
+                    "Expected atoms are missing: " + ", ".join(missing_core_atoms),
+                ),
+            ]
+
+        missing_leaving_atoms = frozenset(atom.name for atom in missing_atoms)
+        results: list[Self | ResidueMismatch] = [
+            cls(
+                residue_definition=residue_definition,
+                # TODO: Make this a frozendict once Python 3.14 support is
+                #       dropped; it is shared by every match from this split
+                index_to_atomdef=index_to_atomdef,
+                vsite_idcs=vsite_idcs,
+                linkages=linkages,
+            )
+            for linkages in residue_definition._linkage_combinations
+            if linkages.leavers == missing_leaving_atoms
+        ]
+
+        rejected = frozenset(
+            linkages
+            for linkages in residue_definition._linkage_combinations
+            if linkages.leavers != missing_leaving_atoms
+        )
+        if len(rejected) == 0:
+            return results
+
+        if len(results) == 0:
+            reason = (
+                f"Missing leaving atoms ({', '.join(sorted(missing_leaving_atoms))})"
+                + " are not explained by any combination of bonds to other residues"
+            )
+        elif len(missing_leaving_atoms) == 0:
+            reason = (
+                "No leaving atoms are missing, but these combinations of bonds to"
+                + " other residues remove some"
+            )
+        else:
+            reason = (
+                f"Missing leaving atoms ({', '.join(sorted(missing_leaving_atoms))})"
+                + " are not explained by these combinations of bonds to other residues"
+            )
+        results.append(
+            cls._mismatch(residue_definition, index_to_atomdef, reason, rejected),
+        )
+        return results
+
+    @classmethod
+    def _mismatch(
+        cls,
+        residue_definition: ResidueDefinition,
+        index_to_atomdef: Mapping[int, AtomDefinition | None],
+        reason: str,
+        linkages: frozenset[_Linkages] = frozenset(),
+    ) -> ResidueMismatch:
         return ResidueMismatch(
-            residue_definition=self.residue_definition,
-            index_to_atomdef=self.index_to_atomdef,
+            residue_definition=residue_definition,
+            index_to_atomdef=index_to_atomdef,
             reason=reason,
+            linkages=linkages,
+        )
+
+    def reject(self, reason: str) -> ResidueMismatch:
+        return self._mismatch(
+            self.residue_definition,
+            self.index_to_atomdef,
+            reason,
+            frozenset({self.linkages}),
         )
 
     def atom(self, identifier: int | str) -> AtomDefinition:
@@ -141,11 +260,15 @@ class ResidueMatch(MatchProtocol):
             or atom2_idx in self.res_atom_idcs
         ):
             raise PabloError("bad crosslink index(es)")
+        if not self.linkages.crosslink:
+            raise PabloError("cannot set crosslink on a match without a crosslink")
         object.__setattr__(self, "crosslink_idcs", (atom1_idx, atom2_idx))
 
     def set_prior_bond(self, atom1_idx: int, atom2_idx: int) -> None:
         if self.residue_definition.linking_bond is None:
             raise PabloError("cannot set prior bond without linking_bond")
+        if not self.linkages.prior:
+            raise PabloError("cannot set prior bond on a match without a prior bond")
         if atom1_idx in self.res_atom_idcs:
             raise PabloError("atom1 in prior bond should be in another residue")
         if atom2_idx not in self.res_atom_idcs:
@@ -160,6 +283,10 @@ class ResidueMatch(MatchProtocol):
     def set_posterior_bond(self, atom1_idx: int, atom2_idx: int) -> None:
         if self.residue_definition.linking_bond is None:
             raise PabloError("cannot set posterior bond without linking_bond")
+        if not self.linkages.posterior:
+            raise PabloError(
+                "cannot set posterior bond on a match without a posterior bond",
+            )
         if atom1_idx not in self.res_atom_idcs:
             raise PabloError("atom1 in posterior bond should be in this residue")
         if atom2_idx in self.res_atom_idcs:
@@ -199,17 +326,7 @@ class ResidueMatch(MatchProtocol):
 
     @cached_property
     def expects_prior_bond(self) -> bool:
-        if self.residue_definition.linking_bond is None:
-            return False
-
-        linking_atom = self.residue_definition._prior_bond_linking_atom
-        expected_leaving_atoms = self.residue_definition._prior_bond_leaving_atoms
-
-        return (
-            linking_atom in self.canonical_atom_name_to_index
-            and len(expected_leaving_atoms) > 0
-            and expected_leaving_atoms.issubset(self.missing_leaving_atoms)
-        )
+        return self.linkages.prior
 
     def must_infer_posterior_bond(self) -> bool:
         if self.posterior_bond_idcs is not None:
@@ -218,31 +335,11 @@ class ResidueMatch(MatchProtocol):
 
     @cached_property
     def expects_posterior_bond(self) -> bool:
-        if self.residue_definition.linking_bond is None:
-            return False
-
-        linking_atom = self.residue_definition._posterior_bond_linking_atom
-        expected_leaving_atoms = self.residue_definition._posterior_bond_leaving_atoms
-
-        return (
-            linking_atom in self.canonical_atom_name_to_index
-            and len(expected_leaving_atoms) > 0
-            and expected_leaving_atoms.issubset(self.missing_leaving_atoms)
-        )
+        return self.linkages.posterior
 
     @cached_property
     def expects_crosslink(self) -> bool:
-        if self.residue_definition.crosslink is None:
-            return False
-
-        linking_atom = self.residue_definition.crosslink.atom1
-        expected_leaving_atoms = self.residue_definition._crosslink_leaving_atoms
-
-        return (
-            linking_atom in self.canonical_atom_name_to_index
-            and len(expected_leaving_atoms) > 0
-            and expected_leaving_atoms.issubset(self.missing_leaving_atoms)
-        )
+        return self.linkages.crosslink
 
     def get_sorted_bond_map(self) -> dict[tuple[int, int], BondDefinition]:
         d: dict[tuple[int, int], BondDefinition] = {
@@ -281,6 +378,9 @@ class ResidueMatch(MatchProtocol):
         connectivity graphs (ignoring bond order) and net formal charges are
         identical. Matches that identify different atoms are never considered
         to agree."""
+        assert not isinstance(other, AdditionalDefMatch), (
+            "matches to additional definitions are only compared with each other"
+        )
         if self.identified_atom_idcs != other.identified_atom_idcs:
             logger.debug(
                 "    DISAGREE: Covers different indices"
@@ -412,11 +512,19 @@ class ResidueConectMismatch(ResidueMismatch):
 
 
 class ResidueConectMatch(ResidueMatch):
-    def reject(self, reason: str) -> ResidueConectMismatch:
+    @classmethod
+    def _mismatch(
+        cls,
+        residue_definition: ResidueDefinition,
+        index_to_atomdef: Mapping[int, AtomDefinition | None],
+        reason: str,
+        linkages: frozenset[_Linkages] = frozenset(),
+    ) -> ResidueConectMismatch:
         return ResidueConectMismatch(
-            residue_definition=self.residue_definition,
-            index_to_atomdef=self.index_to_atomdef,
+            residue_definition=residue_definition,
+            index_to_atomdef=index_to_atomdef,
             reason=reason,
+            linkages=linkages,
         )
 
 
@@ -427,6 +535,7 @@ class AdditionalDefMatch(ResidueMatch):
         cls,
         atom_mapping: Mapping[int, AtomDefinition],
         resdef: ResidueDefinition,
+        linkages: _Linkages,
     ) -> Self:
         """Compute the bond mapping for a particular atom mapping"""
         n_unique_mapped_names = len(
@@ -442,53 +551,88 @@ class AdditionalDefMatch(ResidueMatch):
             else:
                 matched_atoms[atom.name] = i
 
-        if (  # nofmt
-            resdef.linking_bond is None
-            or resdef._prior_bond_leaving_atoms.issubset(matched_atoms)
-        ):
-            prior_bond = None
-        elif resdef._prior_bond_leaving_atoms.isdisjoint(matched_atoms):
-            prior_bond = (
+        prior_bond = (
+            (
                 neighbouring_atoms[resdef._prior_bond_partner_atom + "_PRIOR"],
                 matched_atoms[resdef._prior_bond_linking_atom],
             )
-        else:
-            assert False, "this is not a valid mapping"
-
-        if (  # nofmt
-            resdef.linking_bond is None
-            or resdef._posterior_bond_leaving_atoms.issubset(matched_atoms)
-        ):
-            posterior_bond = None
-        elif resdef._posterior_bond_leaving_atoms.isdisjoint(matched_atoms):
-            posterior_bond = (
+            if linkages.prior
+            else None
+        )
+        posterior_bond = (
+            (
                 matched_atoms[resdef._posterior_bond_linking_atom],
                 neighbouring_atoms[resdef._posterior_bond_partner_atom + "_POSTERIOR"],
             )
-        else:
-            assert False
-
-        if (  # nofmt
-            resdef.crosslink is None
-            or resdef._crosslink_leaving_atoms.issubset(matched_atoms)
-        ):
-            crosslink = None
-        elif resdef._crosslink_leaving_atoms.isdisjoint(matched_atoms):
-            crosslink = (
+            if linkages.posterior
+            else None
+        )
+        crosslink = (
+            (
                 matched_atoms[resdef._crosslink_linking_atom],
                 neighbouring_atoms[resdef._crosslink_partner_atom + "_CROSSLINK"],
             )
-        else:
-            assert False
+            if linkages.crosslink
+            else None
+        )
 
         return cls(
             residue_definition=resdef,
             index_to_atomdef={k: v for k, v in atom_mapping.items()},
             vsite_idcs=(),
+            linkages=linkages,
             prior_bond_idcs=prior_bond,
             posterior_bond_idcs=posterior_bond,
             crosslink_idcs=crosslink,
         )
+
+    @cached_property
+    def missing_atoms(self) -> set[str]:
+        """Atoms present in the residue definition that were not matched
+
+        Stand-ins for atoms outside the residue do not count as matches."""
+        identified_names = {
+            atom.name for atom in self.index_to_atomdef.values() if atom.symbol != ""
+        }
+        return {
+            atom.name
+            for atom in self.residue_definition.atoms
+            if atom.name not in identified_names
+        }
+
+    def agrees_with(self, other: MatchProtocol) -> bool:
+        """``True`` if both matches would assign the same chemistry, ``False`` otherwise.
+
+        Unlike :py:meth:`ResidueMatch.agrees_with`, external bonds are compared
+        by the atoms they join rather than by which linkage forms them."""
+        assert isinstance(other, AdditionalDefMatch), (
+            "matches to additional definitions are only compared with each other"
+        )
+        if self.identified_atom_idcs != other.identified_atom_idcs:
+            return False
+        if self._external_bonds() != other._external_bonds():
+            logger.debug("  DISAGREES: external bonds differ")
+            return False
+        try:
+            self.check_agrees_with_where_overlaps(other)
+        except AmbiguousMatchError as e:
+            logger.debug(f"  DISAGREES: {' and '.join(e.reasons)}")
+            return False
+        return True
+
+    def _external_bonds(
+        self,
+    ) -> set[tuple[tuple[int, int], int, bool, Literal["E", "Z"] | None]]:
+        """Sorted PDB indices, order, aromaticity and stereo of external bonds"""
+        return {
+            (sort_tuple(bond_idcs), bond.order, bond.aromatic, bond.stereo)
+            for bond_idcs, bond in [
+                (self.prior_bond_idcs, self.residue_definition.linking_bond),
+                (self.posterior_bond_idcs, self.residue_definition.linking_bond),
+                (self.crosslink_idcs, self.residue_definition.crosslink),
+            ]
+            if bond_idcs is not None and bond is not None
+        }
 
 
 SuccessfulMatch: TypeAlias = ResidueMatch
