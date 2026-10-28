@@ -9,6 +9,7 @@ from openff.pablo.exceptions import PabloError, ResidueValidationError
 from openff.pablo.residue import (
     AtomDefinition,
     BondDefinition,
+    _Linkages,
     ResidueDefinition,
     _skip_residue_definition_validation,
 )
@@ -666,9 +667,10 @@ class TestResidueDefinition:
         with pytest.raises(PabloError, match="not a leaving atom"):
             cys_def._leaving_fragment_with("SG")
 
-    def test_leaving_fragment_of_leaving_linking_atom(self):
+    @pytest.fixture
+    def leaving_linking_atom_def(self) -> ResidueDefinition:
         # O1 is the posterior linking atom, but also leaves when C1 crosslinks
-        resdef = ResidueDefinition.from_smiles(
+        return ResidueDefinition.from_smiles(
             "[N:1]([H:4])([H:5])[C:2]([H:6])([H:7])[O:3][H:8]",
             atom_names={
                 1: "N1",
@@ -686,8 +688,128 @@ class TestResidueDefinition:
             leaving_atoms=[3, 8],
         )
 
-        assert sorted(resdef._leaving_fragment_of("O1")) == ["HO1"]
-        assert sorted(resdef._leaving_fragment_of("C1")) == ["HO1", "O1"]
+    @pytest.fixture
+    def shared_linking_atom_def(self) -> ResidueDefinition:
+        # C1 is both the posterior linking atom and the crosslinking atom, and
+        # both bonds would remove HC3
+        return ResidueDefinition.from_smiles(
+            "[N:1]([H:3])([H:4])[C:2]([H:5])([H:6])[H:7]",
+            atom_names={
+                1: "N1",
+                2: "C1",
+                3: "HN1",
+                4: "HN2",
+                5: "HC1",
+                6: "HC2",
+                7: "HC3",
+            },
+            residue_name="SLA",
+            linking_bond=BondDefinition.with_defaults("C1", "N1"),
+            crosslink=BondDefinition.with_defaults("C1", "X"),
+            leaving_atoms=[4, 7],
+        )
+
+    def test_leaving_fragment_of_leaving_linking_atom(
+        self,
+        leaving_linking_atom_def: ResidueDefinition,
+    ):
+        assert sorted(leaving_linking_atom_def._leaving_fragment_of("O1")) == ["HO1"]
+        assert sorted(leaving_linking_atom_def._leaving_fragment_of("C1")) == [
+            "HO1",
+            "O1",
+        ]
+
+    def test_linkage_combinations_shared_linking_atom(
+        self,
+        shared_linking_atom_def: ResidueDefinition,
+    ):
+        assert set(shared_linking_atom_def._linkage_combinations) == {
+            _Linkages(
+                prior=False,
+                posterior=False,
+                crosslink=False,
+                leavers=frozenset(),
+            ),
+            _Linkages(
+                prior=False,
+                posterior=True,
+                crosslink=False,
+                leavers=frozenset({"HC3"}),
+            ),
+            _Linkages(
+                prior=False,
+                posterior=False,
+                crosslink=True,
+                leavers=frozenset({"HC3"}),
+            ),
+            _Linkages(
+                prior=True,
+                posterior=False,
+                crosslink=False,
+                leavers=frozenset({"HN2"}),
+            ),
+            _Linkages(
+                prior=True,
+                posterior=True,
+                crosslink=False,
+                leavers=frozenset({"HN2", "HC3"}),
+            ),
+            _Linkages(
+                prior=True,
+                posterior=False,
+                crosslink=True,
+                leavers=frozenset({"HN2", "HC3"}),
+            ),
+        }
+
+    def test_linkage_combinations_leaving_linking_atom(
+        self,
+        leaving_linking_atom_def: ResidueDefinition,
+    ):
+        # The posterior bond and crosslink can't both form because O1 leaves
+        # with the crosslink; N1 has no leaving atoms so can't form a prior bond
+        assert set(leaving_linking_atom_def._linkage_combinations) == {
+            _Linkages(
+                prior=False,
+                posterior=False,
+                crosslink=False,
+                leavers=frozenset(),
+            ),
+            _Linkages(
+                prior=False,
+                posterior=True,
+                crosslink=False,
+                leavers=frozenset({"HO1"}),
+            ),
+            _Linkages(
+                prior=False,
+                posterior=False,
+                crosslink=True,
+                leavers=frozenset({"O1", "HO1"}),
+            ),
+        }
+
+    def test_linkage_combinations_unassigned_leaving_atoms(self):
+        resdef = ResidueDefinition.anon_from_smiles(
+            "[C:1]([H:2])([H:3])([H:4])[O:5][H:6]",
+            leaving_atoms=[6],
+        )
+        hydroxyl_hydrogen = unwrap(atom.name for atom in resdef.atoms if atom.leaving)
+
+        assert set(resdef._linkage_combinations) == {
+            _Linkages(
+                prior=False,
+                posterior=False,
+                crosslink=False,
+                leavers=frozenset(),
+            ),
+            _Linkages(
+                prior=False,
+                posterior=False,
+                crosslink=False,
+                leavers=frozenset({hydroxyl_hydrogen}),
+            ),
+        }
 
     def test_validate_leaving_fragment_only_bonded_to_linking_atom(self):
         # X leaves when C forms its linking bond, but is also bonded to CA

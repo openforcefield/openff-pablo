@@ -217,6 +217,24 @@ class BondDefinition:
 
 
 @dataclass(frozen=True)
+class _Linkages:
+    """
+    A combination of external bonds formed by a residue.
+
+    See :py:attr:`ResidueDefinition._linkage_combinations`.
+    """
+
+    prior: bool
+    """Whether the residue bonds to the previous residue in its polymer"""
+    posterior: bool
+    """Whether the residue bonds to the next residue in its polymer"""
+    crosslink: bool
+    """Whether the residue forms its crosslink"""
+    leavers: frozenset[str]
+    """Canonical names of the leaving atoms absent under this combination"""
+
+
+@dataclass(frozen=True)
 class ResidueDefinition:
     """
     Description of a residue from the Chemical Component Dictionary (CCD).
@@ -1160,6 +1178,67 @@ class ResidueDefinition:
             and self.crosslink.atom1 in self.canonical_name_to_atom
             and len(self._crosslink_leaving_atoms) > 0
         )
+
+    @cached_property
+    def _linkage_combinations(self) -> tuple[_Linkages, ...]:
+        """
+        All valid combinations of external bonds and absent leaving atoms.
+
+        Each absent leaving atom is accounted for exactly once: two bonds never
+        share a leaving atom, and a combination never forms a bond from an atom
+        that it also removes. Groups of leaving atoms that are not associated with any bond,
+        which are only allowed in anonymous residues, may each independently be
+        present or absent.
+        """
+        # (linking atom, leaving fragment) of each bond, or None if it can't form
+        candidate_bonds: list[tuple[str, frozenset[str]] | None] = [
+            (self._prior_bond_linking_atom, frozenset(self._prior_bond_leaving_atoms))
+            if self._can_form_prior_bond
+            else None,
+            (
+                self._posterior_bond_linking_atom,
+                frozenset(self._posterior_bond_leaving_atoms),
+            )
+            if self._can_form_posterior_bond
+            else None,
+            (self._crosslink_linking_atom, frozenset(self._crosslink_leaving_atoms))
+            if self._can_form_crosslink
+            else None,
+        ]
+        unassigned_fragments = sorted(
+            {
+                frozenset(self._leaving_fragment_with(name))
+                for name in self._unassigned_leaving_atoms()
+            },
+            key=sorted,
+        )
+
+        combinations: list[_Linkages] = []
+        for chosen_bonds in itertools.product(
+            *([None] if bond is None else [None, bond] for bond in candidate_bonds),
+        ):
+            formed_bonds = [bond for bond in chosen_bonds if bond is not None]
+            bond_leavers = frozenset(flatten(fragment for _, fragment in formed_bonds))
+            if len(bond_leavers) != sum(len(fragment) for _, fragment in formed_bonds):
+                continue
+
+            for n_absent in range(len(unassigned_fragments) + 1):
+                for absent_fragments in itertools.combinations(
+                    unassigned_fragments,
+                    n_absent,
+                ):
+                    leavers = bond_leavers.union(*absent_fragments)
+                    if any(linking_atom in leavers for linking_atom, _ in formed_bonds):
+                        continue
+                    combinations.append(
+                        _Linkages(
+                            prior=chosen_bonds[0] is not None,
+                            posterior=chosen_bonds[1] is not None,
+                            crosslink=chosen_bonds[2] is not None,
+                            leavers=leavers,
+                        ),
+                    )
+        return tuple(combinations)
 
     def _is_isomorphic_to(self, other: Self) -> bool:
         """Atom and bond ordering insensitive equality test"""
