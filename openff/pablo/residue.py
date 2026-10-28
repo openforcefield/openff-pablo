@@ -233,6 +233,19 @@ class _Linkages:
     leavers: frozenset[str]
     """Canonical names of the leaving atoms absent under this combination"""
 
+    def report(self) -> str:
+        """
+        Three characters showing the prior bond, crosslink and posterior bond.
+
+        Each is ``"←"``, ``"×"`` and ``"→"`` respectively if the bond is formed
+        and ``"·"`` if not.
+        """
+        return (
+            ("←" if self.prior else "·")
+            + ("×" if self.crosslink else "·")
+            + ("→" if self.posterior else "·")
+        )
+
 
 type ResidueGraph = Graph[AtomDefinition, BondDefinition, _Linkages]
 """A residue definition's atoms and bonds under one combination of linkages"""

@@ -827,12 +827,12 @@ def test_unmatched_residues_give_clear_error(
                 str(path),
                 "could not be identified from the provided residue library:",
                 "  A:CYS#221 (l1-11): No matching residue definitions:",
-                "    ├─ CYSTEINE didn't match: found CONECT record that could not be matched with a bond",
-                "    ╰─ CYSTEINE didn't match: Missing leaving atoms (HXT, OXT) are not explained by these combinations of bonds to other residues",
+                "    ├─ CYSTEINE ··→ didn't match: found CONECT record that could not be matched with a bond",
+                "    ╰─ CYSTEINE     didn't match: Missing leaving atoms (HXT, OXT) are not explained by these combinations of bonds to other residues (all other linkages)",
                 "",
                 "  A:CYS#222 (l12-23): No matching residue definitions:",
-                "    ├─ CYSTEINE didn't match: found CONECT record that could not be matched with a bond",
-                "    ╰─ CYSTEINE didn't match: Missing leaving atoms (H2) are not explained by these combinations of bonds to other residues",
+                "    ├─ CYSTEINE ←·· didn't match: found CONECT record that could not be matched with a bond",
+                "    ╰─ CYSTEINE     didn't match: Missing leaving atoms (H2) are not explained by these combinations of bonds to other residues (all other linkages)",
             ],
         )
 

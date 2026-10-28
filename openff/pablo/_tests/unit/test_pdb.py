@@ -42,7 +42,7 @@ def test_conect_to_vsite():
             ValueError,
             match="|".join(
                 [
-                    r"\[H\+:1\] didn't match: found CONECT record that could not be matched with a bond",
+                    r"\[H\+:1\] ··· didn't match: found CONECT record that could not be matched with a bond",
                     r"CONECT records without chemical information not supported",
                 ],
             ),

@@ -16,6 +16,7 @@ __all__ = [
 ]
 
 
+import dataclasses
 import itertools
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING
@@ -29,7 +30,7 @@ from openff.pablo._matching import (
     SuccessfulMatch,
     only_matched,
 )
-from openff.pablo._utils import flatten
+from openff.pablo._utils import flatten, unwrap
 from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.exceptions import (
     MissingAtomError,
@@ -38,7 +39,7 @@ from openff.pablo.exceptions import (
     ResidueValidationError,
     UnknownOrAmbiguousSerialInConectError,
 )
-from openff.pablo.residue import ResidueDefinition
+from openff.pablo.residue import ResidueDefinition, _Linkages
 
 if TYPE_CHECKING:
     from openff.pablo._pdb_data import PdbData
@@ -55,6 +56,126 @@ def _format_linenos(data: "PdbData", res_atom_idcs: Sequence[int]) -> str:
         return f"l{first}-{last}"
     else:
         return f"l{first}"
+
+
+def _collapse_mismatches[T: MismatchProtocol | SuccessfulMatch](
+    residue_errors: Sequence[T],
+) -> list[T]:
+    """
+    Merge mismatches that differ only in the linkages they reject.
+
+    Mismatches of the same type, residue definition and reason are replaced by
+    the first of them, carrying the linkages of all of them. Order is otherwise
+    preserved.
+    """
+    collapsed: list[T] = []
+    mismatch_positions: dict[tuple[type, ResidueDefinition, str], int] = {}
+    for err in residue_errors:
+        if not isinstance(err, ResidueMismatch):
+            collapsed.append(err)
+            continue
+        key = (type(err), err.residue_definition, err.reason)
+        if key not in mismatch_positions:
+            mismatch_positions[key] = len(collapsed)
+            collapsed.append(err)
+            continue
+        position = mismatch_positions[key]
+        earlier = collapsed[position]
+        assert isinstance(earlier, ResidueMismatch)
+        collapsed[position] = dataclasses.replace(
+            earlier,
+            linkages=earlier.linkages | err.linkages,
+        )
+    return collapsed
+
+
+def _other_linkages(
+    err: ResidueMismatch,
+    residue_errors: Sequence[MismatchProtocol | SuccessfulMatch],
+) -> list[frozenset[_Linkages]]:
+    """The linkages of the other mismatches to ``err``'s residue definition"""
+    return [
+        other.linkages
+        for other in residue_errors
+        if other is not err
+        and isinstance(other, ResidueMismatch)
+        and other.residue_definition == err.residue_definition
+    ]
+
+
+def _is_all_other_linkages(
+    err: ResidueMismatch,
+    residue_errors: Sequence[MismatchProtocol | SuccessfulMatch],
+) -> bool:
+    """
+    Whether ``err`` rejects every linkage the definition's other mismatches don't.
+
+    True only if every other mismatch to the same residue definition rejects a
+    single linkage, ``err`` rejects several, and together they reject every
+    linkage of the definition exactly once.
+    """
+    other_linkages = _other_linkages(err, residue_errors)
+    if len(err.linkages) < 2 or len(other_linkages) == 0:
+        return False
+    singles = frozenset(flatten(other_linkages))
+    return (
+        all(len(other) == 1 for other in other_linkages)
+        and len(singles) == len(other_linkages)
+        and singles.isdisjoint(err.linkages)
+        and singles | err.linkages
+        == frozenset(err.residue_definition._linkage_combinations)
+    )
+
+
+def _order_all_other_linkages_last[T: MismatchProtocol | SuccessfulMatch](
+    residue_errors: Sequence[T],
+) -> list[T]:
+    """
+    Move each "all other linkages" mismatch after its definition's other mismatches.
+    """
+    ordered = list(residue_errors)
+    for err in residue_errors:
+        if not (
+            isinstance(err, ResidueMismatch)
+            and _is_all_other_linkages(err, residue_errors)
+        ):
+            continue
+        ordered.pop(next(i for i, other in enumerate(ordered) if other is err))
+        last_other = max(
+            i
+            for i, other in enumerate(ordered)
+            if isinstance(other, ResidueMismatch)
+            and other.residue_definition == err.residue_definition
+        )
+        ordered.insert(last_other + 1, err)
+    return ordered
+
+
+def _report_linkages(
+    residue_definition: ResidueDefinition,
+    linkages: frozenset[_Linkages],
+    all_other_linkages: bool,
+) -> tuple[str, str]:
+    """
+    The aligned column and the trailing text describing ``linkages``
+
+    If ``all_other_linkages`` is true, ``linkages`` is described as all the
+    linkages that the residue definition's other mismatches don't reject.
+    """
+    if len(linkages) == 0:
+        return "   ", ""
+    if len(linkages) == 1:
+        return unwrap(linkages).report(), ""
+    if linkages == frozenset(residue_definition._linkage_combinations):
+        return "   ", " (all linkages)"
+    if all_other_linkages:
+        return "   ", " (all other linkages)"
+    reports = [
+        combination.report()
+        for combination in residue_definition._linkage_combinations
+        if combination in linkages
+    ]
+    return "   ", f" ({', '.join(reports)})"
 
 
 def create_pdb_residue_match_error(
@@ -144,7 +265,10 @@ def create_pdb_residue_match_error(
         else:
             msg.append(f"  {resid} ({src}): No matching residue definitions:")
 
-        for err in sorted(residue_errors, key=lambda x: str(type(x))):
+        collapsed_errors = _order_all_other_linkages_last(
+            _collapse_mismatches(sorted(residue_errors, key=lambda x: str(type(x)))),
+        )
+        for err in collapsed_errors:
             if isinstance(err, NoResidueDefinitions):
                 continue
             elif isinstance(err, ResidueMatch):
@@ -180,13 +304,20 @@ def create_pdb_residue_match_error(
                 if expects == "":
                     expects = "no other linkages"
                 msg.append(
-                    f"    ├─ {desc}{' ' * padding}: expects {expects}",
+                    f"    ├─ {desc}{' ' * padding} {err.linkages.report()}"
+                    + f": expects {expects}",
                 )
             elif isinstance(err, ResidueMismatch):
                 desc = err.residue_definition.description
                 padding = max(0, max_padding - len(desc))
+                column, linkages = _report_linkages(
+                    err.residue_definition,
+                    err.linkages,
+                    _is_all_other_linkages(err, collapsed_errors),
+                )
                 msg.append(
-                    f"    ├─ {desc}{' ' * padding} " + f"didn't match: {err.reason}",
+                    f"    ├─ {desc}{' ' * padding} {column} didn't match:"
+                    + f" {err.reason}{linkages}",
                 )
             else:
                 msg.append(f"    ├ {err.description}")

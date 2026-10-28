@@ -45,6 +45,33 @@ class TestBondDefinition:
         assert PEPTIDE_BOND.stereo == replaced.stereo
 
 
+class TestLinkages:
+    @pytest.mark.parametrize(
+        ("prior", "crosslink", "posterior", "report"),
+        [
+            (True, True, True, "←×→"),
+            (True, True, False, "←×·"),
+            (True, False, True, "←·→"),
+            (False, False, True, "··→"),
+            (False, False, False, "···"),
+        ],
+    )
+    def test_report(
+        self,
+        prior: bool,
+        crosslink: bool,
+        posterior: bool,
+        report: str,
+    ):
+        linkages = _Linkages(
+            prior=prior,
+            posterior=posterior,
+            crosslink=crosslink,
+            leavers=frozenset(),
+        )
+        assert linkages.report() == report
+
+
 class TestResidueDefinition:
     @pytest.fixture
     def cys_mapped_smiles(self) -> str:
