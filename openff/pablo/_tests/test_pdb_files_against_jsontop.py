@@ -170,7 +170,7 @@ SLOW_POLYMERS = [
 ]
 
 SKIP_POLYMERS = [
-    "8ovp.pdb",  # All hydrogens come after all heavy atoms
+    "8ovp.pdb",  # HETATM hydrogens come after all heavy atoms
     "144d.pdb",  # All hydrogens come after all heavy atoms
     "133d.pdb",  # All hydrogens come after all heavy atoms
     "130d.pdb",  # All hydrogens come after all heavy atoms
