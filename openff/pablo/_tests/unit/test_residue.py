@@ -5,7 +5,7 @@ from openff.pablo._tests.utils import get_test_data_path
 from openff.pablo._utils import unwrap
 from openff.pablo.ccd._ccdcache import CcdCache
 from openff.pablo.chem import DISULFIDE_BOND, PEPTIDE_BOND
-from openff.pablo.exceptions import ResidueValidationError
+from openff.pablo.exceptions import PabloError, ResidueValidationError
 from openff.pablo.residue import (
     AtomDefinition,
     BondDefinition,
@@ -656,10 +656,61 @@ class TestResidueDefinition:
         assert sorted(cys_def._leaving_fragment_of("N")) == ["H2"]
         assert sorted(cys_def._leaving_fragment_of("C")) == ["HXT", "OXT"]
 
-    def test_leaving_fragment_of_leaving_atom(self, cys_def: ResidueDefinition):
-        assert sorted(cys_def._leaving_fragment_of("HG")) == ["HG"]
-        assert sorted(cys_def._leaving_fragment_of("H2")) == ["H2"]
-        assert sorted(cys_def._leaving_fragment_of("OXT")) == ["HXT", "OXT"]
+    def test_leaving_fragment_with_leaving_atom(self, cys_def: ResidueDefinition):
+        assert sorted(cys_def._leaving_fragment_with("HG")) == ["HG"]
+        assert sorted(cys_def._leaving_fragment_with("H2")) == ["H2"]
+        assert sorted(cys_def._leaving_fragment_with("OXT")) == ["HXT", "OXT"]
+        assert sorted(cys_def._leaving_fragment_with("HXT")) == ["HXT", "OXT"]
+
+    def test_leaving_fragment_with_core_atom(self, cys_def: ResidueDefinition):
+        with pytest.raises(PabloError, match="not a leaving atom"):
+            cys_def._leaving_fragment_with("SG")
+
+    def test_leaving_fragment_of_leaving_linking_atom(self):
+        # O1 is the posterior linking atom, but also leaves when C1 crosslinks
+        resdef = ResidueDefinition.from_smiles(
+            "[N:1]([H:4])([H:5])[C:2]([H:6])([H:7])[O:3][H:8]",
+            atom_names={
+                1: "N1",
+                2: "C1",
+                3: "O1",
+                4: "HN1",
+                5: "HN2",
+                6: "HC1",
+                7: "HC2",
+                8: "HO1",
+            },
+            residue_name="LLA",
+            linking_bond=BondDefinition.with_defaults("O1", "N1"),
+            crosslink=BondDefinition.with_defaults("C1", "X"),
+            leaving_atoms=[3, 8],
+        )
+
+        assert sorted(resdef._leaving_fragment_of("O1")) == ["HO1"]
+        assert sorted(resdef._leaving_fragment_of("C1")) == ["HO1", "O1"]
+
+    def test_validate_leaving_fragment_only_bonded_to_linking_atom(self):
+        # X leaves when C forms its linking bond, but is also bonded to CA
+        with pytest.raises(ResidueValidationError, match="non-leaving atoms"):
+            ResidueDefinition.from_smiles(
+                "[N:1]([H:5])([H:6])[C:2]1([H:7])[C:3]([H:8])([H:9])[C:4]1([H:10])[H:11]",
+                atom_names={
+                    1: "N",
+                    2: "CA",
+                    3: "C",
+                    4: "X",
+                    5: "H",
+                    6: "H2",
+                    7: "HA",
+                    8: "HC1",
+                    9: "HC2",
+                    10: "HX1",
+                    11: "HX2",
+                },
+                residue_name="DNG",
+                linking_bond=PEPTIDE_BOND,
+                leaving_atoms=[4, 6, 10, 11],
+            )
 
     def test_validate_linking_atoms_have_single_leaving_fragment(
         self,

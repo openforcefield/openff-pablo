@@ -431,6 +431,22 @@ class ResidueDefinition:
             elif len(bonded_atoms) == 0:
                 continue
 
+            # Removing the fragment must not break any bond other than the one
+            # to the linking atom
+            dangling_bonds = sorted(
+                (leaving_atom, core_atom)
+                for leaving_atom in self._leaving_fragment_of(linking_atom)
+                for core_atom in self.atoms_bonded_to(leaving_atom)
+                if core_atom != linking_atom
+                and not self.name_to_atom[core_atom].leaving
+            )
+            if dangling_bonds:
+                raise ResidueValidationError(
+                    f"{self.residue_name} ({self.description}): Leaving fragment"
+                    + f" of linking atom {linking_atom} is bonded to non-leaving"
+                    + f" atoms other than the linking atom: {dangling_bonds}",
+                )
+
             bonded_atom = unwrap(bonded_atoms)
             replaced_bond_order = unwrap(
                 bond.order
@@ -1019,33 +1035,54 @@ class ResidueDefinition:
             if bond.atom2 == atom_name:
                 yield bond.flipped()
 
-    def _leaving_fragment_of(self, linking_atom: str) -> Iterator[str]:
-        atoms_to_check = list(self.atoms_bonded_to(linking_atom))
-        checked_atoms: set[str] = set()
+    def _connected_leaving_atoms(
+        self,
+        seeds: Iterable[str],
+        excluded: str | None = None,
+    ) -> set[str]:
+        """
+        Leaving atoms reachable from ``seeds`` via bonds between leaving atoms.
+
+        Seeds that are not leaving atoms are ignored, and ``excluded`` is never
+        entered.
+        """
+        atoms_to_check = list(seeds)
+        checked_atoms: set[str] = set() if excluded is None else {excluded}
+        leaving_atoms: set[str] = set()
         while atoms_to_check:
             atom_name = atoms_to_check.pop()
-            if self.name_to_atom[atom_name].leaving:
-                yield atom_name
-                atoms_to_check.extend(
-                    filter(
-                        lambda x: x not in checked_atoms,
-                        self.atoms_bonded_to(atom_name),
-                    ),
-                )
+            if atom_name in checked_atoms:
+                continue
             checked_atoms.add(atom_name)
-        if (
-            linking_atom in self.canonical_name_to_atom
-            and self.canonical_name_to_atom[linking_atom].leaving
-            and linking_atom not in checked_atoms
-        ):
-            yield linking_atom
+            if self.name_to_atom[atom_name].leaving:
+                leaving_atoms.add(atom_name)
+                atoms_to_check.extend(self.atoms_bonded_to(atom_name))
+        return leaving_atoms
+
+    def _leaving_fragment_of(self, linking_atom: str) -> set[str]:
+        """
+        The leaving atoms removed when ``linking_atom`` forms an external bond.
+
+        The linking atom is never part of its own leaving fragment, even if it
+        is itself a leaving atom for some other bond.
+        """
+        return self._connected_leaving_atoms(
+            self.atoms_bonded_to(linking_atom),
+            excluded=linking_atom,
+        )
+
+    def _leaving_fragment_with(self, leaving_atom: str) -> set[str]:
+        """The connected group of leaving atoms that includes ``leaving_atom``."""
+        if not self.name_to_atom[leaving_atom].leaving:
+            raise PabloError(f"{leaving_atom} is not a leaving atom")
+        return self._connected_leaving_atoms([leaving_atom])
 
     @cached_property
     def _posterior_bond_leaving_atoms(self) -> set[str]:
         return (
             set()
             if self.linking_bond is None
-            else set(self._leaving_fragment_of(self._posterior_bond_linking_atom))
+            else self._leaving_fragment_of(self._posterior_bond_linking_atom)
         )
 
     @cached_property
@@ -1053,7 +1090,7 @@ class ResidueDefinition:
         return (
             set()
             if self.linking_bond is None
-            else set(self._leaving_fragment_of(self._prior_bond_linking_atom))
+            else self._leaving_fragment_of(self._prior_bond_linking_atom)
         )
 
     @cached_property
@@ -1061,7 +1098,7 @@ class ResidueDefinition:
         return (
             set()
             if self.crosslink is None
-            else set(self._leaving_fragment_of(self.crosslink.atom1))
+            else self._leaving_fragment_of(self.crosslink.atom1)
         )
 
     @property
@@ -1420,15 +1457,8 @@ class ResidueDefinition:
 
     def _unassigned_leaving_atom_fragments(self) -> Iterator[tuple[str, ...]]:
         yield from {
-            tuple(sorted(set(self._leaving_fragment_of(name))))
+            tuple(sorted(self._leaving_fragment_with(name)))
             for name in self._unassigned_leaving_atoms()
-        }
-
-    def _leaving_atom_fragments(self) -> Iterator[tuple[str, ...]]:
-        yield from {
-            tuple(sorted(set(self._leaving_fragment_of(atom.name))))
-            for atom in self.atoms
-            if atom.leaving
         }
 
     def _to_core_graph(self) -> Graph[AtomDefinition, BondDefinition]:

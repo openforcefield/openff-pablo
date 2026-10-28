@@ -65,6 +65,7 @@ def _construct_std_ccd_cache(
                 "DG": set_hop3_leaving,
                 "DC": set_hop3_leaving,
                 "DA": set_hop3_leaving,
+                "OMG": set_hop3_leaving,
             },
             {"*": disambiguate_alt_ids},
             {"*": add_synonyms},
