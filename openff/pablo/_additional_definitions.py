@@ -13,12 +13,15 @@ from ._matching import (
     ResidueMatch,
     SuccessfulMatch,
 )
-from .residue import AtomDefinition, BondDefinition, ResidueDefinition
+from .residue import AtomDefinition, BondDefinition, ResidueDefinition, _Linkages
 
 if TYPE_CHECKING:
     from openff.pablo._pdb_data import PdbData
 
 logger = logging.getLogger(__name__)
+
+type PdbGraph = Graph[int, tuple[int, int], None]
+type ResidueGraph = Graph[AtomDefinition, BondDefinition, _Linkages]
 
 
 def apply_additional_definitions(
@@ -85,14 +88,14 @@ def _get_pdb_graph(
     data: "PdbData",
     matches: Sequence[SuccessfulMatch],
 ) -> tuple[
-    Graph[int, tuple[int, int]],
+    PdbGraph,
     dict[int, AtomDefinition | None],
     dict[tuple[int, int], BondDefinition | None],
 ]:
     """
     Compute a graph of assigned and expected chemical information
     """
-    graph: Graph[int, tuple[int, int]] = Graph(
+    graph: PdbGraph = Graph(
         node_count_hint=len(data.name),
     )
     # Get a set of all the atom record indices - we'll filter out vsites as we go
@@ -151,7 +154,7 @@ def _prettify_mapping(data: "PdbData", new_mapping: "AdditionalDefMatch") -> str
 def _map_resdef_to_graph(
     data: "PdbData",
     resdef: ResidueDefinition,
-    pdb_graph: Graph[int, tuple[int, int]],
+    pdb_graph: PdbGraph,
     atoms: dict[int, AtomDefinition | None],
     bonds: dict[tuple[int, int], BondDefinition | None],
 ) -> "list[AdditionalDefMatch]":
@@ -208,8 +211,8 @@ def _map_resdef_to_graph(
 
 def _get_all_mappings(
     data: "PdbData",
-    pdb_graph: Graph[int, tuple[int, int]],
-    resdef_graph: Graph[AtomDefinition, BondDefinition],
+    pdb_graph: PdbGraph,
+    resdef_graph: ResidueGraph,
     atoms: dict[int, AtomDefinition | None],
     bonds: dict[tuple[int, int], BondDefinition | None],
 ) -> Iterator[Mapping[int, AtomDefinition]]:

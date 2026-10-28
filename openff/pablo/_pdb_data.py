@@ -55,6 +55,8 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
+type PdbGraph = Graph[int, tuple[int, int], None]
+
 
 @dataclass
 class PdbData:
@@ -971,7 +973,7 @@ class PdbData:
         # in conects, node data is the pdb index, edge data is the sorted
         # pdb indices of the two atoms in the CONECT record
         # bonds to other residues are ignored - we'll deal with them later
-        conects = Graph[int, tuple[int, int]]()
+        conects: PdbGraph = Graph()
         conects.add_nodes_from(res_atom_idcs)
         external_conects: list[tuple[int, int]] = []
         for pdb_idx in res_atom_idcs:
@@ -1015,7 +1017,7 @@ class PdbData:
 
             logger.debug("    Compiling bonds graph")
             # Build up a graph of the internal bonds we expect from the residue definition
-            bonds = Graph[AtomDefinition, BondDefinition]()
+            bonds = Graph[AtomDefinition, BondDefinition, None]()
             bonds.add_nodes_from(resdef.atoms)
             bonds.add_edges_from(
                 (resdef.name_to_atom[bond.atom1], resdef.name_to_atom[bond.atom2], bond)

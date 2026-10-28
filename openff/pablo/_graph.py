@@ -10,10 +10,11 @@ from openff.pablo.exceptions import PabloError
 __all__ = ["Graph"]
 
 
-class Graph[NodeT: Hashable, EdgeT: Hashable]:
+class Graph[NodeT: Hashable, EdgeT: Hashable, AttrT]:
     def __init__(
         self,
         *,
+        attrs: AttrT = None,
         node_count_hint: int | None = None,
         edge_count_hint: int | None = None,
     ):
@@ -24,6 +25,7 @@ class Graph[NodeT: Hashable, EdgeT: Hashable]:
         )
         self._node_idcs: dict[NodeT, int] = {}
         self._edge_idcs: dict[EdgeT, int] = {}
+        self._attrs: AttrT = attrs
         super().__init__()
 
     def __contains__(self, item: NodeT | EdgeT):
@@ -40,6 +42,11 @@ class Graph[NodeT: Hashable, EdgeT: Hashable]:
             ) in self._graph.edge_index_map().items()
         }
         return f"<{self.__class__.__name__} object with nodes {pformat(idcs_to_nodes)} and edges {pformat(node_idcs_to_edges)}>"
+
+    @property
+    def attrs(self) -> AttrT:
+        """Data describing the graph as a whole"""
+        return self._attrs
 
     @property
     def n_nodes(self) -> int:
@@ -86,9 +93,9 @@ class Graph[NodeT: Hashable, EdgeT: Hashable]:
         for node in nodes:
             self.add_node(node, skip_existing=skip_existing)
 
-    def is_isomorphic_to[OtherNodeT: Hashable, OtherEdgeT: Hashable](
+    def is_isomorphic_to[OtherNodeT: Hashable, OtherEdgeT: Hashable, OtherAttrT](
         self,
-        other: "Graph[OtherNodeT, OtherEdgeT]",
+        other: "Graph[OtherNodeT, OtherEdgeT, OtherAttrT]",
         node_matcher: Callable[[NodeT, OtherNodeT], bool] | None = None,
         edge_matcher: Callable[[EdgeT, OtherEdgeT], bool] | None = None,
         id_order: bool = True,
@@ -109,9 +116,9 @@ class Graph[NodeT: Hashable, EdgeT: Hashable]:
         else:
             return True
 
-    def is_subgraph_of[OtherNodeT: Hashable, OtherEdgeT: Hashable](
+    def is_subgraph_of[OtherNodeT: Hashable, OtherEdgeT: Hashable, OtherAttrT](
         self,
-        other: "Graph[OtherNodeT, OtherEdgeT]",
+        other: "Graph[OtherNodeT, OtherEdgeT, OtherAttrT]",
         node_matcher: Callable[[NodeT, OtherNodeT], bool] | None = None,
         edge_matcher: Callable[[EdgeT, OtherEdgeT], bool] | None = None,
         id_order: bool = True,
@@ -138,9 +145,9 @@ class Graph[NodeT: Hashable, EdgeT: Hashable]:
         else:
             return True
 
-    def get_mappings[OtherNodeT: Hashable, OtherEdgeT: Hashable](
+    def get_mappings[OtherNodeT: Hashable, OtherEdgeT: Hashable, OtherAttrT](
         self,
-        other: "Graph[OtherNodeT, OtherEdgeT]",
+        other: "Graph[OtherNodeT, OtherEdgeT, OtherAttrT]",
         node_matcher: Callable[[NodeT, OtherNodeT], bool] | None = None,
         edge_matcher: Callable[[EdgeT, OtherEdgeT], bool] | None = None,
         id_order: bool = True,
@@ -168,7 +175,7 @@ class Graph[NodeT: Hashable, EdgeT: Hashable]:
     def desymmetrize_leaf_nodes[KeyT](
         self,
         key: Callable[[NodeT], KeyT] = lambda n: n,
-    ) -> "Graph[tuple[NodeT, int], EdgeT]":
+    ) -> "Graph[tuple[NodeT, int], EdgeT, AttrT]":
         """
         Append an integer to desymmetrize leaf nodes
 
@@ -177,7 +184,7 @@ class Graph[NodeT: Hashable, EdgeT: Hashable]:
         are already asymmetric are given the integer 0. The default value of
         ``key`` uses the entire node value as the key.
         """
-        new_graph = Graph[tuple[NodeT, int], EdgeT]()
+        new_graph = Graph[tuple[NodeT, int], EdgeT, AttrT](attrs=self.attrs)
 
         old_to_new: dict[int, int] = {}
         leaf_nodes: dict[tuple[int, KeyT], list[int]] = {}

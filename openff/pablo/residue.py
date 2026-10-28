@@ -234,6 +234,10 @@ class _Linkages:
     """Canonical names of the leaving atoms absent under this combination"""
 
 
+type ResidueGraph = Graph[AtomDefinition, BondDefinition, _Linkages]
+"""A residue definition's atoms and bonds under one combination of linkages"""
+
+
 @dataclass(frozen=True)
 class ResidueDefinition:
     """
@@ -1534,178 +1538,94 @@ class ResidueDefinition:
         )
         return all_leaving_atoms.difference(assigned_leaving_atoms)
 
-    def _unassigned_leaving_atom_fragments(self) -> Iterator[tuple[str, ...]]:
-        yield from {
-            tuple(sorted(self._leaving_fragment_with(name)))
-            for name in self._unassigned_leaving_atoms()
-        }
-
-    def _to_core_graph(self) -> Graph[AtomDefinition, BondDefinition]:
-        graph: Graph[AtomDefinition, BondDefinition] = Graph(
-            node_count_hint=self.n_core_atoms,
-            edge_count_hint=len(self.bonds),
-        )
-        graph.add_nodes_from(atom for atom in self.atoms if not atom.leaving)
-        for bond in self.bonds:
-            atom1 = self.canonical_name_to_atom[bond.atom1]
-            atom2 = self.canonical_name_to_atom[bond.atom2]
-            if not (atom1.leaving or atom2.leaving):
-                graph.add_edge(atom1, atom2, bond)
-        return graph
-
-    def _to_graphs(self) -> Iterable[Graph[AtomDefinition, BondDefinition]]:
+    def _to_graphs(self) -> Iterator["ResidueGraph"]:
         """
         Construct graphs of all possible arrangements of matching atoms.
 
-        Yields one graph per combination of crosslink, posterior bond, and prior
-        bond, and combination of unassigned leaving atoms. Atoms in the final
-        graphs that are not a part of the substructure, ie. non-physical
-        "leaving" atoms, are represented with element symbol
-        ``""``.
-
+        Yields one graph per element of :py:attr:`_linkage_combinations`, which is
+        stored as the graph's ``attrs``. Atoms in the graphs that are not a part
+        of the substructure, ie. non-physical "leaving" atoms, are represented
+        with element symbol ``""``.
         """
-        for crosslink in {self.crosslink is not None, False}:
-            for posterior_bond in {self.linking_bond is not None, False}:
-                for prior_bond in {self.linking_bond is not None, False}:
-                    leaving_atom_fragments = [
-                        *self._unassigned_leaving_atom_fragments(),
-                    ]
-                    for leaving_atoms in flatten(
-                        map(
-                            lambda x: tuple(flatten(x)),
-                            itertools.combinations(leaving_atom_fragments, i),
-                        )
-                        for i in range(len(leaving_atom_fragments) + 1)
-                    ):
-                        logger.debug(
-                            f"  Generating graph for {self.description}:"
-                            + f" {crosslink=} {posterior_bond=} {prior_bond=} {leaving_atoms=}",
-                        )
-                        yield self._to_graph(
-                            crosslinked=crosslink,
-                            posterior_bonded=posterior_bond,
-                            prior_bonded=prior_bond,
-                            left_atoms=leaving_atoms,
-                        )
+        for linkages in self._linkage_combinations:
+            logger.debug(f"  Generating graph for {self.description}: {linkages}")
+            yield self._to_graph(linkages)
 
-    def _to_graph(
-        self,
-        crosslinked: bool = False,
-        prior_bonded: bool = False,
-        posterior_bonded: bool = False,
-        left_atoms: Sequence[str] = (),
-    ) -> Graph[AtomDefinition, BondDefinition]:
-        graph = self._to_core_graph()
-        restore_leaving_atoms: set[str] = (  # nofmt
-            self._unassigned_leaving_atoms() - set(left_atoms)
+    def _to_graph(self, linkages: _Linkages) -> "ResidueGraph":
+        graph: ResidueGraph = Graph(
+            attrs=linkages,
+            node_count_hint=len(self.atoms),
+            edge_count_hint=len(self.bonds),
         )
 
-        # Add the non-matching (left) leaving atoms that bond to core atoms
-        # along with their corresponding bonds
-        for name in left_atoms:
-            atom = self.name_to_atom[name]
-            assert atom.leaving
-            linking_bonds = [
+        # Leaving atoms that stay in the residue are treated like core atoms
+        nodes = {
+            atom.name: atom.replace(leaving=False) if atom.leaving else atom
+            for atom in self.atoms
+            if atom.name not in linkages.leavers
+        }
+        graph.add_nodes_from(nodes.values())
+        graph.add_edges_from(
+            (nodes[bond.atom1], nodes[bond.atom2], bond)
+            for bond in self.bonds
+            if bond.atom1 in nodes and bond.atom2 in nodes
+        )
+
+        # (linking atom, bond, name of the stand-in for the other residue's atom)
+        external_bonds: list[tuple[str, BondDefinition, str]] = []
+        bond_leavers: set[str] = set()
+        if linkages.prior:
+            assert self.linking_bond is not None
+            external_bonds.append(
+                (
+                    self._prior_bond_linking_atom,
+                    self.linking_bond,
+                    self._prior_bond_partner_atom + "_PRIOR",
+                ),
+            )
+            bond_leavers.update(self._prior_bond_leaving_atoms)
+        if linkages.posterior:
+            assert self.linking_bond is not None
+            external_bonds.append(
+                (
+                    self._posterior_bond_linking_atom,
+                    self.linking_bond,
+                    self._posterior_bond_partner_atom + "_POSTERIOR",
+                ),
+            )
+            bond_leavers.update(self._posterior_bond_leaving_atoms)
+        if linkages.crosslink:
+            assert self.crosslink is not None
+            external_bonds.append(
+                (
+                    self._crosslink_linking_atom,
+                    self.crosslink,
+                    self._crosslink_partner_atom + "_CROSSLINK",
+                ),
+            )
+            bond_leavers.update(self._crosslink_leaving_atoms)
+
+        # A leaving atom that is absent but not removed by any bond is replaced
+        # by a wildcard that may match any atom, bonded to the same core atoms
+        for name in sorted(linkages.leavers - bond_leavers):
+            bonds_to_core = [
                 bond
                 for bond in self.bonds_to(name)
                 if not self.name_to_atom[bond.atom2].leaving
             ]
-            if len(linking_bonds) == 0:
+            if len(bonds_to_core) == 0:
                 continue
-            link_target = AtomDefinition.with_defaults(name, "", leaving=True)
-            graph.add_node(link_target)
+            stand_in = AtomDefinition.with_defaults(name, "", leaving=True)
+            graph.add_node(stand_in)
             graph.add_edges_from(
-                (
-                    link_target,
-                    self.name_to_atom[bond.atom2],
-                    bond,
-                )
-                for bond in linking_bonds
+                (stand_in, nodes[bond.atom2], bond) for bond in bonds_to_core
             )
 
-        crosslink = self.crosslink if crosslinked else None
-        prior_bond = self.linking_bond if prior_bonded else None
-        posterior_bond = self.linking_bond if posterior_bonded else None
-
-        if crosslink is not None:
-            crosslink_target = AtomDefinition.with_defaults(
-                crosslink.atom2 + "_CROSSLINK",
-                "",
-                leaving=True,
-            )
-            assert crosslink_target.name not in {node.name for node in graph.nodes}
-            graph.add_node(crosslink_target)
-            graph.add_edge(
-                self.canonical_name_to_atom[crosslink.atom1],
-                crosslink_target,
-                crosslink,
-            )
-        else:
-            restore_leaving_atoms.update(self._crosslink_leaving_atoms)
-
-        if posterior_bond is not None:
-            posterior_target = AtomDefinition.with_defaults(
-                posterior_bond.atom2 + "_POSTERIOR",
-                "",
-                leaving=True,
-            )
-            assert posterior_target.name not in {node.name for node in graph.nodes}
-            graph.add_node(posterior_target)
-            graph.add_edge(
-                self.canonical_name_to_atom[posterior_bond.atom1],
-                posterior_target,
-                posterior_bond,
-            )
-        else:
-            restore_leaving_atoms.update(self._posterior_bond_leaving_atoms)
-
-        if prior_bond is not None:
-            prior_target = AtomDefinition.with_defaults(
-                prior_bond.atom1 + "_PRIOR",
-                "",
-                leaving=True,
-            )
-            assert prior_target.name not in {node.name for node in graph.nodes}
-            graph.add_node(prior_target)
-            graph.add_edge(
-                self.canonical_name_to_atom[prior_bond.atom2],
-                prior_target,
-                prior_bond,
-            )
-        else:
-            restore_leaving_atoms.update(self._prior_bond_leaving_atoms)
-
-        added_nodes = {atom.name: atom for atom in graph.nodes}
-        for leaving_name in restore_leaving_atoms:
-            try:
-                bond = unwrap(
-                    bond
-                    for bond in self.bonds
-                    if (bond.atom1 in added_nodes and bond.atom2 == leaving_name)
-                    or (bond.atom2 in added_nodes and bond.atom1 == leaving_name)
-                )
-            except ValueError:
-                continue
-
-            leaving_atom = self.canonical_name_to_atom[leaving_name].replace(
-                leaving=False,
-            )
-            graph.add_node(leaving_atom)
-            assert leaving_name not in added_nodes
-            added_nodes[leaving_name] = leaving_atom
-
-            if bond.atom1 == leaving_name:
-                graph.add_edge(
-                    leaving_atom,
-                    added_nodes[bond.atom2],
-                    bond,
-                )
-            else:
-                graph.add_edge(
-                    added_nodes[bond.atom1],
-                    leaving_atom,
-                    bond,
-                )
+        for linking_atom, bond, partner_name in external_bonds:
+            partner = AtomDefinition.with_defaults(partner_name, "", leaving=True)
+            assert partner.name not in {node.name for node in graph.nodes}
+            graph.add_node(partner)
+            graph.add_edge(nodes[linking_atom], partner, bond)
 
         assert graph.is_connected()
         return graph

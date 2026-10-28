@@ -811,6 +811,44 @@ class TestResidueDefinition:
             ),
         }
 
+    def test_to_graphs_shared_linking_atom(
+        self,
+        shared_linking_atom_def: ResidueDefinition,
+    ):
+        graphs = list(shared_linking_atom_def._to_graphs())
+
+        assert {graph.attrs for graph in graphs} == set(
+            shared_linking_atom_def._linkage_combinations,
+        )
+        for graph in graphs:
+            c1 = unwrap(node for node in graph.nodes if node.name == "C1")
+            assert len(list(graph.neighbours(c1))) == 4
+
+            partners = {node.name for node in graph.nodes if node.symbol == ""}
+            assert partners == {
+                name
+                for name, formed in [
+                    ("C1_PRIOR", graph.attrs.prior),
+                    ("N1_POSTERIOR", graph.attrs.posterior),
+                    ("X_CROSSLINK", graph.attrs.crosslink),
+                ]
+                if formed
+            }
+
+    def test_to_graph_leaving_linking_atom(
+        self,
+        leaving_linking_atom_def: ResidueDefinition,
+    ):
+        posterior_only = unwrap(
+            linkages
+            for linkages in leaving_linking_atom_def._linkage_combinations
+            if linkages.posterior
+        )
+        graph = leaving_linking_atom_def._to_graph(posterior_only)
+
+        o1 = unwrap(node for node in graph.nodes if node.name == "O1")
+        assert {node.name for node in graph.neighbours(o1)} == {"C1", "N1_POSTERIOR"}
+
     def test_validate_leaving_fragment_only_bonded_to_linking_atom(self):
         # X leaves when C forms its linking bond, but is also bonded to CA
         with pytest.raises(ResidueValidationError, match="non-leaving atoms"):
