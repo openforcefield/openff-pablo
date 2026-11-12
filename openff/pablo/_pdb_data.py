@@ -801,7 +801,7 @@ class PdbData:
         if any(not atom.leaving for atom in missing_atoms):
             reason = "Expected atoms are missing: "
             reason += ", ".join(
-                {atom.name for atom in missing_atoms if not atom.leaving},
+                sorted({atom.name for atom in missing_atoms if not atom.leaving}),
             )
             unmatched_indices = [
                 i for i in res_atom_idcs_without_vsites if i not in index_to_atomdef

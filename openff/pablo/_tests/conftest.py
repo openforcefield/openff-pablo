@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from openff.toolkit import Molecule, Topology
 
+from openff.pablo import STD_CCD_CACHE
 from openff.pablo._pdb_data import PdbData, ResidueMatch
 from openff.pablo._tests.utils import get_test_data_path, only_match
 from openff.pablo.ccd import CcdCache
@@ -454,3 +455,87 @@ def hoh_match(hoh_def: ResidueDefinition) -> ResidueMatch:
 )
 def any_match(request: pytest.FixtureRequest) -> ResidueMatch:
     return request.getfixturevalue(request.param)
+
+
+@pytest.fixture
+def ytf_carboxy_crosslink_library() -> CcdCache:
+    """
+    The standard library plus YTF from PDB 2B0F, crosslinked to cysteine SG.
+
+    YTF's crosslinking atom ``C`` is also the posterior atom of its peptide
+    linking bond, so both bonds share the leaving fragment ``{H11}``.
+    """
+    residue_library = STD_CCD_CACHE
+
+    # Set up crosslink from a cysteine SG to a YTF C
+    carboxy_crosslink = BondDefinition(
+        atom1="SG",
+        atom2="C",
+        order=1,
+        aromatic=False,
+        stereo=None,
+    )
+
+    # Set up cysteine with a YTF carboxy crosslink
+    residue_library = residue_library.with_(
+        resdef.replace(
+            description=f"{resdef.description} CARBOXY CROSSLINK",
+            crosslink=carboxy_crosslink,
+        )
+        for resdef in residue_library["CYS"]
+    )
+
+    # Set up non-canonical residue YTF from HRV3C-LEALFQ (PDB 2B0F)
+    residue_library = residue_library.with_(
+        [
+            ResidueDefinition.from_smiles(
+                mapped_smiles=(
+                    "[C:1]([C:2]([O:3][C:4](=[O:5])[C:6]([C:7]([C@:8]([C:9]([C:10]"
+                    "([C:11](=[O:12])[N:13]([H:29])[H:30])([H:27])[H:28])([H:25])"
+                    "[H:26])([N:14]([H:31])[H:32])[H:24])([H:22])[H:23])([H:20])"
+                    "[H:21])([H:18])[H:19])([H:15])([H:16])[H:17]"
+                ),
+                atom_names={
+                    1: "CJ2",
+                    2: "CJ1",
+                    3: "OX9",
+                    4: "CX7",
+                    5: "OX8",
+                    6: "CX6",
+                    7: "C",
+                    8: "CA",
+                    9: "CB",
+                    10: "CG",
+                    11: "CD",
+                    12: "OE1",
+                    13: "NE2",
+                    14: "N",
+                    15: "H6",
+                    16: "H7",
+                    17: "H8",
+                    18: "H4",
+                    19: "H5",
+                    20: "H3",
+                    21: "H31",
+                    22: "H1",
+                    23: "H11",
+                    24: "HA",
+                    25: "HB2",
+                    26: "HB3",
+                    27: "HG2",
+                    28: "HG3",
+                    29: "HE21",
+                    30: "HE22",
+                    31: "H",
+                    32: "H2",
+                },
+                residue_name="YTF",
+                description="ethyl (4~{S})-4,7-bis(azanyl)-7-oxidanylidene-heptanoate",
+                linking_bond=PEPTIDE_BOND,
+                crosslink=carboxy_crosslink.flipped(),
+                leaving_atoms=[23, 32],
+            ),
+        ],
+    )
+
+    return residue_library

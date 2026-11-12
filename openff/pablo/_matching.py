@@ -186,6 +186,9 @@ class ResidueMatch(MatchProtocol):
         if len(rejected) == 0:
             return results
 
+        these_combinations = (
+            "this combination" if len(rejected) == 1 else "these combinations"
+        )
         if len(results) == 0:
             reason = (
                 f"Missing leaving atoms ({', '.join(sorted(missing_leaving_atoms))})"
@@ -193,13 +196,15 @@ class ResidueMatch(MatchProtocol):
             )
         elif len(missing_leaving_atoms) == 0:
             reason = (
-                "No leaving atoms are missing, but these combinations of bonds to"
-                + " other residues remove some"
+                f"No leaving atoms are missing, but {these_combinations} of bonds to"
+                + f" other residues {'removes' if len(rejected) == 1 else 'remove'}"
+                + " some"
             )
         else:
             reason = (
                 f"Missing leaving atoms ({', '.join(sorted(missing_leaving_atoms))})"
-                + " are not explained by these combinations of bonds to other residues"
+                + f" are not explained by {these_combinations} of bonds to other"
+                + " residues"
             )
         results.append(
             cls._mismatch(residue_definition, index_to_atomdef, reason, rejected),

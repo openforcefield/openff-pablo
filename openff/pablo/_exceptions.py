@@ -159,23 +159,111 @@ def _report_linkages(
     """
     The aligned column and the trailing text describing ``linkages``
 
-    If ``all_other_linkages`` is true, ``linkages`` is described as all the
-    linkages that the residue definition's other mismatches don't reject.
+    A single linkage is shown in the column. Nothing is shown for every linkage
+    of the definition, or if ``all_other_linkages`` is true, for all the
+    linkages that the definition's other mismatches don't reject. Any other set
+    of linkages is listed after the reason.
     """
-    if len(linkages) == 0:
-        return "   ", ""
     if len(linkages) == 1:
         return unwrap(linkages).report(), ""
-    if linkages == frozenset(residue_definition._linkage_combinations):
-        return "   ", " (all linkages)"
-    if all_other_linkages:
-        return "   ", " (all other linkages)"
+    if (
+        len(linkages) == 0
+        or all_other_linkages
+        or linkages == frozenset(residue_definition._linkage_combinations)
+    ):
+        return "   ", ""
     reports = [
         combination.report()
         for combination in residue_definition._linkage_combinations
         if combination in linkages
     ]
     return "   ", f" ({', '.join(reports)})"
+
+
+@dataclasses.dataclass(frozen=True)
+class _ReportBlock:
+    """Report lines shared by one or more residue definitions"""
+
+    descriptions: tuple[str, ...]
+    """Descriptions of the residue definitions, in order of first appearance"""
+    lines: tuple[str, ...]
+    """One line per mismatch: the linkage column, then why it didn't match"""
+
+
+def _mismatch_blocks(
+    residue_errors: Sequence[MismatchProtocol | SuccessfulMatch],
+) -> list[_ReportBlock]:
+    """
+    Group a residue's mismatches by residue definition and fold identical groups.
+
+    Definitions keep the order of their first mismatch, and a definition's
+    mismatches keep their order within it. Definitions whose lines are
+    identical share a single block.
+    """
+    by_definition: dict[ResidueDefinition, list[ResidueMismatch]] = {}
+    for err in residue_errors:
+        if isinstance(err, ResidueMismatch):
+            by_definition.setdefault(err.residue_definition, []).append(err)
+
+    blocks: list[_ReportBlock] = []
+    block_positions: dict[tuple[str, ...], int] = {}
+    for resdef, mismatches in by_definition.items():
+        lines: list[str] = []
+        for mismatch in mismatches:
+            column, listed_linkages = _report_linkages(
+                resdef,
+                mismatch.linkages,
+                _is_all_other_linkages(mismatch, residue_errors),
+            )
+            lines.append(f"{column} didn't match: {mismatch.reason}{listed_linkages}")
+        key = tuple(lines)
+        if key in block_positions:
+            position = block_positions[key]
+            blocks[position] = dataclasses.replace(
+                blocks[position],
+                descriptions=(*blocks[position].descriptions, resdef.description),
+            )
+        else:
+            block_positions[key] = len(blocks)
+            blocks.append(_ReportBlock(descriptions=(resdef.description,), lines=key))
+    return blocks
+
+
+def _description_width(descriptions: Sequence[str]) -> int:
+    """Width of the description column, ignoring a single unusually long one"""
+    lengths = sorted(len(description) for description in descriptions)
+    if len(lengths) > 2 and lengths[-1] - lengths[-2] > 30:
+        return lengths[-2]
+    return lengths[-1] if len(lengths) > 0 else 0
+
+
+def _format_mismatch_blocks(blocks: Sequence[_ReportBlock]) -> list[str]:
+    """
+    Report lines for a residue's mismatches, drawn as a tree.
+
+    A block for a single definition starts with its description, with its lines
+    aligned in a column after it. A block shared by several definitions lists
+    their descriptions on a line of their own, followed by its lines in the
+    same column. Shared descriptions don't affect the column's width.
+    """
+    width = _description_width(
+        [block.descriptions[0] for block in blocks if len(block.descriptions) == 1],
+    )
+    lines: list[str] = []
+    for i, block in enumerate(blocks):
+        is_last = i == len(blocks) - 1
+        branch = "╰─" if is_last else "├─"
+        stem = " " if is_last else "│"
+        if len(block.descriptions) > 1:
+            lines.append(f"    {branch} {', '.join(block.descriptions)}")
+            lines.extend(f"    {stem}  {' ' * width} {line}" for line in block.lines)
+        else:
+            description = unwrap(block.descriptions)
+            padded = description.ljust(width)
+            first, *rest = block.lines
+            lines.append(f"    {branch} {padded} {first}")
+            lines.extend(f"    {stem}  {' ' * len(padded)} {line}" for line in rest)
+    return lines
 
 
 def create_pdb_residue_match_error(
@@ -268,8 +356,9 @@ def create_pdb_residue_match_error(
         collapsed_errors = _order_all_other_linkages_last(
             _collapse_mismatches(sorted(residue_errors, key=lambda x: str(type(x)))),
         )
+        msg.extend(_format_mismatch_blocks(_mismatch_blocks(collapsed_errors)))
         for err in collapsed_errors:
-            if isinstance(err, NoResidueDefinitions):
+            if isinstance(err, NoResidueDefinitions | ResidueMismatch):
                 continue
             elif isinstance(err, ResidueMatch):
                 desc = err.residue_definition.description
@@ -306,18 +395,6 @@ def create_pdb_residue_match_error(
                 msg.append(
                     f"    ├─ {desc}{' ' * padding} {err.linkages.report()}"
                     + f": expects {expects}",
-                )
-            elif isinstance(err, ResidueMismatch):
-                desc = err.residue_definition.description
-                padding = max(0, max_padding - len(desc))
-                column, linkages = _report_linkages(
-                    err.residue_definition,
-                    err.linkages,
-                    _is_all_other_linkages(err, collapsed_errors),
-                )
-                msg.append(
-                    f"    ├─ {desc}{' ' * padding} {column} didn't match:"
-                    + f" {err.reason}{linkages}",
                 )
             else:
                 msg.append(f"    ├ {err.description}")
