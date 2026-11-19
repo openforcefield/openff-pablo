@@ -479,7 +479,7 @@ class ResidueDefinition:
         else:
             crosslink = None
 
-        molecule_linking_bond = molecule.properties.get("crosslink")
+        molecule_linking_bond = molecule.properties.get("linking_bond")
         if isinstance(molecule_linking_bond, BondDefinition):
             linking_bond = molecule_linking_bond
         else:
@@ -492,15 +492,34 @@ class ResidueDefinition:
             else:
                 description = ""
 
+        # Atoms are named by index, except those named in the linking bond or
+        # crosslink, which must keep their names so those bonds can find them
+        linking_atom_names: set[str] = set()
+        if linking_bond is not None:
+            linking_atom_names.update([linking_bond.atom1, linking_bond.atom2])
+        if crosslink is not None:
+            linking_atom_names.add(crosslink.atom1)
+
+        extra_index = molecule.n_atoms
+        used_linking_atom_names: set[str] = set()
         atoms: list[AtomDefinition] = []
-        for atom in molecule.atoms:
-            if (  # nofmt
-                linking_bond is not None
-                and atom.name in {linking_bond.atom1, linking_bond.atom2}
-            ):
+        for index, atom in enumerate(molecule.atoms):
+            # Anonymise the non-linking names. If the index would clash,
+            # choose a non-clashing name from past the end of the molecule. If
+            # there is a duplicate linking atom name, raise.
+            if atom.name in used_linking_atom_names:
+                raise ResidueValidationError(
+                    f"Multiple atoms with linking atom name {atom.name!r}: must be unique",
+                )
+            elif atom.name in linking_atom_names:
                 name = atom.name
+                used_linking_atom_names.add(name)
             else:
-                name = str(atom.molecule_atom_index)
+                while str(index) in linking_atom_names:
+                    index = extra_index
+                    extra_index += 1
+                name = str(index)
+
             atoms.append(
                 AtomDefinition(
                     name=name,
@@ -512,12 +531,13 @@ class ResidueDefinition:
                     aromatic=atom.is_aromatic,
                 ),
             )
+
         bonds: list[BondDefinition] = []
         for bond in molecule.bonds:
             bonds.append(
                 BondDefinition(
-                    atom1=str(bond.atom1.molecule_atom_index),
-                    atom2=str(bond.atom2.molecule_atom_index),
+                    atom1=atoms[bond.atom1.molecule_atom_index].name,
+                    atom2=atoms[bond.atom2.molecule_atom_index].name,
                     order=bond.bond_order,
                     aromatic=bond.is_aromatic,
                     stereo=bond.stereochemistry,
@@ -595,7 +615,7 @@ class ResidueDefinition:
                 crosslink = molecule_crosslink
 
         if linking_bond is None:
-            molecule_linking_bond = molecule.properties.get("crosslink")
+            molecule_linking_bond = molecule.properties.get("linking_bond")
             if isinstance(molecule_linking_bond, BondDefinition):
                 linking_bond = molecule_linking_bond
 

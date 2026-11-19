@@ -1204,3 +1204,264 @@ def test_semaglutide_with_crosslink(tmp_ccd_cache: CcdCache):
     )
 
     assert topology.n_molecules == 1
+
+
+ALKYNE_CAPS = (
+    "C#CCCC(=O)[O:1][H:2]",
+    "[H:1]NCC#C",
+)
+ALKYNE_CAPPED_PEPTIDE = "C#CCCC(=O)N[C@@H](C)C(=O)N[C@@H](C)C(=O)NCC#C"
+
+
+# Peptides bonded by CONECT records to residues with no definitions. Atom names
+# in the undefined residues are deliberately not the canonical partner names
+# of a peptide bond, so the bonds can only come from the CONECT records.
+@pytest.mark.parametrize(
+    ("filename", "undefined_residue_smiles", "molecule_smiles", "error_lines"),
+    [
+        pytest.param(
+            "alkyne_capped_peptide.pdb",
+            ALKYNE_CAPS,
+            ALKYNE_CAPPED_PEPTIDE,
+            [
+                "  A:UNL#1 (l4-14): No residue definitions",
+                "  A:UNL#4 (l35-42): No residue definitions",
+            ],
+            id="linear",
+        ),
+        pytest.param(
+            "alkyne_capped_peptide_hetatm_after_ter.pdb",
+            ALKYNE_CAPS,
+            ALKYNE_CAPPED_PEPTIDE,
+            [
+                "  A:UNL#1 (l3-13): No residue definitions",
+                "  A:UNL#4 (l35-42): No residue definitions",
+            ],
+            id="cap_after_ter",
+        ),
+        pytest.param(
+            "linker_cyclised_peptide.pdb",
+            ["[H:1]NCc1ccc(cc1)C(=O)[O:2][H:3]"],
+            "O=C1N[C@@H](C)C(=O)N[C@@H](C)C(=O)N[C@@H](C)C(=O)NCc2ccc1cc2",
+            ["  A:UNL#4 (l34-50): No residue definitions"],
+            id="cyclic",
+        ),
+    ],
+)
+def test_peptide_bonded_to_undefined_residues(
+    tmp_ccd_cache: CcdCache,
+    filename: str,
+    undefined_residue_smiles: Sequence[str],
+    molecule_smiles: str,
+    error_lines: Sequence[str],
+):
+    """Only the undefined residues are reported, and the peptide loads once they are defined"""
+    path = get_test_data_path(filename).absolute()
+
+    def check_err(err: PdbResidueMatchError) -> bool:
+        expected_error = "\n".join(
+            [
+                "some residues could not be identified",
+                "A topology cannot be created without chemical information for every",
+                "atom and bond. The following residues present in PDB file",
+                str(path),
+                "could not be identified from the provided residue library:",
+                "\n\n".join(error_lines),
+            ],
+        )
+
+        assert err.args[0] == expected_error
+        return True
+
+    with pytest.raises(PdbResidueMatchError, check=check_err):
+        topology_from_pdb(path, residue_library=tmp_ccd_cache)
+
+    top = topology_from_pdb(
+        path,
+        residue_library=tmp_ccd_cache,
+        additional_definitions=[
+            ResidueDefinition.anon_from_smiles_marked_leaving(smiles)
+            for smiles in undefined_residue_smiles
+        ],
+    )
+
+    top_mol = unwrap(top.molecules)
+    assert isinstance(top_mol, Molecule)
+    assert top_mol.is_isomorphic_with(Molecule.from_smiles(molecule_smiles))
+
+
+class TestMultipleLinkagesOnSameAtom:
+    @pytest.fixture
+    def ytf_carboxy_crosslink_library(self) -> CcdCache:
+        """
+        The standard library plus YTF from PDB 2B0F, crosslinked to cysteine SG.
+
+        YTF's crosslinking atom ``C`` is also the posterior atom of its peptide
+        linking bond, so both bonds share the leaving fragment ``{H11}``.
+        """
+        residue_library = STD_CCD_CACHE
+
+        # Set up crosslink from a cysteine SG to a YTF C
+        carboxy_crosslink = BondDefinition(
+            atom1="SG",
+            atom2="C",
+            order=1,
+            aromatic=False,
+            stereo=None,
+        )
+
+        # Set up cysteine with a YTF carboxy crosslink
+        residue_library = residue_library.with_(
+            resdef.replace(
+                description=f"{resdef.description} CARBOXY CROSSLINK",
+                crosslink=carboxy_crosslink,
+            )
+            for resdef in residue_library["CYS"]
+        )
+
+        # Set up non-canonical residue YTF from HRV3C-LEALFQ (PDB 2B0F)
+        residue_library = residue_library.with_(
+            [
+                ResidueDefinition.from_smiles(
+                    mapped_smiles=(
+                        "[C:1]([C:2]([O:3][C:4](=[O:5])[C:6]([C:7]([C@:8]([C:9]([C:10]"
+                        "([C:11](=[O:12])[N:13]([H:29])[H:30])([H:27])[H:28])([H:25])"
+                        "[H:26])([N:14]([H:31])[H:32])[H:24])([H:22])[H:23])([H:20])"
+                        "[H:21])([H:18])[H:19])([H:15])([H:16])[H:17]"
+                    ),
+                    atom_names={
+                        1: "CJ2",
+                        2: "CJ1",
+                        3: "OX9",
+                        4: "CX7",
+                        5: "OX8",
+                        6: "CX6",
+                        7: "C",
+                        8: "CA",
+                        9: "CB",
+                        10: "CG",
+                        11: "CD",
+                        12: "OE1",
+                        13: "NE2",
+                        14: "N",
+                        15: "H6",
+                        16: "H7",
+                        17: "H8",
+                        18: "H4",
+                        19: "H5",
+                        20: "H3",
+                        21: "H31",
+                        22: "H1",
+                        23: "H11",
+                        24: "HA",
+                        25: "HB2",
+                        26: "HB3",
+                        27: "HG2",
+                        28: "HG3",
+                        29: "HE21",
+                        30: "HE22",
+                        31: "H",
+                        32: "H2",
+                    },
+                    residue_name="YTF",
+                    description="ethyl (4~{S})-4,7-bis(azanyl)-7-oxidanylidene-heptanoate",
+                    linking_bond=PEPTIDE_BOND,
+                    crosslink=carboxy_crosslink.flipped(),
+                    leaving_atoms=[23, 32],
+                ),
+            ],
+        )
+
+        return residue_library
+
+    def test_2b0f_crosslink_on_same_atom_as_linking_loads(
+        self,
+        ytf_carboxy_crosslink_library: CcdCache,
+    ):
+        pdb_path = get_test_data_path("2B0F.pdb").absolute()
+
+        # Load the ACE-YTF-CYS PDB file
+        topology_from_pdb(pdb_path, residue_library=ytf_carboxy_crosslink_library)
+
+    def test_2b0f_crosslink_on_same_atom_as_linking_loads_with_resdef_atom_rename(
+        self,
+        ytf_carboxy_crosslink_library: CcdCache,
+    ):
+        pdb_path = get_test_data_path("2B0F.pdb").absolute()
+
+        residue_library = ytf_carboxy_crosslink_library.with_replaced(
+            {
+                "YTF": [
+                    resdef.replace(
+                        atoms=(
+                            atom if atom.name != "C" else atom.replace(name="CX1")
+                            for atom in resdef.atoms
+                        ),
+                        bonds=(
+                            bond.replace(
+                                atom1="CX1" if bond.atom1 == "C" else bond.atom1,
+                                atom2="CX1" if bond.atom2 == "C" else bond.atom2,
+                            )
+                            for bond in resdef.bonds
+                        ),
+                        crosslink=resdef.crosslink.replace(atom1="CX1"),
+                    )
+                    for resdef in ytf_carboxy_crosslink_library["YTF"]
+                    if resdef.crosslink is not None and resdef.crosslink.atom1 == "C"
+                ],
+            },
+        ).with_(
+            resdef.replace(
+                crosslink=resdef.crosslink.replace(atom2="CX1"),
+            )
+            for resdef in ytf_carboxy_crosslink_library["CYS"]
+            if resdef.crosslink is not None and resdef.crosslink.atom2 == "C"
+        )
+
+        # Load the ACE-YTF-CYS PDB file
+        topology_from_pdb(pdb_path, residue_library=residue_library)
+
+    def test_2b0f_crosslink_on_same_atom_as_linking_with_next_residue_is_rejected(
+        self,
+        ytf_carboxy_crosslink_library: CcdCache,
+    ):
+        # 2B0F model 1 with GLN A 182 O restored and NMA B 8 appended after YTF B 7,
+        # so YTF C is CONECTed to both CYS A 146 SG and NMA N. Both bonds consume
+        # the same single leaving atom (H11), so a match that forms both gives a
+        # pentavalent carbon that must be rejected before a topology is produced.
+        pdb_path = get_test_data_path("2B0F_ytf_nma.pdb").absolute()
+
+        with pytest.raises(
+            ValueError,
+            match="Explicit valence for atom # 2928 C, 5, is greater than permitted",
+        ):
+            topology_from_pdb(pdb_path, residue_library=ytf_carboxy_crosslink_library)
+
+    def test_2b0f_crosslink_on_same_atom_as_linking_without_crosslink_forms_linking_bond(
+        self,
+        ytf_carboxy_crosslink_library: CcdCache,
+    ):
+        # Same as 2B0F_ytf_nma.pdb, but without the CYS A 146 SG - YTF B 7 C CONECT
+        # and with HG restored to CYS A 146. YTF C's leaving atom (H11) is consumed
+        # by the peptide bond to NMA B 8 alone, and no crosslink is formed.
+        pdb_path = get_test_data_path("2B0F_ytf_nma_no_crosslink.pdb").absolute()
+
+        topology = topology_from_pdb(
+            pdb_path,
+            residue_library=ytf_carboxy_crosslink_library,
+        )
+
+        serial_to_atom = {atom.metadata["atom_serial"]: atom for atom in topology.atoms}
+        ytf_c = serial_to_atom[2929]
+        cys_sg = serial_to_atom[2284]
+
+        assert {atom.metadata["atom_serial"] for atom in ytf_c.bonded_atoms} == {
+            2923,  # YTF CA
+            2930,  # YTF CX6
+            2944,  # YTF H1
+            9002,  # NMA N
+        }
+        assert {atom.metadata["atom_serial"] for atom in cys_sg.bonded_atoms} == {
+            2283,  # CYS CB
+            9009,  # CYS HG
+        }

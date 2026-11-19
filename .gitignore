@@ -122,3 +122,6 @@ poetry.lock
 .ccd_cache/
 .docs-build/
 ty.toml
+
+# Claude
+.claude/settings.local.json

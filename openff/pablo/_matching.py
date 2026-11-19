@@ -22,6 +22,15 @@ class PossibleMatchProtocol(Protocol):
     def res_atom_idcs(self) -> tuple[int, ...]:
         return tuple(sorted(self.index_to_atomdef))
 
+    @cached_property
+    def identified_atom_idcs(self) -> frozenset[int]:
+        """PDB indices of atoms whose chemistry this match identifies"""
+        return frozenset(
+            i
+            for i, atom in self.index_to_atomdef.items()
+            if atom is not None and atom.symbol != ""
+        )
+
     def __bool__(self) -> bool:
         return self.is_match
 
@@ -272,15 +281,7 @@ class ResidueMatch(MatchProtocol):
         connectivity graphs (ignoring bond order) and net formal charges are
         identical. Matches that identify different atoms are never considered
         to agree."""
-        self_identified_indices = {
-            i for i, atom in self.index_to_atomdef.items() if atom.symbol != ""
-        }
-        other_identified_indices = {
-            i
-            for i, atom in other.index_to_atomdef.items()
-            if atom is not None and atom.symbol != ""
-        }
-        if self_identified_indices != other_identified_indices:
+        if self.identified_atom_idcs != other.identified_atom_idcs:
             logger.debug(
                 "    DISAGREE: Covers different indices"
                 + f" ({set(self.index_to_atomdef.keys())}"
@@ -336,10 +337,8 @@ class ResidueMatch(MatchProtocol):
 
     def check_agrees_with_where_overlaps(self, other: "ResidueMatch"):
         overlap = {
-            i: (self_atom, other.index_to_atomdef[i])
-            for i, self_atom in self.index_to_atomdef.items()
-            if i in other.index_to_atomdef
-            and "" not in [self_atom.symbol, other.index_to_atomdef[i].symbol]
+            i: (self.index_to_atomdef[i], other.index_to_atomdef[i])
+            for i in self.identified_atom_idcs & other.identified_atom_idcs
         }
 
         # All atoms should have the same element

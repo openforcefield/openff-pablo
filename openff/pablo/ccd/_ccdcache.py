@@ -450,7 +450,7 @@ class CcdCache(Mapping[str, tuple[ResidueDefinition, ...]]):
     def with_(
         self,
         definitions: Mapping[str, Sequence[ResidueDefinition]]
-        | Sequence[ResidueDefinition],
+        | Iterable[ResidueDefinition],
     ) -> Self:
         """
         Get a copy of this ``CcdCache`` with additional definitions added.
